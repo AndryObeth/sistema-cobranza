@@ -1,0 +1,520 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// 1. USUARIOS
+// ─────────────────────────────────────────
+model Usuario {
+  id_usuario     Int      @id @default(autoincrement())
+  nombre         String
+  usuario        String   @unique
+  contrasena     String
+  rol            RolUsuario
+  ruta_asignada  String?
+  activo         Boolean  @default(true)
+  fecha_creacion DateTime @default(now())
+
+  // Relaciones
+  ventas_como_vendedor  Venta[]              @relation("VendedorVenta")
+  ventas_como_cobrador  Venta[]              @relation("CobradorVenta")
+  clientes_registrados  Cliente[]
+  pagos_registrados     Pago[]
+  seguimientos          SeguimientoCliente[]
+  comisiones_vendedor   ComisionVendedor[]
+  comisiones_cobrador   ComisionCobrador[]
+  cortes_cobrador       CorteCobrador[]
+  cortes_vendedor       CorteVendedor[]
+  utilidades_contado    UtilidadContado[]
+
+  @@map("usuarios")
+}
+
+enum RolUsuario {
+  administrador
+  secretaria
+  vendedor
+  cobrador
+}
+
+// ─────────────────────────────────────────
+// 2. CLIENTES
+// ─────────────────────────────────────────
+model Cliente {
+  id_cliente               Int      @id @default(autoincrement())
+  numero_cuenta            String   @unique
+  nombre                   String
+  alias                    String?
+  telefono                 String?
+  municipio                String?
+  colonia                  String?
+  direccion                String?
+  referencias              String?
+  ruta                     String?
+  fecha_alta               DateTime @default(now())
+  id_vendedor_alta         Int?
+  estado_cliente           EstadoCliente @default(activo)
+  nivel_riesgo             NivelRiesgo?
+  recomendacion_operativa  String?
+  observaciones_generales  String?
+  activo                   Boolean  @default(true)
+
+  // Relaciones
+  vendedor_alta  Usuario?             @relation(fields: [id_vendedor_alta], references: [id_usuario])
+  ventas         Venta[]
+  cuentas        Cuenta[]
+  pagos          Pago[]
+  seguimientos   SeguimientoCliente[]
+
+  @@map("clientes")
+}
+
+enum EstadoCliente {
+  activo
+  moroso
+  bloqueado
+  inactivo
+}
+
+enum NivelRiesgo {
+  bajo
+  medio
+  alto
+}
+
+// ─────────────────────────────────────────
+// 3. PRODUCTOS
+// ─────────────────────────────────────────
+model Producto {
+  id_producto           Int      @id @default(autoincrement())
+  codigo_producto       String   @unique
+  categoria             String?
+  subcategoria          String?
+  material              String?
+  nombre_comercial      String
+  nombre_interno        String?
+  marca                 String?
+  precio_original       Decimal  @db.Decimal(10, 2)
+  precio_credito        Decimal? @db.Decimal(10, 2)
+  aplica_2_meses        Boolean  @default(false)
+  pago_semanal_2_meses  Decimal? @db.Decimal(10, 2)
+  precio_2_meses        Decimal? @db.Decimal(10, 2)
+  aplica_3_meses        Boolean  @default(false)
+  pago_semanal_3_meses  Decimal? @db.Decimal(10, 2)
+  precio_3_meses        Decimal? @db.Decimal(10, 2)
+  abono_semanal_largo   Decimal? @db.Decimal(10, 2)
+  estatus               EstatusProducto @default(activo)
+  fecha_actualizacion   DateTime @updatedAt
+  notas                 String?
+
+  // Relaciones
+  detalles_venta DetalleVenta[]
+
+  @@map("productos")
+}
+
+enum EstatusProducto {
+  activo
+  inactivo
+  descontinuado
+}
+
+// ─────────────────────────────────────────
+// 4. VENTAS
+// ─────────────────────────────────────────
+model Venta {
+  id_venta                    Int      @id @default(autoincrement())
+  folio_venta                 String   @unique
+  fecha_venta                 DateTime @default(now())
+  id_cliente                  Int
+  id_vendedor                 Int
+  id_cobrador                 Int?
+  ruta                        String?
+  tipo_venta                  TipoVenta
+  plan_venta                  PlanVenta
+  precio_original_total       Decimal  @db.Decimal(10, 2)
+  precio_final_total          Decimal  @db.Decimal(10, 2)
+  enganche_recibido_total     Decimal  @default(0) @db.Decimal(10, 2)
+  enganche_objetivo_vendedor  Decimal  @default(0) @db.Decimal(10, 2)
+  enganche_para_vendedor      Decimal  @default(0) @db.Decimal(10, 2)
+  enganche_regado             Decimal  @default(0) @db.Decimal(10, 2)
+  sobreenganche               Decimal  @default(0) @db.Decimal(10, 2)
+  monto_reportado_negocio     Decimal  @default(0) @db.Decimal(10, 2)
+  utilidad_vendedor_contado   Decimal  @default(0) @db.Decimal(10, 2)
+  observaciones               String?
+  estatus_venta               EstatusVenta @default(activa)
+  created_at                  DateTime @default(now())
+  updated_at                  DateTime @updatedAt
+
+  // Relaciones
+  cliente              Cliente          @relation(fields: [id_cliente], references: [id_cliente])
+  vendedor             Usuario          @relation("VendedorVenta", fields: [id_vendedor], references: [id_usuario])
+  cobrador             Usuario?         @relation("CobradorVenta", fields: [id_cobrador], references: [id_usuario])
+  detalles             DetalleVenta[]
+  cuenta               Cuenta?
+  comision_vendedor    ComisionVendedor?
+  utilidad_contado     UtilidadContado?
+  recuperaciones       RecuperacionEnganche[]
+
+  @@map("ventas")
+}
+
+enum TipoVenta {
+  contado
+  plazo
+}
+
+enum PlanVenta {
+  contado_directo
+  un_mes
+  dos_meses
+  tres_meses
+  largo_plazo
+}
+
+enum EstatusVenta {
+  activa
+  cancelada
+  liquidada
+}
+
+// ─────────────────────────────────────────
+// 5. DETALLE VENTA
+// ─────────────────────────────────────────
+model DetalleVenta {
+  id_detalle_venta       Int     @id @default(autoincrement())
+  id_venta               Int
+  id_producto            Int
+  codigo_producto        String
+  producto               String
+  cantidad               Int     @default(1)
+  precio_original_unitario Decimal @db.Decimal(10, 2)
+  precio_final_unitario  Decimal @db.Decimal(10, 2)
+  subtotal_original      Decimal @db.Decimal(10, 2)
+  subtotal_final         Decimal @db.Decimal(10, 2)
+
+  // Relaciones
+  venta    Venta    @relation(fields: [id_venta], references: [id_venta])
+  producto_rel Producto @relation(fields: [id_producto], references: [id_producto])
+
+  @@map("detalle_venta")
+}
+
+// ─────────────────────────────────────────
+// 6. CUENTAS
+// ─────────────────────────────────────────
+model Cuenta {
+  id_cuenta            Int      @id @default(autoincrement())
+  folio_cuenta         String   @unique
+  id_venta             Int      @unique
+  id_cliente           Int
+  plan_inicial         PlanVenta
+  plan_actual          PlanVenta
+  precio_original_total Decimal @db.Decimal(10, 2)
+  precio_plan_actual   Decimal  @db.Decimal(10, 2)
+  abono_inicial        Decimal  @default(0) @db.Decimal(10, 2)
+  saldo_inicial        Decimal  @db.Decimal(10, 2)
+  saldo_actual         Decimal  @db.Decimal(10, 2)
+  semanas_plazo        Int
+  fecha_inicio         DateTime @default(now())
+  fecha_limite         DateTime?
+  beneficio_vigente    Boolean  @default(true)
+  nivel_reestructura   Int      @default(0)
+  semanas_atraso       Int      @default(0)
+  fecha_ultimo_pago    DateTime?
+  estado_cuenta        EstadoCuenta @default(activa)
+  observaciones        String?
+  updated_at           DateTime @updatedAt
+
+  // Relaciones
+  venta    Venta  @relation(fields: [id_venta], references: [id_venta])
+  cliente  Cliente @relation(fields: [id_cliente], references: [id_cliente])
+  pagos    Pago[]
+
+  @@map("cuentas")
+}
+
+enum EstadoCuenta {
+  activa
+  atraso
+  moroso
+  liquidada
+  cancelada
+}
+
+// ─────────────────────────────────────────
+// 7. PAGOS
+// ─────────────────────────────────────────
+model Pago {
+  id_pago                      Int      @id @default(autoincrement())
+  id_cuenta                    Int
+  id_cliente                   Int
+  id_cobrador                  Int
+  fecha_pago                   DateTime @default(now())
+  monto_pago                   Decimal  @db.Decimal(10, 2)
+  saldo_anterior               Decimal  @db.Decimal(10, 2)
+  saldo_nuevo                  Decimal  @db.Decimal(10, 2)
+  tipo_pago                    TipoPago
+  aplica_a_enganche_regado     Boolean  @default(false)
+  monto_aplicado_enganche_regado Decimal @default(0) @db.Decimal(10, 2)
+  monto_aplicado_saldo         Decimal  @db.Decimal(10, 2)
+  observaciones                String?
+  origen_pago   OrigenPago @default(domicilio)
+  created_at                   DateTime @default(now())
+
+  // Relaciones
+  cuenta     Cuenta  @relation(fields: [id_cuenta], references: [id_cuenta])
+  cliente    Cliente @relation(fields: [id_cliente], references: [id_cliente])
+  cobrador   Usuario @relation(fields: [id_cobrador], references: [id_usuario])
+  comision_cobrador    ComisionCobrador?
+  recuperacion_enganche RecuperacionEnganche?
+  detalles_corte       DetalleCorteCorador[]
+
+  @@map("pagos")
+}
+
+enum TipoPago {
+  abono
+  liquidacion
+  recuperacion_enganche
+  pago_extra
+}
+enum OrigenPago {
+  domicilio
+  calle
+  oficina
+}
+// ─────────────────────────────────────────
+// 8. SEGUIMIENTO CLIENTE
+// ─────────────────────────────────────────
+model SeguimientoCliente {
+  id_seguimiento  Int      @id @default(autoincrement())
+  id_cliente      Int
+  id_cuenta       Int?
+  id_usuario      Int
+  fecha_registro  DateTime @default(now())
+  fecha_programada  DateTime?
+  tipo_seguimiento TipoSeguimiento
+  comentario      String?
+
+  // Relaciones
+  cliente Cliente @relation(fields: [id_cliente], references: [id_cliente])
+  usuario Usuario @relation(fields: [id_usuario], references: [id_usuario])
+
+  @@map("seguimiento_cliente")
+}
+
+enum TipoSeguimiento {
+  visita
+  promesa_pago
+  no_localizado
+  casa_cerrada
+  se_nego
+  observacion_general
+}
+
+// ─────────────────────────────────────────
+// 9. UTILIDADES CONTADO
+// ─────────────────────────────────────────
+model UtilidadContado {
+  id_utilidad_contado    Int      @id @default(autoincrement())
+  id_venta               Int      @unique
+  id_vendedor            Int
+  precio_original        Decimal  @db.Decimal(10, 2)
+  precio_contado         Decimal  @db.Decimal(10, 2)
+  monto_reportado_negocio Decimal @db.Decimal(10, 2)
+  utilidad_vendedor      Decimal  @db.Decimal(10, 2)
+  fecha_registro         DateTime @default(now())
+
+  // Relaciones
+  venta    Venta   @relation(fields: [id_venta], references: [id_venta])
+  vendedor Usuario @relation(fields: [id_vendedor], references: [id_usuario])
+
+  @@map("utilidades_contado")
+}
+
+// ─────────────────────────────────────────
+// 10. COMISIONES VENDEDOR
+// ─────────────────────────────────────────
+model ComisionVendedor {
+  id_comision_vendedor        Int      @id @default(autoincrement())
+  id_venta                    Int      @unique
+  id_cliente                  Int
+  id_vendedor                 Int
+  porcentaje_comision         Decimal  @db.Decimal(5, 2)
+  comision_objetivo           Decimal  @db.Decimal(10, 2)
+  enganche_cobrado_inicial    Decimal  @default(0) @db.Decimal(10, 2)
+  enganche_regado_pendiente   Decimal  @default(0) @db.Decimal(10, 2)
+  monto_recuperado_para_vendedor Decimal @default(0) @db.Decimal(10, 2)
+  monto_pagado_en_corte       Decimal  @default(0) @db.Decimal(10, 2)
+  estado_comision             EstadoComisionVendedor @default(pendiente_recuperacion)
+  fecha_registro              DateTime @default(now())
+
+  // Relaciones
+  venta    Venta   @relation(fields: [id_venta], references: [id_venta])
+  vendedor Usuario @relation(fields: [id_vendedor], references: [id_usuario])
+
+  @@map("comisiones_vendedor")
+}
+
+enum EstadoComisionVendedor {
+  completa_inmediata
+  parcial
+  pendiente_recuperacion
+  lista_para_corte
+  pagada
+}
+
+// ─────────────────────────────────────────
+// 11. COMISIONES COBRADOR
+// ─────────────────────────────────────────
+model ComisionCobrador {
+  id_comision_cobrador Int      @id @default(autoincrement())
+  id_pago              Int      @unique
+  id_cobrador          Int
+  monto_cobrado        Decimal  @db.Decimal(10, 2)
+  porcentaje_comision  Decimal  @default(12) @db.Decimal(5, 2)
+  comision_generada    Decimal  @db.Decimal(10, 2)
+  fecha_registro       DateTime @default(now())
+  semana_corte         String?
+
+  // Relaciones
+  pago     Pago    @relation(fields: [id_pago], references: [id_pago])
+  cobrador Usuario @relation(fields: [id_cobrador], references: [id_usuario])
+
+  @@map("comisiones_cobrador")
+}
+
+// ─────────────────────────────────────────
+// 12. RECUPERACION ENGANCHE REGADO
+// ─────────────────────────────────────────
+model RecuperacionEnganche {
+  id_recuperacion    Int      @id @default(autoincrement())
+  id_venta           Int
+  id_pago            Int      @unique
+  id_vendedor        Int
+  id_cobrador        Int
+  monto_recuperado   Decimal  @db.Decimal(10, 2)
+  comision_cobrador  Decimal  @db.Decimal(10, 2)
+  monto_neto_vendedor Decimal @db.Decimal(10, 2)
+  fecha_recuperacion DateTime @default(now())
+  estado_corte       EstadoCorteRecuperacion @default(pendiente_corte)
+
+  // Relaciones
+  venta Venta @relation(fields: [id_venta], references: [id_venta])
+  pago  Pago  @relation(fields: [id_pago], references: [id_pago])
+  detalles_corte_vendedor DetalleCorteVendedor[]
+
+  @@map("recuperacion_enganche_regado")
+}
+
+enum EstadoCorteRecuperacion {
+  pendiente_corte
+  incluido_en_corte
+  pagado
+}
+
+// ─────────────────────────────────────────
+// 13. CORTES COBRADOR
+// ─────────────────────────────────────────
+model CorteCobrador {
+  id_corte_cobrador Int      @id @default(autoincrement())
+  id_cobrador       Int
+  fecha_inicio      DateTime
+  fecha_fin         DateTime
+  total_cobrado     Decimal  @db.Decimal(10, 2)
+  total_depositado  Decimal  @db.Decimal(10, 2)
+  diferencia        Decimal  @db.Decimal(10, 2)
+  comision_total    Decimal  @db.Decimal(10, 2)
+  estado_corte      EstadoCorte @default(abierto)
+  observaciones     String?
+  created_at        DateTime @default(now())
+
+  // Relaciones
+  cobrador Usuario              @relation(fields: [id_cobrador], references: [id_usuario])
+  detalles DetalleCorteCorador[]
+
+  @@map("cortes_cobrador")
+}
+
+enum EstadoCorte {
+  abierto
+  revisado
+  cerrado
+  pagado
+}
+
+// ─────────────────────────────────────────
+// 14. DETALLE CORTE COBRADOR
+// ─────────────────────────────────────────
+model DetalleCorteCorador {
+  id_detalle_corte_cobrador Int     @id @default(autoincrement())
+  id_corte_cobrador         Int
+  id_pago                   Int
+  monto_pago                Decimal @db.Decimal(10, 2)
+  comision_generada         Decimal @db.Decimal(10, 2)
+
+  // Relaciones
+  corte_cobrador CorteCobrador @relation(fields: [id_corte_cobrador], references: [id_corte_cobrador])
+  pago           Pago          @relation(fields: [id_pago], references: [id_pago])
+
+  @@map("detalle_corte_cobrador")
+}
+
+// ─────────────────────────────────────────
+// 15. CORTES VENDEDOR
+// ─────────────────────────────────────────
+model CorteVendedor {
+  id_corte_vendedor Int      @id @default(autoincrement())
+  fecha_corte       DateTime @default(now())
+  tipo_corte        TipoCorteVendedor
+  id_vendedor       Int
+  total_pagado      Decimal  @db.Decimal(10, 2)
+  estado_corte      EstadoCorte @default(abierto)
+  observaciones     String?
+
+  // Relaciones
+  vendedor Usuario               @relation(fields: [id_vendedor], references: [id_usuario])
+  detalles DetalleCorteVendedor[]
+
+  @@map("cortes_vendedor")
+}
+
+enum TipoCorteVendedor {
+  cinco
+  veinte
+}
+
+// ─────────────────────────────────────────
+// 16. DETALLE CORTE VENDEDOR
+// ─────────────────────────────────────────
+model DetalleCorteVendedor {
+  id_detalle_corte_vendedor Int     @id @default(autoincrement())
+  id_corte_vendedor         Int
+  id_recuperacion           Int
+  monto_pagado              Decimal @db.Decimal(10, 2)
+
+  // Relaciones
+  corte_vendedor CorteVendedor        @relation(fields: [id_corte_vendedor], references: [id_corte_vendedor])
+  recuperacion   RecuperacionEnganche @relation(fields: [id_recuperacion], references: [id_recuperacion])
+
+  @@map("detalle_corte_vendedor")
+}
+
+// ─────────────────────────────────────────
+// 17. CONFIGURACION NEGOCIO
+// ─────────────────────────────────────────
+model ConfiguracionNegocio {
+  id_configuracion Int     @id @default(autoincrement())
+  clave            String  @unique
+  valor            String
+  descripcion      String?
+  activo           Boolean @default(true)
+
+  @@map("configuracion_negocio")
+}
