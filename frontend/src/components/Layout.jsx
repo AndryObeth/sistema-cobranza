@@ -2,12 +2,13 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const menu = [
-  { path: '/',          label: 'Dashboard',  icono: '📊' },
-  { path: '/clientes',  label: 'Clientes',   icono: '👥' },
-  { path: '/productos', label: 'Productos',  icono: '📦' },
-  { path: '/ventas',    label: 'Ventas',     icono: '🧾', roles: ['vendedor', 'administrador'] },
+  { path: '/',          label: 'Dashboard',  icono: '📊', roles: ['administrador'] },
+  { path: '/clientes',  label: 'Clientes',   icono: '👥', roles: ['administrador', 'secretaria', 'vendedor', 'jefe_camioneta'] },
+  { path: '/productos', label: 'Productos',  icono: '📦', roles: ['administrador', 'secretaria', 'vendedor', 'jefe_camioneta'] },
+  { path: '/ventas',    label: 'Ventas',     icono: '🧾', roles: ['administrador', 'secretaria', 'vendedor', 'jefe_camioneta'] },
   { path: '/cobranza',  label: 'Cobranza',   icono: '💰', roles: ['cobrador', 'administrador'] },
-  { path: '/visitas',   label: 'Agenda',      icono: '📅', roles: ['cobrador', 'administrador'] },
+  { path: '/visitas',   label: 'Agenda',     icono: '📅', roles: ['cobrador', 'administrador'] },
+  { path: '/cortes',    label: 'Cortes',      icono: '✂️', roles: ['administrador'] },
   { path: '/usuarios',  label: 'Usuarios',   icono: '👤', roles: ['administrador'] },
 ]
 

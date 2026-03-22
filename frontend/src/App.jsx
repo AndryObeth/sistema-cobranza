@@ -8,23 +8,32 @@ import Ventas from './pages/ventas/Ventas.jsx'
 import Cobranza from './pages/cobranza/Cobranza.jsx'
 import Usuarios from './pages/usuarios/Usuarios.jsx'
 import Visitas from './pages/visitas/Visitas.jsx'
+import Cortes from './pages/cortes/Cortes.jsx'
 
-function RutaProtegida({ children }) {
-  const { token } = useAuth()
-  return token ? children : <Navigate to="/login" />
+function paginaInicio(rol) {
+  if (rol === 'cobrador') return '/cobranza'
+  return '/clientes'
+}
+
+function RutaProtegida({ children, roles }) {
+  const { token, usuario } = useAuth()
+  if (!token) return <Navigate to="/login" />
+  if (roles && !roles.includes(usuario?.rol)) return <Navigate to={paginaInicio(usuario?.rol)} />
+  return children
 }
 
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<RutaProtegida><Dashboard /></RutaProtegida>} />
-      <Route path="/clientes" element={<RutaProtegida><Clientes /></RutaProtegida>} />
-      <Route path="/productos" element={<RutaProtegida><Productos /></RutaProtegida>} />
-      <Route path="/ventas" element={<RutaProtegida><Ventas /></RutaProtegida>} />
-      <Route path="/cobranza" element={<RutaProtegida><Cobranza /></RutaProtegida>} />
-      <Route path="/usuarios" element={<RutaProtegida><Usuarios /></RutaProtegida>} />
-      <Route path="/visitas"  element={<RutaProtegida><Visitas /></RutaProtegida>} />
+      <Route path="/" element={<RutaProtegida roles={['administrador']}><Dashboard /></RutaProtegida>} />
+      <Route path="/clientes" element={<RutaProtegida roles={['administrador', 'secretaria', 'vendedor', 'jefe_camioneta']}><Clientes /></RutaProtegida>} />
+      <Route path="/productos" element={<RutaProtegida roles={['administrador', 'secretaria', 'vendedor', 'jefe_camioneta']}><Productos /></RutaProtegida>} />
+      <Route path="/ventas" element={<RutaProtegida roles={['administrador', 'secretaria', 'vendedor', 'jefe_camioneta']}><Ventas /></RutaProtegida>} />
+      <Route path="/cobranza" element={<RutaProtegida roles={['cobrador', 'administrador']}><Cobranza /></RutaProtegida>} />
+      <Route path="/usuarios" element={<RutaProtegida roles={['administrador']}><Usuarios /></RutaProtegida>} />
+      <Route path="/visitas"  element={<RutaProtegida roles={['cobrador', 'administrador']}><Visitas /></RutaProtegida>} />
+      <Route path="/cortes"   element={<RutaProtegida roles={['administrador']}><Cortes /></RutaProtegida>} />
     </Routes>
   )
 }
