@@ -6,11 +6,22 @@ const api = axios.create({
 
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('token')
-  console.log('Token enviado:', token ? 'sí' : 'no')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
+
+api.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 401 || err.response?.status === 403) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('usuario')
+      window.location.href = '/login?sesion=expirada'
+    }
+    return Promise.reject(err)
+  }
+)
 
 export default api

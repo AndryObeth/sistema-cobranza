@@ -13,7 +13,8 @@ app.use('/api/productos', require('./routes/productos'))
 app.use('/api/ventas',    require('./routes/ventas'))
 app.use('/api/pagos',     require('./routes/pagos'))
 app.use('/api/usuarios',  require('./routes/usuarios'))
-app.use('/api/visitas',   require('./routes/visitas'))
+app.use('/api/visitas',    require('./routes/visitas'))
+app.use('/api/dashboard', require('./routes/dashboard'))
 
 app.get('/', (req, res) => {
   res.json({ mensaje: 'Sistema cobranza activo ✅' })

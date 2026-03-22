@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../api'
 
@@ -9,6 +9,8 @@ export default function Login() {
   const [cargando, setCargando] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const sesionExpirada = searchParams.get('sesion') === 'expirada'
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -32,6 +34,12 @@ export default function Login() {
           <h1 className="text-2xl font-bold text-gray-800">Novedades Cancún</h1>
           <p className="text-gray-500 text-sm mt-1">Sistema de Cobranza</p>
         </div>
+
+        {sesionExpirada && (
+          <div className="mb-4 bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm text-center px-4 py-3 rounded-lg">
+            Tu sesión expiró, inicia sesión nuevamente
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
