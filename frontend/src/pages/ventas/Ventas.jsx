@@ -22,6 +22,7 @@ export default function Ventas() {
   const [productosSeleccionados, setProductosSeleccionados] = useState([])
   const [productoActual, setProductoActual] = useState('')
   const [calculos, setCalculos] = useState(null)
+  const [mostrarLiquidadas, setMostrarLiquidadas] = useState(false)
 
   useEffect(() => {
     cargarDatos()
@@ -156,23 +157,43 @@ export default function Ventas() {
     ]
   }
 
+  const ventasFiltradas = ventas.filter(v =>
+    mostrarLiquidadas ? true : v.estatus_venta !== 'liquidada'
+  )
+
   return (
     <Layout>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Ventas</h2>
-          <p className="text-gray-500 text-sm mt-1">{ventas.length} ventas registradas</p>
+          <p className="text-gray-500 text-sm mt-1">
+            {ventasFiltradas.length} ventas
+            {!mostrarLiquidadas && ventas.filter(v => v.estatus_venta === 'liquidada').length > 0 && (
+              <span className="text-gray-400"> · {ventas.filter(v => v.estatus_venta === 'liquidada').length} liquidadas ocultas</span>
+            )}
+          </p>
         </div>
-        <button onClick={() => setModalAbierto(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
-          + Nueva venta
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <div
+              onClick={() => setMostrarLiquidadas(!mostrarLiquidadas)}
+              className={`relative w-10 h-6 rounded-full transition-colors ${mostrarLiquidadas ? 'bg-blue-500' : 'bg-gray-300'}`}
+            >
+              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${mostrarLiquidadas ? 'translate-x-5' : 'translate-x-1'}`} />
+            </div>
+            <span className="text-sm text-gray-600">Mostrar liquidadas</span>
+          </label>
+          <button onClick={() => setModalAbierto(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+            + Nueva venta
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow overflow-hidden">
         {cargando ? (
           <p className="text-center text-gray-500 py-12">Cargando...</p>
-        ) : ventas.length === 0 ? (
+        ) : ventasFiltradas.length === 0 ? (
           <p className="text-center text-gray-400 py-12">No hay ventas registradas</p>
         ) : (
           <table className="w-full text-sm">
@@ -188,31 +209,36 @@ export default function Ventas() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {ventas.map(v => (
-                <tr key={v.id_venta} className="hover:bg-gray-50 transition">
-                  <td className="px-6 py-4 font-mono text-gray-500 text-xs">{v.folio_venta}</td>
-                  <td className="px-6 py-4 font-medium text-gray-800">{v.cliente?.nombre}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      v.tipo_venta === 'contado' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                    }`}>{v.tipo_venta}</span>
-                  </td>
-                  <td className="px-6 py-4 text-gray-600 text-xs">{v.plan_venta?.replace(/_/g, ' ')}</td>
-                  <td className="px-6 py-4">
-                    {parseFloat(v.precio_original_total) > parseFloat(v.precio_final_total) && (
-                      <p className="text-xs text-gray-400 line-through">{fmt(v.precio_original_total)}</p>
-                    )}
-                    <p className="font-medium text-gray-800">{fmt(v.precio_final_total)}</p>
-                  </td>
-                  <td className="px-6 py-4 text-gray-500">{new Date(v.fecha_venta).toLocaleDateString('es-MX')}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      v.estatus_venta === 'activa' ? 'bg-green-100 text-green-700' :
-                      v.estatus_venta === 'liquidada' ? 'bg-gray-100 text-gray-500' : 'bg-red-100 text-red-700'
-                    }`}>{v.estatus_venta}</span>
-                  </td>
-                </tr>
-              ))}
+              {ventasFiltradas.map(v => {
+                const liquidada = v.estatus_venta === 'liquidada'
+                return (
+                  <tr key={v.id_venta} className={`transition ${liquidada ? 'opacity-50 bg-gray-50' : 'hover:bg-gray-50'}`}>
+                    <td className="px-6 py-4 font-mono text-gray-400 text-xs">{v.folio_venta}</td>
+                    <td className={`px-6 py-4 font-medium ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{v.cliente?.nombre}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        liquidada ? 'bg-gray-100 text-gray-400' :
+                        v.tipo_venta === 'contado' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                      }`}>{v.tipo_venta}</span>
+                    </td>
+                    <td className={`px-6 py-4 text-xs ${liquidada ? 'text-gray-400' : 'text-gray-600'}`}>{v.plan_venta?.replace(/_/g, ' ')}</td>
+                    <td className="px-6 py-4">
+                      {!liquidada && parseFloat(v.precio_original_total) > parseFloat(v.precio_final_total) && (
+                        <p className="text-xs text-gray-400 line-through">{fmt(v.precio_original_total)}</p>
+                      )}
+                      <p className={`font-medium ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{fmt(v.precio_final_total)}</p>
+                    </td>
+                    <td className={`px-6 py-4 ${liquidada ? 'text-gray-400' : 'text-gray-500'}`}>{new Date(v.fecha_venta).toLocaleDateString('es-MX')}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        v.estatus_venta === 'activa'    ? 'bg-green-100 text-green-700' :
+                        v.estatus_venta === 'liquidada' ? 'bg-gray-100 text-gray-400' :
+                        'bg-red-100 text-red-700'
+                      }`}>{v.estatus_venta}</span>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

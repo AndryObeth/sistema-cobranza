@@ -2,11 +2,237 @@ import { useState, useEffect } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 
+const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX') : '—'
+
+const estadoCuentaColor = {
+  activa:    'bg-green-100 text-green-700',
+  atraso:    'bg-yellow-100 text-yellow-700',
+  moroso:    'bg-red-100 text-red-700',
+  liquidada: 'bg-gray-100 text-gray-500',
+  cancelada: 'bg-gray-100 text-gray-400',
+}
+
+const tipoSeguimientoLabel = {
+  visita:               '👁 Visita',
+  promesa_pago:         '🤝 Promesa de pago',
+  no_localizado:        '📵 No localizado',
+  casa_cerrada:         '🚪 Casa cerrada',
+  se_nego:              '❌ Se negó',
+  observacion_general:  '📝 Observación',
+}
+
+function ModalExpediente({ cliente, onClose }) {
+  const tabsDisponibles = ['datos', 'compras', 'cuentas', 'seguimientos']
+  const [tab, setTab] = useState('datos')
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[92vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-start justify-between p-6 border-b">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">{cliente.nombre}</h2>
+            <p className="text-sm text-gray-400 font-mono mt-0.5">{cliente.numero_cuenta}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">✕</button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 px-6 pt-4 border-b">
+          {[
+            { id: 'datos',        label: 'Datos' },
+            { id: 'compras',      label: `Compras (${cliente.ventas?.length || 0})` },
+            { id: 'cuentas',      label: `Cuentas (${cliente.cuentas?.length || 0})` },
+            { id: 'seguimientos', label: `Seguimientos (${cliente.seguimientos?.length || 0})` },
+          ].map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 transition ${
+                tab === t.id
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Contenido */}
+        <div className="flex-1 overflow-y-auto p-6">
+
+          {/* TAB DATOS */}
+          {tab === 'datos' && (
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+              {[
+                { label: 'Nombre',     value: cliente.nombre },
+                { label: 'Alias',      value: cliente.alias || '—' },
+                { label: 'Teléfono',   value: cliente.telefono || '—' },
+                { label: 'Municipio',  value: cliente.municipio || '—' },
+                { label: 'Colonia',    value: cliente.colonia || '—' },
+                { label: 'Ruta',       value: cliente.ruta || '—' },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+                  <p className="font-medium text-gray-800">{value}</p>
+                </div>
+              ))}
+              <div className="col-span-2">
+                <p className="text-xs text-gray-400 mb-0.5">Dirección</p>
+                <p className="font-medium text-gray-800">{cliente.direccion || '—'}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-xs text-gray-400 mb-0.5">Referencias</p>
+                <p className="font-medium text-gray-800">{cliente.referencias || '—'}</p>
+              </div>
+              {cliente.observaciones_generales && (
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-400 mb-0.5">Observaciones</p>
+                  <p className="text-gray-700">{cliente.observaciones_generales}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB COMPRAS */}
+          {tab === 'compras' && (
+            cliente.ventas?.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">Sin compras registradas</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <tr>
+                    <th className="text-left px-4 py-2">Folio</th>
+                    <th className="text-left px-4 py-2">Fecha</th>
+                    <th className="text-left px-4 py-2">Productos</th>
+                    <th className="text-left px-4 py-2">Tipo / Plan</th>
+                    <th className="text-right px-4 py-2">Total</th>
+                    <th className="text-left px-4 py-2">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {cliente.ventas?.map(v => (
+                    <tr key={v.id_venta} className={v.estatus_venta === 'liquidada' ? 'opacity-50' : ''}>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-400">{v.folio_venta}</td>
+                      <td className="px-4 py-3 text-gray-500">{fmtFecha(v.fecha_venta)}</td>
+                      <td className="px-4 py-3 text-gray-700">
+                        {v.detalles?.map(d => (
+                          <span key={d.id_detalle_venta} className="block text-xs">{d.producto} x{d.cantidad}</span>
+                        ))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${v.tipo_venta === 'contado' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                          {v.tipo_venta}
+                        </span>
+                        <p className="text-xs text-gray-400 mt-1">{v.plan_venta?.replace(/_/g, ' ')}</p>
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium">{fmt(v.precio_final_total)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          v.estatus_venta === 'activa'    ? 'bg-green-100 text-green-700' :
+                          v.estatus_venta === 'liquidada' ? 'bg-gray-100 text-gray-400' :
+                          'bg-red-100 text-red-600'
+                        }`}>{v.estatus_venta}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          )}
+
+          {/* TAB CUENTAS */}
+          {tab === 'cuentas' && (
+            cliente.cuentas?.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">Sin cuentas registradas</p>
+            ) : (
+              <div className="space-y-3">
+                {cliente.cuentas?.map(c => (
+                  <div key={c.id_cuenta} className="border rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="font-mono text-sm text-gray-500">{c.folio_cuenta}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${estadoCuentaColor[c.estado_cuenta]}`}>
+                        {c.estado_cuenta}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-xs text-gray-400">Saldo actual</p>
+                        <p className="font-bold text-gray-800 text-lg">{fmt(c.saldo_actual)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Plan</p>
+                        <p className="font-medium">{c.plan_actual?.replace(/_/g, ' ')}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Fecha límite</p>
+                        <p className="font-medium">{fmtFecha(c.fecha_limite)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Saldo inicial</p>
+                        <p className="text-gray-600">{fmt(c.saldo_inicial)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Semanas atraso</p>
+                        <p className={`font-medium ${c.semanas_atraso > 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                          {c.semanas_atraso}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Último pago</p>
+                        <p className="text-gray-600">{fmtFecha(c.fecha_ultimo_pago)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+
+          {/* TAB SEGUIMIENTOS */}
+          {tab === 'seguimientos' && (
+            cliente.seguimientos?.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">Sin seguimientos registrados</p>
+            ) : (
+              <div className="space-y-3">
+                {cliente.seguimientos?.map(s => (
+                  <div key={s.id_seguimiento} className="border rounded-xl p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">
+                          {tipoSeguimientoLabel[s.tipo_seguimiento] || s.tipo_seguimiento}
+                        </p>
+                        {s.comentario && <p className="text-sm text-gray-500 mt-1">{s.comentario}</p>}
+                      </div>
+                      <div className="text-right text-xs text-gray-400 shrink-0 ml-4">
+                        <p>{fmtFecha(s.fecha_registro)}</p>
+                        <p className="mt-0.5">{s.usuario?.nombre}</p>
+                      </div>
+                    </div>
+                    {s.fecha_programada && (
+                      <p className="text-xs text-blue-600 mt-2">Programado: {fmtFecha(s.fecha_programada)}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Clientes() {
   const [clientes, setClientes] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [cargando, setCargando] = useState(true)
   const [modalAbierto, setModalAbierto] = useState(false)
+  const [clienteExpediente, setClienteExpediente] = useState(null)
   const [form, setForm] = useState({
     nombre: '', alias: '', telefono: '',
     municipio: '', colonia: '', direccion: '',
@@ -53,6 +279,15 @@ export default function Clientes() {
       setError('Error al guardar cliente')
     } finally {
       setGuardando(false)
+    }
+  }
+
+  const abrirExpediente = async (id) => {
+    try {
+      const res = await api.get(`/clientes/${id}`)
+      setClienteExpediente(res.data)
+    } catch {
+      console.error('Error al cargar expediente')
     }
   }
 
@@ -110,7 +345,11 @@ export default function Clientes() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {clientesFiltrados.map(c => (
-                <tr key={c.id_cliente} className="hover:bg-gray-50 transition">
+                <tr
+                  key={c.id_cliente}
+                  onClick={() => abrirExpediente(c.id_cliente)}
+                  className="hover:bg-blue-50 transition cursor-pointer"
+                >
                   <td className="px-6 py-4 font-mono text-gray-500">{c.numero_cuenta}</td>
                   <td className="px-6 py-4 font-medium text-gray-800">
                     {c.nombre}
@@ -130,6 +369,14 @@ export default function Clientes() {
           </table>
         )}
       </div>
+
+      {/* Modal expediente cliente */}
+      {clienteExpediente && (
+        <ModalExpediente
+          cliente={clienteExpediente}
+          onClose={() => setClienteExpediente(null)}
+        />
+      )}
 
       {/* Modal nuevo cliente */}
       {modalAbierto && (

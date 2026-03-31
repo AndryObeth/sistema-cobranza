@@ -83,6 +83,7 @@ router.post('/', auth, async (req, res) => {
         monto_reportado_negocio: monto_reportado,
         utilidad_vendedor_contado,
         observaciones,
+        estatus_venta: tipo_venta === 'contado' ? 'liquidada' : 'activa',
         detalles: {
           create: detalles
         }

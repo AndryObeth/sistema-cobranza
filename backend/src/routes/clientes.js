@@ -23,14 +23,29 @@ router.get('/:id', auth, async (req, res) => {
     const cliente = await prisma.cliente.findUnique({
       where: { id_cliente: parseInt(req.params.id) },
       include: {
-        cuentas: true,
-        ventas: { orderBy: { fecha_venta: 'desc' }, take: 5 }
+        cuentas: {
+          orderBy: { fecha_inicio: 'desc' }
+        },
+        ventas: {
+          orderBy: { fecha_venta: 'desc' },
+          include: {
+            detalles: true,
+            vendedor: { select: { nombre: true } }
+          }
+        },
+        seguimientos: {
+          orderBy: { fecha_registro: 'desc' },
+          take: 10,
+          include: {
+            usuario: { select: { nombre: true } }
+          }
+        }
       }
     })
     if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' })
     res.json(cliente)
-  } catch {
-    res.status(500).json({ error: 'Error al obtener cliente' })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener cliente', detalle: error.message })
   }
 })
 

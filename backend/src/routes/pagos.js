@@ -138,6 +138,14 @@ router.post('/', auth, async (req, res) => {
       }
     })
 
+    // Si se liquidó, sincronizar estatus de la venta
+    if (saldo_nuevo === 0) {
+      await prisma.venta.update({
+        where: { id_venta: cuenta.id_venta },
+        data: { estatus_venta: 'liquidada' }
+      })
+    }
+
     // Registrar comisión del cobrador
     await prisma.comisionCobrador.create({
       data: {
