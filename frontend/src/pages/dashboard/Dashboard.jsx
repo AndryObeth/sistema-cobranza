@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
@@ -7,6 +8,7 @@ const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFract
 
 export default function Dashboard() {
   const { usuario } = useAuth()
+  const navigate = useNavigate()
   const [resumen, setResumen] = useState(null)
   const [cargando, setCargando] = useState(true)
 
@@ -122,6 +124,26 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* Tarjeta planes vencidos */}
+      {!cargando && resumen?.planes_vencidos > 0 && (
+        <div className="mt-6">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Atención requerida</p>
+          <button
+            onClick={() => navigate('/cobranza?filtro=vencidas')}
+            className="w-full md:w-auto text-left bg-orange-50 border-2 border-orange-300 rounded-2xl p-6 hover:bg-orange-100 transition group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-orange-400 rounded-xl flex items-center justify-center text-white text-xl">⚠️</div>
+              <div>
+                <p className="text-orange-700 text-sm font-medium">Planes vencidos por incumplimiento</p>
+                <p className="text-3xl font-bold text-orange-600 mt-0.5">{resumen.planes_vencidos}</p>
+                <p className="text-xs text-orange-500 mt-1">Cuentas que superaron su fecha límite — Click para gestionar</p>
+              </div>
+            </div>
+          </button>
+        </div>
+      )}
     </Layout>
   )
 }

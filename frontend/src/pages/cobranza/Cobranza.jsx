@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
@@ -32,11 +33,23 @@ const TIPOS_SIN_PAGO = [
 const FORM_PAGO_VACIO   = { monto_pago: '', tipo_pago: 'abono', origen_pago: 'domicilio', observaciones: '' }
 const FORM_VISITA_VACIO = { tipo_seguimiento: 'no_localizado', comentario: '', fecha_programada: '' }
 
+const LABEL_PLAN = {
+  un_mes: '1 mes', dos_meses: '2 meses', tres_meses: '3 meses', largo_plazo: 'Largo plazo'
+}
+
+const SIGUIENTES_PLANES = {
+  un_mes: ['dos_meses', 'tres_meses', 'largo_plazo'],
+  dos_meses: ['tres_meses', 'largo_plazo'],
+  tres_meses: ['largo_plazo'],
+}
+
 export default function Cobranza() {
   const { usuario } = useAuth()
+  const location = useLocation()
 
   const [cuentas, setCuentas] = useState([])
   const [cargando, setCargando] = useState(true)
+  const [soloVencidas, setSoloVencidas] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null)
   const [modalAbierto, setModalAbierto] = useState(false)
@@ -62,11 +75,23 @@ export default function Cobranza() {
   const [formFrecuencia, setFormFrecuencia] = useState({ frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '' })
   const [guardandoFrecuencia, setGuardandoFrecuencia] = useState(false)
 
+  // Cambio de plan
+  const [modalCambiarPlan, setModalCambiarPlan] = useState(false)
+  const [nuevoPlanSugerido, setNuevoPlanSugerido] = useState(null)
+  const [guardandoPlan, setGuardandoPlan] = useState(false)
+  const [previewCambio, setPreviewCambio] = useState(null) // { precio_anterior, precio_nuevo, saldo_anterior, saldo_nuevo }
+
   // Historiales
   const [historialPagos, setHistorialPagos]     = useState([])
   const [historialVisitas, setHistorialVisitas] = useState([])
 
-  useEffect(() => { cargarCuentas() }, [])
+  useEffect(() => {
+    cargarCuentas()
+    // Detectar filtro de vencidas desde el dashboard
+    if (new URLSearchParams(location.search).get('filtro') === 'vencidas') {
+      setSoloVencidas(true)
+    }
+  }, [])
 
   const cargarCuentas = async () => {
     try {
@@ -415,6 +440,50 @@ export default function Cobranza() {
     }
   }
 
+  const estaVencida = (c) =>
+    c.fecha_limite &&
+    new Date(c.fecha_limite) < new Date() &&
+    !['liquidada', 'cancelada'].includes(c.estado_cuenta) &&
+    c.plan_actual !== 'largo_plazo'
+
+  const abrirCambiarPlan = async () => {
+    // Obtener preview del cambio desde el backend
+    try {
+      const res = await api.get('/cuentas/verificar-vencimientos')
+      const info = res.data.find(v => v.id_cuenta === cuentaSeleccionada.id_cuenta)
+      if (info?.nuevo_plan_sugerido) {
+        setNuevoPlanSugerido(info.nuevo_plan_sugerido)
+        setPreviewCambio({
+          precio_anterior: parseFloat(cuentaSeleccionada.precio_plan_actual),
+          precio_nuevo:    info.precio_nuevo_plan,
+          saldo_anterior:  parseFloat(cuentaSeleccionada.saldo_actual),
+          saldo_nuevo:     info.nuevo_saldo,
+        })
+      }
+    } catch {
+      // Si falla el preview, igual permitir selección manual
+      const planes = SIGUIENTES_PLANES[cuentaSeleccionada.plan_actual] || []
+      setNuevoPlanSugerido(planes[0] || null)
+      setPreviewCambio(null)
+    }
+    setModalCambiarPlan(true)
+  }
+
+  const handleCambiarPlan = async () => {
+    if (!nuevoPlanSugerido) return
+    setGuardandoPlan(true)
+    try {
+      await api.post(`/cuentas/${cuentaSeleccionada.id_cuenta}/cambiar-plan`, { nuevo_plan: nuevoPlanSugerido })
+      setModalCambiarPlan(false)
+      cerrarModal()
+      cargarCuentas()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al cambiar el plan')
+    } finally {
+      setGuardandoPlan(false)
+    }
+  }
+
   const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
   const estadoColor = {
@@ -429,11 +498,16 @@ export default function Cobranza() {
     return <span className="text-red-600 text-xs font-medium">{semanas} semanas de atraso</span>
   }
 
-  const cuentasFiltradas = cuentas.filter(c =>
-    c.cliente?.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-    c.folio_cuenta.toLowerCase().includes(busqueda.toLowerCase()) ||
-    c.cliente?.numero_cuenta.toLowerCase().includes(busqueda.toLowerCase())
-  )
+  const cuentasFiltradas = cuentas.filter(c => {
+    if (soloVencidas && !estaVencida(c)) return false
+    return (
+      c.cliente?.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+      c.folio_cuenta.toLowerCase().includes(busqueda.toLowerCase()) ||
+      c.cliente?.numero_cuenta.toLowerCase().includes(busqueda.toLowerCase())
+    )
+  })
+
+  const totalVencidas = cuentas.filter(estaVencida).length
 
   const saldo          = parseFloat(cuentaSeleccionada?.saldo_actual || 0)
   const montoIngresado = parseFloat(formPago.monto_pago || 0)
@@ -444,8 +518,26 @@ export default function Cobranza() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Cobranza</h2>
-          <p className="text-gray-500 text-sm mt-1">{cuentas.length} cuentas activas</p>
+          <p className="text-gray-500 text-sm mt-1">{cuentas.length} cuentas activas
+            {totalVencidas > 0 && (
+              <span className="ml-2 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full font-medium">
+                {totalVencidas} plan(es) vencido(s)
+              </span>
+            )}
+          </p>
         </div>
+        {totalVencidas > 0 && (
+          <button
+            onClick={() => setSoloVencidas(!soloVencidas)}
+            className={`text-sm px-3 py-1.5 rounded-lg font-medium transition border ${
+              soloVencidas
+                ? 'bg-orange-500 text-white border-orange-500'
+                : 'bg-orange-50 text-orange-700 border-orange-300 hover:bg-orange-100'
+            }`}
+          >
+            {soloVencidas ? '⚠️ Mostrando vencidas' : '⚠️ Ver solo vencidas'}
+          </button>
+        )}
       </div>
 
       <div className="mb-4">
@@ -485,7 +577,12 @@ export default function Cobranza() {
                     {estadoSemanas(c.semanas_atraso)}
                   </td>
                   <td className="px-6 py-4 font-mono text-gray-500 text-xs">{c.folio_cuenta}</td>
-                  <td className="px-6 py-4 text-gray-600 text-xs">{c.plan_actual?.replace(/_/g, ' ')}</td>
+                  <td className="px-6 py-4 text-xs">
+                    <span className="text-gray-600">{c.plan_actual?.replace(/_/g, ' ')}</span>
+                    {estaVencida(c) && (
+                      <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Plan vencido</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 text-gray-500 text-xs">
                     <span className="capitalize">{c.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</span>
                     {c.horario_preferido && <p className="text-gray-400">{c.horario_preferido}</p>}
@@ -532,6 +629,28 @@ export default function Cobranza() {
 
             {/* Info de la cuenta */}
             <div className="p-6 border-b bg-gray-50">
+              {/* Banner plan vencido */}
+              {estaVencida(cuentaSeleccionada) && (
+                <div className="mb-4 bg-orange-50 border border-orange-300 rounded-xl px-4 py-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-orange-800 text-sm font-semibold">⚠️ Plan vencido por incumplimiento</p>
+                    <p className="text-orange-600 text-xs mt-0.5">
+                      Venció el {new Date(cuentaSeleccionada.fecha_limite).toLocaleDateString('es-MX')} —
+                      Plan actual: {LABEL_PLAN[cuentaSeleccionada.plan_actual]}
+                    </p>
+                  </div>
+                  {usuario?.rol === 'administrador' && (
+                    <button
+                      type="button"
+                      onClick={abrirCambiarPlan}
+                      className="shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                    >
+                      Cambiar plan
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Saldo restante</p>
@@ -974,6 +1093,99 @@ export default function Cobranza() {
           </div>
         </div>
       )}
+      {/* ──── MINI MODAL: Cambiar plan ──── */}
+      {modalCambiarPlan && cuentaSeleccionada && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-bold text-gray-800">Cambiar plan por incumplimiento</h3>
+              <button onClick={() => setModalCambiarPlan(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Info del plan actual */}
+              <div className="bg-gray-50 rounded-xl px-4 py-3 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Cliente:</span>
+                  <span className="font-medium">{cuentaSeleccionada.cliente?.nombre}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Plan actual:</span>
+                  <span className="font-medium text-orange-700">{LABEL_PLAN[cuentaSeleccionada.plan_actual]}</span>
+                </div>
+              </div>
+
+              {/* Selector de nuevo plan */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Nuevo plan</label>
+                <div className="space-y-2">
+                  {(SIGUIENTES_PLANES[cuentaSeleccionada.plan_actual] || []).map(plan => (
+                    <label key={plan} className={`flex items-center gap-3 border rounded-xl px-4 py-3 cursor-pointer transition ${
+                      nuevoPlanSugerido === plan ? 'border-orange-400 bg-orange-50' : 'border-gray-200 hover:bg-gray-50'
+                    }`}>
+                      <input type="radio" name="nuevo_plan" value={plan}
+                        checked={nuevoPlanSugerido === plan}
+                        onChange={() => setNuevoPlanSugerido(plan)}
+                        className="accent-orange-500" />
+                      <span className="text-sm font-medium text-gray-800">{LABEL_PLAN[plan]}</span>
+                      {plan === (SIGUIENTES_PLANES[cuentaSeleccionada.plan_actual] || [])[0] && (
+                        <span className="ml-auto text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Sugerido</span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview del recálculo */}
+              {previewCambio && nuevoPlanSugerido && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm space-y-2">
+                  <p className="font-semibold text-blue-800 text-xs uppercase tracking-wide">Resumen del cambio</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="text-gray-500">Precio anterior</p>
+                      <p className="font-bold text-gray-700">{fmt(previewCambio.precio_anterior)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Precio nuevo plan</p>
+                      <p className="font-bold text-gray-700">{fmt(previewCambio.precio_nuevo)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Saldo anterior</p>
+                      <p className="font-bold text-orange-600">{fmt(previewCambio.saldo_anterior)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Nuevo saldo</p>
+                      <p className={`font-bold ${previewCambio.saldo_nuevo === 0 ? 'text-green-600' : 'text-blue-700'}`}>
+                        {previewCambio.saldo_nuevo === 0 ? '✅ Liquidada' : fmt(previewCambio.saldo_nuevo)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Diferencia en precio: {fmt(previewCambio.precio_nuevo - previewCambio.precio_anterior)}
+                  </p>
+                </div>
+              )}
+
+              <p className="text-xs text-gray-400">
+                Se registrará en observaciones y se perderá el beneficio del plan anterior (beneficio_vigente = false).
+              </p>
+
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setModalCambiarPlan(false)}
+                  className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50 transition">
+                  Cancelar
+                </button>
+                <button type="button" onClick={handleCambiarPlan}
+                  disabled={!nuevoPlanSugerido || guardandoPlan}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                  {guardandoPlan ? 'Aplicando...' : 'Confirmar cambio de plan'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </Layout>
   )
 }
