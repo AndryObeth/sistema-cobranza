@@ -56,6 +56,11 @@ export default function Cobranza() {
   // Datos del último pago registrado (para el ticket)
   const [datosPago, setDatosPago] = useState(null)
 
+  // Edición de frecuencia de cobro
+  const [editandoFrecuencia, setEditandoFrecuencia] = useState(false)
+  const [formFrecuencia, setFormFrecuencia] = useState({ frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '' })
+  const [guardandoFrecuencia, setGuardandoFrecuencia] = useState(false)
+
   // Historiales
   const [historialPagos, setHistorialPagos]     = useState([])
   const [historialVisitas, setHistorialVisitas] = useState([])
@@ -79,8 +84,9 @@ export default function Cobranza() {
         api.get(`/pagos/cuenta/${cuenta.id_cuenta}`),
         api.get(`/visitas/cuenta/${cuenta.id_cuenta}`)
       ])
-      setCuentaSeleccionada(resCuenta.data)
-      setHistorialPagos(resCuenta.data.pagos || [])
+      const cuenta = resCuenta.data
+      setCuentaSeleccionada(cuenta)
+      setHistorialPagos(cuenta.pagos || [])
       setHistorialVisitas(resVisitas.data)
       setNoHuboPago(false)
       setRegistrarVisitaTambien(false)
@@ -88,6 +94,12 @@ export default function Cobranza() {
       setFormVisita(FORM_VISITA_VACIO)
       setError('')
       setExito('')
+      setEditandoFrecuencia(false)
+      setFormFrecuencia({
+        frecuencia_pago:    cuenta.frecuencia_pago    || 'semanal',
+        fecha_primer_cobro: cuenta.fecha_primer_cobro ? cuenta.fecha_primer_cobro.split('T')[0] : '',
+        horario_preferido:  cuenta.horario_preferido  || '',
+      })
       setModalAbierto(true)
     } catch {
       console.error('Error al cargar cuenta')
@@ -368,6 +380,23 @@ export default function Cobranza() {
     }
   }
 
+  const handleGuardarFrecuencia = async () => {
+    setGuardandoFrecuencia(true)
+    try {
+      const res = await api.put(`/pagos/cuenta/${cuentaSeleccionada.id_cuenta}/frecuencia`, {
+        frecuencia_pago:    formFrecuencia.frecuencia_pago,
+        fecha_primer_cobro: formFrecuencia.fecha_primer_cobro || null,
+        horario_preferido:  formFrecuencia.horario_preferido  || null,
+      })
+      setCuentaSeleccionada(prev => ({ ...prev, ...res.data.cuenta }))
+      setEditandoFrecuencia(false)
+    } catch {
+      // silencioso — el usuario puede reintentar
+    } finally {
+      setGuardandoFrecuencia(false)
+    }
+  }
+
   const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
   const estadoColor = {
@@ -423,6 +452,7 @@ export default function Cobranza() {
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">Cliente</th>
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">Folio</th>
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
+                <th className="text-left px-6 py-3 text-gray-600 font-medium">Frecuencia</th>
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">Saldo</th>
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">Último pago</th>
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">Estado</th>
@@ -438,6 +468,10 @@ export default function Cobranza() {
                   </td>
                   <td className="px-6 py-4 font-mono text-gray-500 text-xs">{c.folio_cuenta}</td>
                   <td className="px-6 py-4 text-gray-600 text-xs">{c.plan_actual?.replace(/_/g, ' ')}</td>
+                  <td className="px-6 py-4 text-gray-500 text-xs">
+                    <span className="capitalize">{c.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</span>
+                    {c.horario_preferido && <p className="text-gray-400">{c.horario_preferido}</p>}
+                  </td>
                   <td className="px-6 py-4 font-bold text-gray-800">{fmt(c.saldo_actual)}</td>
                   <td className="px-6 py-4 text-gray-500">
                     {c.fecha_ultimo_pago
@@ -540,6 +574,99 @@ export default function Cobranza() {
                         {d.producto} x{d.cantidad}
                       </span>
                     ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── Panel de frecuencia de cobro ── */}
+            <div className="px-6 py-4 border-b">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-gray-700">Frecuencia de cobro</p>
+                {!editandoFrecuencia && (
+                  <button
+                    type="button"
+                    onClick={() => setEditandoFrecuencia(true)}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Editar
+                  </button>
+                )}
+              </div>
+
+              {!editandoFrecuencia ? (
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-400 mb-0.5">Frecuencia</p>
+                    <p className="font-medium text-gray-700 capitalize">
+                      {(cuentaSeleccionada.frecuencia_pago || 'semanal').replace(/_/g, ' ')}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 mb-0.5">Primer cobro</p>
+                    <p className="font-medium text-gray-700">
+                      {cuentaSeleccionada.fecha_primer_cobro
+                        ? new Date(cuentaSeleccionada.fecha_primer_cobro).toLocaleDateString('es-MX')
+                        : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 mb-0.5">Horario preferido</p>
+                    <p className="font-medium text-gray-700">{cuentaSeleccionada.horario_preferido || '—'}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Frecuencia</label>
+                      <select
+                        value={formFrecuencia.frecuencia_pago}
+                        onChange={e => setFormFrecuencia({ ...formFrecuencia, frecuencia_pago: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="semanal">Semanal</option>
+                        <option value="quincenal">Quincenal</option>
+                        <option value="mensual">Mensual</option>
+                        <option value="dos_meses">Cada 2 meses</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Fecha primer cobro</label>
+                      <input
+                        type="date"
+                        value={formFrecuencia.fecha_primer_cobro}
+                        onChange={e => setFormFrecuencia({ ...formFrecuencia, fecha_primer_cobro: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Horario preferido</label>
+                      <input
+                        type="text"
+                        value={formFrecuencia.horario_preferido}
+                        onChange={e => setFormFrecuencia({ ...formFrecuencia, horario_preferido: e.target.value })}
+                        placeholder="Ej: Mañanas, 10–12 am"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditandoFrecuencia(false)}
+                      className="flex-1 border border-gray-300 text-gray-600 py-1.5 rounded-lg text-sm hover:bg-gray-50 transition"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGuardarFrecuencia}
+                      disabled={guardandoFrecuencia}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50"
+                    >
+                      {guardandoFrecuencia ? 'Guardando...' : 'Guardar'}
+                    </button>
                   </div>
                 </div>
               )}

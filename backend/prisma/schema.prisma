@@ -229,6 +229,9 @@ model Cuenta {
   semanas_atraso       Int      @default(0)
   fecha_ultimo_pago    DateTime?
   estado_cuenta        EstadoCuenta @default(activa)
+  frecuencia_pago      FrecuenciaPago @default(semanal)
+  fecha_primer_cobro   DateTime?
+  horario_preferido    String?
   observaciones        String?
   updated_at           DateTime @updatedAt
 
@@ -238,6 +241,13 @@ model Cuenta {
   pagos    Pago[]
 
   @@map("cuentas")
+}
+
+enum FrecuenciaPago {
+  semanal
+  quincenal
+  mensual
+  dos_meses
 }
 
 enum EstadoCuenta {

@@ -47,20 +47,34 @@ router.post('/', auth, async (req, res) => {
       id_cliente, id_cobrador, ruta,
       tipo_venta, plan_venta,
       precio_original_total, precio_final_total,
+      precio_final_total_override, observacion_ajuste,
       enganche_recibido_total, observaciones,
+      fecha_venta,
+      frecuencia_pago, fecha_primer_cobro, horario_preferido,
       detalles
     } = req.body
 
+    // Si el admin envía un override de precio, usarlo; si no, usar el calculado
+    const esAdmin = req.usuario.rol === 'administrador'
+    const precio_final_usado = esAdmin && precio_final_total_override != null
+      ? parseFloat(precio_final_total_override)
+      : parseFloat(precio_final_total)
+
     const enganche_objetivo = precio_original_total * 0.10
-    const enganche_para_vendedor = Math.min(enganche_recibido_total, enganche_objetivo)
-    const enganche_regado = Math.max(0, enganche_objetivo - enganche_recibido_total)
-    const sobreenganche = Math.max(0, enganche_recibido_total - enganche_objetivo)
+    const enganche_para_vendedor = Math.min(enganche_recibido_total || 0, enganche_objetivo)
+    const enganche_regado = Math.max(0, enganche_objetivo - (enganche_recibido_total || 0))
+    const sobreenganche = Math.max(0, (enganche_recibido_total || 0) - enganche_objetivo)
     const monto_reportado = tipo_venta === 'contado'
       ? precio_original_total * 0.50
       : sobreenganche
     const utilidad_vendedor_contado = tipo_venta === 'contado'
-      ? precio_final_total - monto_reportado
+      ? precio_final_usado - monto_reportado
       : 0
+
+    // Combinar observaciones con motivo de ajuste si aplica
+    const observaciones_final = observacion_ajuste
+      ? `${observaciones || ''}${observaciones ? ' | ' : ''}[Ajuste de precio: ${observacion_ajuste}]`
+      : observaciones
 
     const folio_venta = 'VTA-' + Date.now()
 
@@ -73,8 +87,9 @@ router.post('/', auth, async (req, res) => {
         ruta,
         tipo_venta,
         plan_venta,
+        fecha_venta: fecha_venta ? new Date(fecha_venta) : new Date(),
         precio_original_total,
-        precio_final_total,
+        precio_final_total: precio_final_usado,
         enganche_recibido_total: enganche_recibido_total || 0,
         enganche_objetivo_vendedor: enganche_objetivo,
         enganche_para_vendedor,
@@ -82,7 +97,7 @@ router.post('/', auth, async (req, res) => {
         sobreenganche,
         monto_reportado_negocio: monto_reportado,
         utilidad_vendedor_contado,
-        observaciones,
+        observaciones: observaciones_final,
         estatus_venta: tipo_venta === 'contado' ? 'liquidada' : 'activa',
         detalles: {
           create: detalles
@@ -106,12 +121,15 @@ router.post('/', auth, async (req, res) => {
           plan_inicial: plan_venta,
           plan_actual: plan_venta,
           precio_original_total,
-          precio_plan_actual: precio_final_total,
+          precio_plan_actual: precio_final_usado,
           abono_inicial: enganche_recibido_total || 0,
-          saldo_inicial: precio_final_total - (enganche_recibido_total || 0),
-          saldo_actual: precio_final_total - (enganche_recibido_total || 0),
+          saldo_inicial: precio_final_usado - (enganche_recibido_total || 0),
+          saldo_actual: precio_final_usado - (enganche_recibido_total || 0),
           semanas_plazo: semanas,
-          fecha_limite: new Date(Date.now() + semanas * 7 * 24 * 60 * 60 * 1000)
+          fecha_limite: new Date(Date.now() + semanas * 7 * 24 * 60 * 60 * 1000),
+          frecuencia_pago:    frecuencia_pago    || 'semanal',
+          fecha_primer_cobro: fecha_primer_cobro ? new Date(fecha_primer_cobro) : null,
+          horario_preferido:  horario_preferido  || null
         }
       })
     }
@@ -119,6 +137,57 @@ router.post('/', auth, async (req, res) => {
     res.status(201).json({ mensaje: 'Venta registrada', venta })
   } catch (error) {
     res.status(500).json({ error: 'Error al registrar venta', detalle: error.message })
+  }
+})
+
+// PUT /api/ventas/:id — editar venta (solo administrador)
+router.put('/:id', auth, async (req, res) => {
+  try {
+    if (req.usuario.rol !== 'administrador') {
+      return res.status(403).json({ error: 'Solo el administrador puede editar ventas' })
+    }
+
+    const id_venta = parseInt(req.params.id)
+    const { fecha_venta, precio_final_total, enganche_recibido_total, observaciones, estatus_venta } = req.body
+
+    const ventaActual = await prisma.venta.findUnique({
+      where: { id_venta },
+      include: { cuenta: true }
+    })
+    if (!ventaActual) return res.status(404).json({ error: 'Venta no encontrada' })
+
+    const dataUpdate = {}
+    if (fecha_venta !== undefined)           dataUpdate.fecha_venta            = new Date(fecha_venta)
+    if (precio_final_total !== undefined)    dataUpdate.precio_final_total      = parseFloat(precio_final_total)
+    if (enganche_recibido_total !== undefined) dataUpdate.enganche_recibido_total = parseFloat(enganche_recibido_total)
+    if (observaciones !== undefined)         dataUpdate.observaciones           = observaciones
+    if (estatus_venta !== undefined)         dataUpdate.estatus_venta           = estatus_venta
+
+    const venta = await prisma.venta.update({
+      where: { id_venta },
+      data: dataUpdate
+    })
+
+    // Si cambió el precio y hay cuenta asociada, ajustar saldo proporcionalmente
+    if (precio_final_total !== undefined && ventaActual.cuenta) {
+      const diferencia = parseFloat(precio_final_total) - parseFloat(ventaActual.precio_final_total)
+      const nuevo_saldo_actual = Math.max(0, parseFloat(ventaActual.cuenta.saldo_actual) + diferencia)
+      const nuevo_saldo_inicial = Math.max(0, parseFloat(ventaActual.cuenta.saldo_inicial) + diferencia)
+
+      await prisma.cuenta.update({
+        where: { id_cuenta: ventaActual.cuenta.id_cuenta },
+        data: {
+          precio_plan_actual: parseFloat(precio_final_total),
+          saldo_inicial:      nuevo_saldo_inicial,
+          saldo_actual:       nuevo_saldo_actual,
+          estado_cuenta:      nuevo_saldo_actual === 0 ? 'liquidada' : ventaActual.cuenta.estado_cuenta
+        }
+      })
+    }
+
+    res.json({ mensaje: 'Venta actualizada', venta })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar venta', detalle: error.message })
   }
 })
 
