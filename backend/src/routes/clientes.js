@@ -103,6 +103,8 @@ router.post('/', auth, async (req, res) => {
     }
 
     const nc = numero_cuenta.trim()
+    // Evitar que campos enum vacíos generen error en Prisma
+    if (!resto.nivel_riesgo) resto.nivel_riesgo = null
 
     // Verificar si ya existe ese número de cuenta
     const existente = await prisma.cliente.findUnique({ where: { numero_cuenta: nc } })
@@ -130,9 +132,11 @@ router.post('/', auth, async (req, res) => {
 // PUT /api/clientes/:id — actualizar cliente
 router.put('/:id', auth, async (req, res) => {
   try {
+    const data = { ...req.body }
+    if (!data.nivel_riesgo) data.nivel_riesgo = null
     const cliente = await prisma.cliente.update({
       where: { id_cliente: parseInt(req.params.id) },
-      data: req.body
+      data
     })
     res.json(cliente)
   } catch {
