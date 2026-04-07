@@ -7,8 +7,12 @@ const prisma = new PrismaClient()
 // GET /api/clientes — listar todos
 router.get('/', auth, async (req, res) => {
   try {
+    const where = { activo: true }
+    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
+      where.ruta = req.usuario.ruta_asignada
+    }
     const clientes = await prisma.cliente.findMany({
-      where: { activo: true },
+      where,
       orderBy: { nombre: 'asc' }
     })
     res.json(clientes)
@@ -49,18 +53,73 @@ router.get('/:id', auth, async (req, res) => {
   }
 })
 
+// POST /api/clientes/importar-lote — inserción masiva (debe ir antes de /:id)
+router.post('/importar-lote', auth, async (req, res) => {
+  if (req.usuario.rol !== 'administrador') {
+    return res.status(403).json({ error: 'Solo el administrador puede importar clientes' })
+  }
+  const clientes = req.body // array de clientes
+  if (!Array.isArray(clientes) || clientes.length === 0) {
+    return res.status(400).json({ error: 'Se requiere un array de clientes' })
+  }
+
+  const resultados = { creados: 0, reactivados: 0, omitidos: [], errores: [] }
+
+  for (const data of clientes) {
+    if (!data.numero_cuenta) { resultados.errores.push({ cliente: data.nombre, error: 'Falta numero_cuenta' }); continue }
+    try {
+      const existente = await prisma.cliente.findUnique({ where: { numero_cuenta: data.numero_cuenta } })
+      if (existente) {
+        if (existente.activo) {
+          resultados.omitidos.push({ numero_cuenta: data.numero_cuenta, nombre: data.nombre, motivo: 'Ya existe y está activo' })
+          continue
+        }
+        await prisma.cliente.update({
+          where: { id_cliente: existente.id_cliente },
+          data: { ...data, activo: true, id_vendedor_alta: req.usuario.id }
+        })
+        resultados.reactivados++
+      } else {
+        await prisma.cliente.create({
+          data: { ...data, id_vendedor_alta: req.usuario.id }
+        })
+        resultados.creados++
+      }
+    } catch (e) {
+      resultados.errores.push({ cliente: data.nombre, error: e.message })
+    }
+  }
+
+  res.status(201).json({ mensaje: 'Importación completada', ...resultados })
+})
+
 // POST /api/clientes — crear cliente
 router.post('/', auth, async (req, res) => {
   try {
-    const data = req.body
-    const numero_cuenta = 'NC-' + Date.now()
+    const { numero_cuenta, ...resto } = req.body
+
+    if (!numero_cuenta || !numero_cuenta.trim()) {
+      return res.status(400).json({ error: 'El número de cuenta es obligatorio' })
+    }
+
+    const nc = numero_cuenta.trim()
+
+    // Verificar si ya existe ese número de cuenta
+    const existente = await prisma.cliente.findUnique({ where: { numero_cuenta: nc } })
+    if (existente) {
+      if (existente.activo) {
+        return res.status(400).json({ error: 'El número de cuenta ya está en uso por un cliente activo' })
+      }
+      // Reutilizar registro inactivo
+      const cliente = await prisma.cliente.update({
+        where: { id_cliente: existente.id_cliente },
+        data: { ...resto, numero_cuenta: nc, activo: true, id_vendedor_alta: req.usuario.id }
+      })
+      return res.status(201).json(cliente)
+    }
 
     const cliente = await prisma.cliente.create({
-      data: {
-        ...data,
-        numero_cuenta,
-        id_vendedor_alta: req.usuario.id
-      }
+      data: { ...resto, numero_cuenta: nc, id_vendedor_alta: req.usuario.id }
     })
     res.status(201).json(cliente)
   } catch (error) {

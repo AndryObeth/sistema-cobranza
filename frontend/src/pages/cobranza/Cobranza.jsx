@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
+import { encolarPago, getQueue } from '../../utils/offlineQueue.js'
 
 const visitaColor = {
   promesa_pago:        'bg-green-100 text-green-700',
@@ -84,9 +85,9 @@ export default function Cobranza() {
         api.get(`/pagos/cuenta/${cuenta.id_cuenta}`),
         api.get(`/visitas/cuenta/${cuenta.id_cuenta}`)
       ])
-      const cuenta = resCuenta.data
-      setCuentaSeleccionada(cuenta)
-      setHistorialPagos(cuenta.pagos || [])
+      const detalle = resCuenta.data
+      setCuentaSeleccionada(detalle)
+      setHistorialPagos(detalle.pagos || [])
       setHistorialVisitas(resVisitas.data)
       setNoHuboPago(false)
       setRegistrarVisitaTambien(false)
@@ -96,9 +97,9 @@ export default function Cobranza() {
       setExito('')
       setEditandoFrecuencia(false)
       setFormFrecuencia({
-        frecuencia_pago:    cuenta.frecuencia_pago    || 'semanal',
-        fecha_primer_cobro: cuenta.fecha_primer_cobro ? cuenta.fecha_primer_cobro.split('T')[0] : '',
-        horario_preferido:  cuenta.horario_preferido  || '',
+        frecuencia_pago:    detalle.frecuencia_pago    || 'semanal',
+        fecha_primer_cobro: detalle.fecha_primer_cobro ? detalle.fecha_primer_cobro.split('T')[0] : '',
+        horario_preferido:  detalle.horario_preferido  || '',
       })
       setModalAbierto(true)
     } catch {
@@ -291,6 +292,23 @@ export default function Cobranza() {
         const monto = parseFloat(formPago.monto_pago)
         if (!formPago.monto_pago || monto <= 0) {
           setError('Ingresa un monto válido')
+          return
+        }
+
+        // ── Modo offline: encolar y salir ──
+        if (!navigator.onLine) {
+          encolarPago({
+            id_cuenta:   cuentaSeleccionada.id_cuenta,
+            ...formPago,
+            monto_pago:  monto,
+            _meta: {
+              cliente_nombre: cuentaSeleccionada.cliente?.nombre,
+              folio_cuenta:   cuentaSeleccionada.folio_cuenta,
+            }
+          })
+          setExito('__offline__')
+          setFormPago(FORM_PAGO_VACIO)
+          setRegistrarVisitaTambien(false)
           return
         }
 
@@ -841,7 +859,13 @@ export default function Cobranza() {
 
               {/* Mensajes */}
               {error && <p className="text-red-500 text-sm">{error}</p>}
-              {exito && (
+              {exito === '__offline__' ? (
+                <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3">
+                  <p className="text-yellow-800 text-sm font-medium">
+                    📴 Guardado localmente — se enviará cuando haya conexión
+                  </p>
+                </div>
+              ) : exito ? (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
                   <p className="text-green-700 text-sm font-medium">{exito}</p>
                   {datosPago && (
@@ -854,7 +878,7 @@ export default function Cobranza() {
                     </button>
                   )}
                 </div>
-              )}
+              ) : null}
 
               {/* Botones */}
               <div className="flex gap-3 pt-1">
@@ -882,25 +906,44 @@ export default function Cobranza() {
             </form>
 
             {/* ── Historial de pagos ── */}
-            {historialPagos.length > 0 && (
-              <div className="px-6 pb-4 border-t pt-4">
-                <p className="text-sm font-semibold text-gray-700 mb-3">Últimos pagos</p>
-                <div className="space-y-2">
-                  {historialPagos.map(p => (
-                    <div key={p.id_pago} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2 text-sm">
-                      <div>
-                        <span className="font-medium text-gray-800">{fmt(p.monto_pago)}</span>
-                        <span className="text-gray-400 ml-2 text-xs">{p.tipo_pago}</span>
+            {(() => {
+              const pagosCola = cuentaSeleccionada
+                ? getQueue().filter(op => !op.sincronizado && op.datos?.id_cuenta === cuentaSeleccionada.id_cuenta)
+                : []
+              const hayHistorial = historialPagos.length > 0 || pagosCola.length > 0
+              if (!hayHistorial) return null
+              return (
+                <div className="px-6 pb-4 border-t pt-4">
+                  <p className="text-sm font-semibold text-gray-700 mb-3">Últimos pagos</p>
+                  <div className="space-y-2">
+                    {/* Pagos en cola offline */}
+                    {pagosCola.map(op => (
+                      <div key={op.id} className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2 text-sm">
+                        <div>
+                          <span className="font-medium text-yellow-800">{fmt(op.datos.monto_pago)}</span>
+                          <span className="text-yellow-600 ml-2 text-xs">{op.datos.tipo_pago}</span>
+                          <span className="ml-2 px-1.5 py-0.5 bg-yellow-200 text-yellow-800 text-xs rounded-full font-medium">Pendiente de sincronizar</span>
+                        </div>
+                        <p className="text-yellow-600 text-xs">{new Date(op.timestamp).toLocaleDateString('es-MX')}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX')}</p>
-                        <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
+                    ))}
+                    {/* Pagos sincronizados */}
+                    {historialPagos.map(p => (
+                      <div key={p.id_pago} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2 text-sm">
+                        <div>
+                          <span className="font-medium text-gray-800">{fmt(p.monto_pago)}</span>
+                          <span className="text-gray-400 ml-2 text-xs">{p.tipo_pago}</span>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX')}</p>
+                          <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* ── Historial de visitas ── */}
             {historialVisitas.length > 0 && (

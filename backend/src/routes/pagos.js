@@ -46,13 +46,15 @@ router.get('/cuenta/:id_cuenta', auth, async (req, res) => {
   }
 })
 
-// GET /api/pagos/todas-cuentas — todas las cuentas activas (para admin)
+// GET /api/pagos/todas-cuentas — todas las cuentas activas (para admin/cobrador)
 router.get('/todas-cuentas', auth, async (req, res) => {
   try {
+    const where = { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] } }
+    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
+      where.cliente = { ruta: req.usuario.ruta_asignada }
+    }
     const cuentas = await prisma.cuenta.findMany({
-      where: {
-        estado_cuenta: { in: ['activa', 'atraso', 'moroso'] }
-      },
+      where,
       include: {
         cliente: true,
         venta: { include: { vendedor: true, cobrador: true } }

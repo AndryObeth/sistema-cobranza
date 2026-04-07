@@ -204,6 +204,7 @@ function Campo({ label, children }) {
 const INPUT = 'w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm'
 
 const FORM_VACIO = {
+  numero_cuenta: '',
   nombre: '', alias: '', telefono: '',
   municipio: '', colonia: '', direccion: '',
   referencias: '', ruta: '',
@@ -255,16 +256,17 @@ export default function Clientes() {
     e.stopPropagation()
     setClienteEditando(c.id_cliente)
     setForm({
-      nombre:                 c.nombre || '',
-      alias:                  c.alias || '',
-      telefono:               c.telefono || '',
-      municipio:              c.municipio || '',
-      colonia:                c.colonia || '',
-      direccion:              c.direccion || '',
-      referencias:            c.referencias || '',
-      ruta:                   c.ruta || '',
-      estado_cliente:         c.estado_cliente || 'activo',
-      nivel_riesgo:           c.nivel_riesgo || '',
+      numero_cuenta:           c.numero_cuenta || '',
+      nombre:                  c.nombre || '',
+      alias:                   c.alias || '',
+      telefono:                c.telefono || '',
+      municipio:               c.municipio || '',
+      colonia:                 c.colonia || '',
+      direccion:               c.direccion || '',
+      referencias:             c.referencias || '',
+      ruta:                    c.ruta || '',
+      estado_cliente:          c.estado_cliente || 'activo',
+      nivel_riesgo:            c.nivel_riesgo || '',
       observaciones_generales: c.observaciones_generales || ''
     })
     setError('')
@@ -280,6 +282,7 @@ export default function Clientes() {
 
   const handleGuardar = async (e) => {
     e.preventDefault()
+    if (!form.numero_cuenta.trim()) { setError('El número de cuenta es obligatorio'); return }
     setGuardando(true)
     setError('')
     try {
@@ -290,8 +293,8 @@ export default function Clientes() {
       }
       cerrarModal()
       cargarClientes()
-    } catch {
-      setError(clienteEditando ? 'Error al actualizar cliente' : 'Error al guardar cliente')
+    } catch (err) {
+      setError(err.response?.data?.error || (clienteEditando ? 'Error al actualizar cliente' : 'Error al guardar cliente'))
     } finally {
       setGuardando(false)
     }
@@ -399,7 +402,7 @@ export default function Clientes() {
                 <h3 className="text-lg font-bold text-gray-800">
                   {clienteEditando ? 'Editar cliente' : 'Nuevo cliente'}
                 </h3>
-                {clienteEditando && (
+                {clienteEditando && !esAdmin && (
                   <p className="text-xs text-gray-400 mt-0.5">El número de cuenta no se puede modificar</p>
                 )}
               </div>
@@ -408,6 +411,15 @@ export default function Clientes() {
 
             <form onSubmit={handleGuardar} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Campo label="Número de cuenta *">
+                    <input type="text" required value={form.numero_cuenta}
+                      onChange={e => setForm({...form, numero_cuenta: e.target.value})}
+                      placeholder="Ej: 001, 1234, A-001"
+                      disabled={clienteEditando && !esAdmin}
+                      className={`${INPUT} ${clienteEditando && !esAdmin ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''}`} />
+                  </Campo>
+                </div>
                 <div className="col-span-2">
                   <Campo label="Nombre completo *">
                     <input type="text" required value={form.nombre}
@@ -442,9 +454,11 @@ export default function Clientes() {
                       onChange={e => setForm({...form, referencias: e.target.value})} className={INPUT} />
                   </Campo>
                 </div>
-                <Campo label="Ruta">
-                  <input type="text" value={form.ruta}
-                    onChange={e => setForm({...form, ruta: e.target.value})} className={INPUT} />
+                <Campo label="Ruta *">
+                  <input type="text" value={form.ruta} required
+                    onChange={e => setForm({...form, ruta: e.target.value})}
+                    placeholder="Ej: A, B, C, E"
+                    className={INPUT} />
                 </Campo>
 
                 {/* Campos solo visibles en edición */}

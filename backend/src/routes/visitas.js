@@ -54,16 +54,19 @@ router.get('/pendientes/:id_cobrador', auth, async (req, res) => {
   }
 })
 
-// GET /api/visitas/todas-pendientes — todas las visitas pendientes (admin)
+// GET /api/visitas/todas-pendientes — todas las visitas pendientes (admin/cobrador)
 router.get('/todas-pendientes', auth, async (req, res) => {
   try {
     const hoy = new Date()
     hoy.setHours(0, 0, 0, 0)
 
+    const where = { fecha_programada: { gte: hoy } }
+    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
+      where.cliente = { ruta: req.usuario.ruta_asignada }
+    }
+
     const visitas = await prisma.seguimientoCliente.findMany({
-      where: {
-        fecha_programada: { gte: hoy }
-      },
+      where,
       include: {
         cliente: { select: { nombre: true, numero_cuenta: true } },
         usuario: { select: { nombre: true, rol: true } }
