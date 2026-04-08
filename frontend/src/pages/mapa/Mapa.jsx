@@ -5,7 +5,7 @@ import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
 
-const GOOGLE_API_KEY = 'AIzaSyCyxJz71a1Sxghckwxiq00PKckjbSeK0vg'
+const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY
 const CENTRO_TUXTEPEC = { lat: 18.0886, lng: -96.1342 }
 const LIBRARIES = ['places']
 
