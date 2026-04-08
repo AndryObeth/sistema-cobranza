@@ -93,12 +93,12 @@ export default function Dashboard() {
       </div>
 
       {/* Fila 1 — métricas principales */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-4 md:mb-6">
         {fila1.map(card => (
-          <div key={card.label} className="bg-white rounded-2xl shadow p-6">
-            <div className={`w-10 h-10 ${card.color} rounded-xl mb-4`} />
-            <p className="text-gray-500 text-sm">{card.label}</p>
-            <p className={`text-3xl font-bold mt-1 ${cargando ? 'text-gray-300 animate-pulse' : 'text-gray-800'}`}>
+          <div key={card.label} className="bg-white rounded-xl md:rounded-2xl shadow p-4 md:p-6">
+            <div className={`w-8 h-8 md:w-10 md:h-10 ${card.color} rounded-lg md:rounded-xl mb-3 md:mb-4`} />
+            <p className="text-gray-500 text-xs md:text-sm">{card.label}</p>
+            <p className={`text-2xl md:text-3xl font-bold mt-1 ${cargando ? 'text-gray-300 animate-pulse' : 'text-gray-800'}`}>
               {card.valor}
             </p>
             {card.sub && (
@@ -110,12 +110,12 @@ export default function Dashboard() {
 
       {/* Fila 2 — métricas de cartera */}
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Cartera</p>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
         {fila2.map(card => (
-          <div key={card.label} className="bg-white rounded-2xl shadow p-6">
-            <div className={`w-10 h-10 ${card.color} rounded-xl mb-4`} />
-            <p className="text-gray-500 text-sm">{card.label}</p>
-            <p className={`text-3xl font-bold mt-1 ${cargando ? 'text-gray-300 animate-pulse' : 'text-gray-800'}`}>
+          <div key={card.label} className="bg-white rounded-xl md:rounded-2xl shadow p-4 md:p-6">
+            <div className={`w-8 h-8 md:w-10 md:h-10 ${card.color} rounded-lg md:rounded-xl mb-3 md:mb-4`} />
+            <p className="text-gray-500 text-xs md:text-sm">{card.label}</p>
+            <p className={`text-2xl md:text-3xl font-bold mt-1 ${cargando ? 'text-gray-300 animate-pulse' : 'text-gray-800'}`}>
               {card.valor}
             </p>
             {card.sub && (

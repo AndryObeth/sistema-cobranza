@@ -116,6 +116,32 @@ export default function Visitas() {
                 <span className="text-xs text-gray-500 font-medium">{items.length} visita{items.length !== 1 ? 's' : ''}</span>
               </div>
 
+              {/* Cards — móvil */}
+              <div className="sm:hidden divide-y divide-gray-100">
+                {items.map(v => (
+                  <div key={v.id_seguimiento} className="p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-gray-800">{v.cliente?.nombre}</p>
+                        <p className="text-gray-400 text-xs font-mono">{v.cliente?.numero_cuenta}</p>
+                      </div>
+                      <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-medium ${visitaColor[v.tipo_seguimiento]}`}>
+                        {visitaLabel[v.tipo_seguimiento]}
+                      </span>
+                    </div>
+                    {v.fecha_programada && (
+                      <p className={`text-sm font-medium ${esFechaHoy(v.fecha_programada) ? 'text-orange-600' : 'text-gray-600'}`}>
+                        {esFechaHoy(v.fecha_programada) && '⚡ '}
+                        {new Date(v.fecha_programada).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
+                      </p>
+                    )}
+                    {v.comentario && <p className="text-sm text-gray-500">{v.comentario}</p>}
+                  </div>
+                ))}
+              </div>
+
+              {/* Tabla — desktop */}
+              <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
@@ -160,6 +186,7 @@ export default function Visitas() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           ))}
         </div>

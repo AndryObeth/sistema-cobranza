@@ -276,17 +276,18 @@ export default function Ventas() {
         ) : ventasFiltradas.length === 0 ? (
           <p className="text-center text-gray-400 py-12">No hay ventas registradas</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Folio</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Cliente</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Tipo</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Precio</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Fecha</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Estatus</th>
-                {esAdmin && <th className="px-6 py-3"></th>}
+                <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Folio</th>
+                <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Cliente</th>
+                <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Tipo</th>
+                <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
+                <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Precio</th>
+                <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Fecha</th>
+                <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Estatus</th>
+                {esAdmin && <th className="px-4 md:px-6 py-3"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -294,23 +295,23 @@ export default function Ventas() {
                 const liquidada = v.estatus_venta === 'liquidada'
                 return (
                   <tr key={v.id_venta} className={`transition ${liquidada ? 'opacity-50 bg-gray-50' : 'hover:bg-gray-50'}`}>
-                    <td className="px-6 py-4 font-mono text-gray-400 text-xs">{v.folio_venta}</td>
-                    <td className={`px-6 py-4 font-medium ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{v.cliente?.nombre}</td>
-                    <td className="px-6 py-4">
+                    <td className="hidden md:table-cell px-6 py-4 font-mono text-gray-400 text-xs">{v.folio_venta}</td>
+                    <td className={`px-4 md:px-6 py-4 font-medium ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{v.cliente?.nombre}</td>
+                    <td className="hidden sm:table-cell px-6 py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         liquidada ? 'bg-gray-100 text-gray-400' :
                         v.tipo_venta === 'contado' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
                       }`}>{v.tipo_venta}</span>
                     </td>
-                    <td className={`px-6 py-4 text-xs ${liquidada ? 'text-gray-400' : 'text-gray-600'}`}>{v.plan_venta?.replace(/_/g, ' ')}</td>
-                    <td className="px-6 py-4">
+                    <td className={`hidden sm:table-cell px-6 py-4 text-xs ${liquidada ? 'text-gray-400' : 'text-gray-600'}`}>{v.plan_venta?.replace(/_/g, ' ')}</td>
+                    <td className="px-4 md:px-6 py-4">
                       {!liquidada && parseFloat(v.precio_original_total) > parseFloat(v.precio_final_total) && (
                         <p className="text-xs text-gray-400 line-through">{fmt(v.precio_original_total)}</p>
                       )}
-                      <p className={`font-medium ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{fmt(v.precio_final_total)}</p>
+                      <p className={`font-medium whitespace-nowrap ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{fmt(v.precio_final_total)}</p>
                     </td>
-                    <td className={`px-6 py-4 ${liquidada ? 'text-gray-400' : 'text-gray-500'}`}>{new Date(v.fecha_venta).toLocaleDateString('es-MX')}</td>
-                    <td className="px-6 py-4">
+                    <td className={`hidden md:table-cell px-6 py-4 ${liquidada ? 'text-gray-400' : 'text-gray-500'}`}>{new Date(v.fecha_venta).toLocaleDateString('es-MX')}</td>
+                    <td className="px-4 md:px-6 py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         v.estatus_venta === 'activa'    ? 'bg-green-100 text-green-700' :
                         v.estatus_venta === 'liquidada' ? 'bg-gray-100 text-gray-400' :
@@ -318,9 +319,9 @@ export default function Ventas() {
                       }`}>{v.estatus_venta}</span>
                     </td>
                     {esAdmin && (
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-4 md:px-6 py-4 text-right">
                         <button onClick={e => abrirEdicion(e, v)}
-                          className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition font-medium">
+                          className="text-xs px-3 min-h-[44px] md:min-h-0 md:py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition font-medium">
                           Editar
                         </button>
                       </td>
@@ -330,6 +331,7 @@ export default function Ventas() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

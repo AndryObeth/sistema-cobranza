@@ -615,8 +615,8 @@ export default function Cobranza() {
 
       {/* ──────────────── MODAL ──────────────── */}
       {modalAbierto && cuentaSeleccionada && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[95vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-end sm:items-center justify-center z-50 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl h-[95vh] sm:h-auto sm:max-h-[95vh] overflow-y-auto">
 
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b">

@@ -100,47 +100,49 @@ export default function Productos() {
         ) : productosFiltrados.length === 0 ? (
           <p className="text-center text-gray-400 py-12">No hay productos registrados</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Código</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Nombre</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Categoría</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Precio original</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">2 meses</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">3 meses</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Estatus</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {productosFiltrados.map(p => (
-                <tr key={p.id_producto} className="hover:bg-gray-50 transition">
-                  <td className="px-6 py-4 font-mono text-gray-500">{p.codigo_producto}</td>
-                  <td className="px-6 py-4 font-medium text-gray-800">
-                    {p.nombre_comercial}
-                    {p.marca && <span className="text-gray-400 font-normal ml-2">{p.marca}</span>}
-                  </td>
-                  <td className="px-6 py-4 text-gray-600">{p.categoria || '—'}</td>
-                  <td className="px-6 py-4 text-gray-800 font-medium">{fmt(p.precio_original)}</td>
-                  <td className="px-6 py-4">
-                    {p.aplica_2_meses
-                      ? <span className="text-green-600">{fmt(p.pago_semanal_2_meses)}/sem</span>
-                      : <span className="text-gray-400">No aplica</span>}
-                  </td>
-                  <td className="px-6 py-4">
-                    {p.aplica_3_meses
-                      ? <span className="text-green-600">{fmt(p.pago_semanal_3_meses)}/sem</span>
-                      : <span className="text-gray-400">No aplica</span>}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      p.estatus === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                    }`}>{p.estatus}</span>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium whitespace-nowrap">Código</th>
+                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Nombre</th>
+                  <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Categoría</th>
+                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium whitespace-nowrap">Precio</th>
+                  <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium whitespace-nowrap">2 meses</th>
+                  <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium whitespace-nowrap">3 meses</th>
+                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Estatus</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {productosFiltrados.map(p => (
+                  <tr key={p.id_producto} className="hover:bg-gray-50 transition">
+                    <td className="hidden sm:table-cell px-6 py-4 font-mono text-gray-500 text-xs">{p.codigo_producto}</td>
+                    <td className="px-4 md:px-6 py-4 font-medium text-gray-800">
+                      {p.nombre_comercial}
+                      {p.marca && <span className="text-gray-400 font-normal ml-2 hidden md:inline">{p.marca}</span>}
+                    </td>
+                    <td className="hidden md:table-cell px-6 py-4 text-gray-600">{p.categoria || '—'}</td>
+                    <td className="px-4 md:px-6 py-4 text-gray-800 font-medium whitespace-nowrap">{fmt(p.precio_original)}</td>
+                    <td className="hidden sm:table-cell px-6 py-4">
+                      {p.aplica_2_meses
+                        ? <span className="text-green-600 whitespace-nowrap">{fmt(p.pago_semanal_2_meses)}/sem</span>
+                        : <span className="text-gray-400">No aplica</span>}
+                    </td>
+                    <td className="hidden sm:table-cell px-6 py-4">
+                      {p.aplica_3_meses
+                        ? <span className="text-green-600 whitespace-nowrap">{fmt(p.pago_semanal_3_meses)}/sem</span>
+                        : <span className="text-gray-400">No aplica</span>}
+                    </td>
+                    <td className="px-4 md:px-6 py-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        p.estatus === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                      }`}>{p.estatus}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

@@ -342,49 +342,51 @@ export default function Clientes() {
         ) : clientesFiltrados.length === 0 ? (
           <p className="text-center text-gray-400 py-12">No hay clientes registrados</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Cuenta</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Nombre</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Teléfono</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Municipio</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Ruta</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Estado</th>
-                {esAdmin && <th className="px-6 py-3"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {clientesFiltrados.map(c => (
-                <tr key={c.id_cliente} onClick={() => abrirExpediente(c.id_cliente)}
-                  className="hover:bg-blue-50 transition cursor-pointer">
-                  <td className="px-6 py-4 font-mono text-gray-500">{c.numero_cuenta}</td>
-                  <td className="px-6 py-4 font-medium text-gray-800">
-                    {c.nombre}
-                    {c.alias && <span className="text-gray-400 font-normal ml-2">({c.alias})</span>}
-                  </td>
-                  <td className="px-6 py-4 text-gray-600">{c.telefono || '—'}</td>
-                  <td className="px-6 py-4 text-gray-600">{c.municipio || '—'}</td>
-                  <td className="px-6 py-4 text-gray-600">{c.ruta || '—'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cliente]}`}>
-                      {c.estado_cliente}
-                    </span>
-                  </td>
-                  {esAdmin && (
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={e => abrirEdicion(e, c)}
-                        className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition font-medium"
-                      >
-                        Editar
-                      </button>
-                    </td>
-                  )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium whitespace-nowrap">Cuenta</th>
+                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Nombre</th>
+                  <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Teléfono</th>
+                  <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Municipio</th>
+                  <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Ruta</th>
+                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Estado</th>
+                  {esAdmin && <th className="px-4 md:px-6 py-3"></th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {clientesFiltrados.map(c => (
+                  <tr key={c.id_cliente} onClick={() => abrirExpediente(c.id_cliente)}
+                    className="hover:bg-blue-50 transition cursor-pointer">
+                    <td className="px-4 md:px-6 py-4 font-mono text-gray-500 text-xs whitespace-nowrap">{c.numero_cuenta}</td>
+                    <td className="px-4 md:px-6 py-4 font-medium text-gray-800">
+                      {c.nombre}
+                      {c.alias && <span className="text-gray-400 font-normal ml-2 hidden sm:inline">({c.alias})</span>}
+                    </td>
+                    <td className="hidden sm:table-cell px-6 py-4 text-gray-600">{c.telefono || '—'}</td>
+                    <td className="hidden md:table-cell px-6 py-4 text-gray-600">{c.municipio || '—'}</td>
+                    <td className="hidden sm:table-cell px-6 py-4 text-gray-600">{c.ruta || '—'}</td>
+                    <td className="px-4 md:px-6 py-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cliente]}`}>
+                        {c.estado_cliente}
+                      </span>
+                    </td>
+                    {esAdmin && (
+                      <td className="px-4 md:px-6 py-4 text-right">
+                        <button
+                          onClick={e => abrirEdicion(e, c)}
+                          className="text-xs px-3 min-h-[44px] md:min-h-0 md:py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition font-medium"
+                        >
+                          Editar
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
