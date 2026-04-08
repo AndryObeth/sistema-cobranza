@@ -550,66 +550,112 @@ export default function Cobranza() {
         />
       </div>
 
-      <div className="bg-white rounded-2xl shadow overflow-hidden">
+      {/* Cards — móvil */}
+      <div className="sm:hidden space-y-3">
+        {cargando ? (
+          <p className="text-center text-gray-500 py-12">Cargando...</p>
+        ) : cuentasFiltradas.length === 0 ? (
+          <p className="text-center text-gray-400 py-12">No hay cuentas activas</p>
+        ) : cuentasFiltradas.map(c => (
+          <div key={c.id_cuenta} className="bg-white rounded-2xl shadow p-4">
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-800 truncate">{c.cliente?.nombre}</p>
+                <p className="text-gray-400 text-xs font-mono">{c.folio_cuenta}</p>
+                {estadoSemanas(c.semanas_atraso)}
+              </div>
+              <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cuenta]}`}>
+                {c.estado_cuenta}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xs text-gray-400">Saldo</p>
+                <p className="text-xl font-bold text-gray-800">{fmt(c.saldo_actual)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-400">Plan</p>
+                <p className="text-sm text-gray-600">{c.plan_actual?.replace(/_/g, ' ')}</p>
+                {estaVencida(c) && (
+                  <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Vencido</span>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={() => abrirModal(c)}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition"
+            >
+              Registrar pago
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabla — desktop */}
+      <div className="hidden sm:block bg-white rounded-2xl shadow overflow-hidden">
         {cargando ? (
           <p className="text-center text-gray-500 py-12">Cargando...</p>
         ) : cuentasFiltradas.length === 0 ? (
           <p className="text-center text-gray-400 py-12">No hay cuentas activas</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Cliente</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Folio</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Frecuencia</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Saldo</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Último pago</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Estado</th>
-                <th className="px-6 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {cuentasFiltradas.map(c => (
-                <tr key={c.id_cuenta} className="hover:bg-gray-50 transition">
-                  <td className="px-6 py-4">
-                    <p className="font-medium text-gray-800">{c.cliente?.nombre}</p>
-                    {estadoSemanas(c.semanas_atraso)}
-                  </td>
-                  <td className="px-6 py-4 font-mono text-gray-500 text-xs">{c.folio_cuenta}</td>
-                  <td className="px-6 py-4 text-xs">
-                    <span className="text-gray-600">{c.plan_actual?.replace(/_/g, ' ')}</span>
-                    {estaVencida(c) && (
-                      <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Plan vencido</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-gray-500 text-xs">
-                    <span className="capitalize">{c.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</span>
-                    {c.horario_preferido && <p className="text-gray-400">{c.horario_preferido}</p>}
-                  </td>
-                  <td className="px-6 py-4 font-bold text-gray-800">{fmt(c.saldo_actual)}</td>
-                  <td className="px-6 py-4 text-gray-500">
-                    {c.fecha_ultimo_pago
-                      ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX')
-                      : 'Sin pagos'}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cuenta]}`}>
-                      {c.estado_cuenta}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => abrirModal(c)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-xs font-medium transition"
-                    >
-                      Registrar pago
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Cliente</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Folio</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Frecuencia</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Saldo</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Último pago</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Estado</th>
+                  <th className="px-6 py-3"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {cuentasFiltradas.map(c => (
+                  <tr key={c.id_cuenta} className="hover:bg-gray-50 transition">
+                    <td className="px-6 py-4">
+                      <p className="font-medium text-gray-800">{c.cliente?.nombre}</p>
+                      {estadoSemanas(c.semanas_atraso)}
+                    </td>
+                    <td className="px-6 py-4 font-mono text-gray-500 text-xs">{c.folio_cuenta}</td>
+                    <td className="px-6 py-4 text-xs">
+                      <span className="text-gray-600">{c.plan_actual?.replace(/_/g, ' ')}</span>
+                      {estaVencida(c) && (
+                        <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Plan vencido</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-gray-500 text-xs">
+                      <span className="capitalize">{c.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</span>
+                      {c.horario_preferido && <p className="text-gray-400">{c.horario_preferido}</p>}
+                    </td>
+                    <td className="px-6 py-4 font-bold text-gray-800">{fmt(c.saldo_actual)}</td>
+                    <td className="px-6 py-4 text-gray-500">
+                      {c.fecha_ultimo_pago
+                        ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX')
+                        : 'Sin pagos'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cuenta]}`}>
+                        {c.estado_cuenta}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => abrirModal(c)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                      >
+                        Registrar pago
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -619,7 +665,7 @@ export default function Cobranza() {
           <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl h-[95vh] sm:h-auto sm:max-h-[95vh] overflow-y-auto">
 
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b">
+            <div className="flex items-center justify-between p-4 md:p-6 border-b">
               <div>
                 <h3 className="text-lg font-bold text-gray-800">{cuentaSeleccionada.cliente?.nombre}</h3>
                 <p className="text-gray-500 text-sm">{cuentaSeleccionada.folio_cuenta}</p>
@@ -628,7 +674,7 @@ export default function Cobranza() {
             </div>
 
             {/* Info de la cuenta */}
-            <div className="p-6 border-b bg-gray-50">
+            <div className="p-4 md:p-6 border-b bg-gray-50">
               {/* Banner plan vencido */}
               {estaVencida(cuentaSeleccionada) && (
                 <div className="mb-4 bg-orange-50 border border-orange-300 rounded-xl px-4 py-3 flex items-start justify-between gap-3">
@@ -643,7 +689,7 @@ export default function Cobranza() {
                     <button
                       type="button"
                       onClick={abrirCambiarPlan}
-                      className="shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                      className="shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition min-h-[44px]"
                     >
                       Cambiar plan
                     </button>
@@ -651,10 +697,10 @@ export default function Cobranza() {
                 </div>
               )}
 
-              <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="grid grid-cols-3 gap-2 md:gap-4 text-center">
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Saldo restante</p>
-                  <p className="text-2xl font-bold text-gray-800">{fmt(cuentaSeleccionada.saldo_actual)}</p>
+                  <p className="text-xl md:text-2xl font-bold text-gray-800">{fmt(cuentaSeleccionada.saldo_actual)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Plan</p>
@@ -717,7 +763,7 @@ export default function Cobranza() {
             </div>
 
             {/* ── Panel de frecuencia de cobro ── */}
-            <div className="px-6 py-4 border-b">
+            <div className="px-4 md:px-6 py-4 border-b">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-semibold text-gray-700">Frecuencia de cobro</p>
                 {!editandoFrecuencia && (
@@ -810,7 +856,7 @@ export default function Cobranza() {
             </div>
 
             {/* ── Toggle de flujo ── */}
-            <div className="px-6 pt-5 pb-2">
+            <div className="px-4 md:px-6 pt-5 pb-2">
               <div className="flex rounded-xl bg-gray-100 p-1 gap-1">
                 <button
                   type="button"
@@ -838,7 +884,7 @@ export default function Cobranza() {
             </div>
 
             {/* ── Formulario unificado ── */}
-            <form onSubmit={handleGuardar} className="px-6 pb-6 pt-4 space-y-4">
+            <form onSubmit={handleGuardar} className="px-4 md:px-6 pb-8 md:pb-6 pt-4 space-y-4">
 
               {!noHuboPago ? (
                 /* ── FLUJO 1: pago ── */
@@ -850,7 +896,7 @@ export default function Cobranza() {
                         type="number" step="0.01" min="0.01" max={saldo} required
                         value={formPago.monto_pago}
                         onChange={e => setFormPago({ ...formPago, monto_pago: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-3 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="0.00"
                       />
                       {formPago.monto_pago && montoIngresado > 0 && (
@@ -874,7 +920,7 @@ export default function Cobranza() {
                       <select
                         value={formPago.tipo_pago}
                         onChange={e => setFormPago({ ...formPago, tipo_pago: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="abono">Abono</option>
                         <option value="liquidacion">Liquidación</option>
@@ -888,7 +934,7 @@ export default function Cobranza() {
                       <select
                         value={formPago.origen_pago}
                         onChange={e => setFormPago({ ...formPago, origen_pago: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="domicilio">Domicilio</option>
                         <option value="calle">Calle</option>
