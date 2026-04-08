@@ -10,6 +10,7 @@ const menu = [
   { path: '/ventas',    label: 'Ventas',     icono: '🧾', roles: ['administrador', 'secretaria', 'vendedor', 'jefe_camioneta'] },
   { path: '/cobranza',  label: 'Cobranza',   icono: '💰', roles: ['cobrador', 'administrador'] },
   { path: '/visitas',   label: 'Agenda',     icono: '📅', roles: ['cobrador', 'administrador'] },
+  { path: '/mapa',      label: 'Mapa',       icono: '🗺️',  roles: ['cobrador', 'jefe_camioneta', 'administrador'] },
   { path: '/cortes',    label: 'Cortes',     icono: '✂️',  roles: ['administrador'] },
   { path: '/usuarios',  label: 'Usuarios',   icono: '👤', roles: ['administrador'] },
 ]

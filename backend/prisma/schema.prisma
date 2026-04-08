@@ -64,6 +64,8 @@ model Cliente {
   nivel_riesgo             NivelRiesgo?
   recomendacion_operativa  String?
   observaciones_generales  String?
+  latitud                  Float?
+  longitud                 Float?
   activo                   Boolean  @default(true)
 
   // Relaciones

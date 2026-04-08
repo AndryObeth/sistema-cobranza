@@ -75,6 +75,77 @@ async function cargarCuentaCompleta(id_cuenta) {
   })
 }
 
+// ── 0. GET /api/cuentas/estado-cumplimiento/:id_cuenta ───────────────────────
+
+const DIAS_POR_FRECUENCIA = {
+  semanal:    7,
+  quincenal:  15,
+  mensual:    30,
+  dos_meses:  60,
+}
+
+router.get('/estado-cumplimiento/:id_cuenta', auth, async (req, res) => {
+  try {
+    const cuenta = await prisma.cuenta.findUnique({
+      where: { id_cuenta: parseInt(req.params.id_cuenta) },
+      select: {
+        id_cuenta: true,
+        frecuencia_pago: true,
+        fecha_primer_cobro: true,
+        fecha_ultimo_pago: true,
+        estado_cuenta: true,
+        saldo_actual: true,
+      }
+    })
+    if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
+
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+
+    const dias = DIAS_POR_FRECUENCIA[cuenta.frecuencia_pago] || 7
+
+    // Si no hay fecha de inicio no podemos calcular
+    if (!cuenta.fecha_primer_cobro) {
+      return res.json({
+        id_cuenta: cuenta.id_cuenta,
+        esta_al_corriente: null,
+        fecha_proximo_pago: null,
+        dias_restantes: null,
+        periodos_sin_pagar: 0,
+      })
+    }
+
+    // Próximo pago esperado
+    const base = cuenta.fecha_ultimo_pago
+      ? new Date(cuenta.fecha_ultimo_pago)
+      : new Date(cuenta.fecha_primer_cobro)
+    base.setHours(0, 0, 0, 0)
+
+    const fechaProximo = new Date(base)
+    fechaProximo.setDate(fechaProximo.getDate() + dias)
+
+    const msxDia       = 1000 * 60 * 60 * 24
+    const diasRestantes = Math.ceil((fechaProximo - hoy) / msxDia) // negativo = atraso
+    const estaAlCorriente = diasRestantes >= 0
+
+    // Períodos sin pagar (cuántos ciclos han pasado sin pago)
+    const periodosSinPagar = estaAlCorriente
+      ? 0
+      : Math.floor(Math.abs(diasRestantes) / dias)
+
+    res.json({
+      id_cuenta:          cuenta.id_cuenta,
+      fecha_ultimo_pago:  cuenta.fecha_ultimo_pago,
+      fecha_proximo_pago: fechaProximo,
+      dias_restantes:     diasRestantes,
+      esta_al_corriente:  estaAlCorriente,
+      periodos_sin_pagar: periodosSinPagar,
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al calcular cumplimiento', detalle: error.message })
+  }
+})
+
 // ── 1. GET /api/cuentas/verificar-vencimientos ────────────────────────────────
 
 router.get('/verificar-vencimientos', auth, async (req, res) => {

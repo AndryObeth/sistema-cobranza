@@ -498,14 +498,54 @@ export default function Cobranza() {
     return <span className="text-red-600 text-xs font-medium">{semanas} semanas de atraso</span>
   }
 
-  const cuentasFiltradas = cuentas.filter(c => {
-    if (soloVencidas && !estaVencida(c)) return false
-    return (
-      c.cliente?.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-      c.folio_cuenta.toLowerCase().includes(busqueda.toLowerCase()) ||
-      c.cliente?.numero_cuenta.toLowerCase().includes(busqueda.toLowerCase())
-    )
-  })
+  // ── Cálculo de cumplimiento (client-side) ─────────────────────────────────
+  const DIAS_FRECUENCIA = { semanal: 7, quincenal: 15, mensual: 30, dos_meses: 60 }
+
+  const calcularCumplimiento = (c) => {
+    const dias = DIAS_FRECUENCIA[c.frecuencia_pago] || 7
+    const hoy  = new Date(); hoy.setHours(0, 0, 0, 0)
+    const base = c.fecha_ultimo_pago
+      ? new Date(c.fecha_ultimo_pago)
+      : c.fecha_primer_cobro ? new Date(c.fecha_primer_cobro) : null
+    if (!base) return { diasAtraso: 0, tipo: 'sin_datos' }
+    base.setHours(0, 0, 0, 0)
+    const proximo = new Date(base)
+    proximo.setDate(proximo.getDate() + dias)
+    const diff = Math.ceil((hoy - proximo) / (1000 * 60 * 60 * 24)) // positivo = atrasado
+    if (diff > 0)  return { diasAtraso: diff, tipo: 'atrasado' }
+    if (diff === 0) return { diasAtraso: 0,   tipo: 'vence_hoy' }
+    return { diasAtraso: diff, tipo: 'al_corriente' }
+  }
+
+  const badgeCumplimiento = (c) => {
+    const { diasAtraso, tipo } = calcularCumplimiento(c)
+    if (tipo === 'al_corriente')
+      return <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium whitespace-nowrap">✓ Al corriente</span>
+    if (tipo === 'vence_hoy')
+      return <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium whitespace-nowrap">⚡ Vence hoy</span>
+    if (tipo === 'atrasado')
+      return <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium whitespace-nowrap">{diasAtraso}d atraso</span>
+    return null
+  }
+
+  // Orden: atrasados primero (más días) → vence hoy → al corriente
+  const prioridadCumplimiento = (c) => {
+    const { diasAtraso, tipo } = calcularCumplimiento(c)
+    if (tipo === 'atrasado')    return -diasAtraso      // mayor atraso = menor número (más arriba)
+    if (tipo === 'vence_hoy')   return 0
+    return 1
+  }
+
+  const cuentasFiltradas = cuentas
+    .filter(c => {
+      if (soloVencidas && !estaVencida(c)) return false
+      return (
+        c.cliente?.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+        c.folio_cuenta.toLowerCase().includes(busqueda.toLowerCase()) ||
+        c.cliente?.numero_cuenta.toLowerCase().includes(busqueda.toLowerCase())
+      )
+    })
+    .sort((a, b) => prioridadCumplimiento(a) - prioridadCumplimiento(b))
 
   const totalVencidas = cuentas.filter(estaVencida).length
 
@@ -569,7 +609,7 @@ export default function Cobranza() {
               </span>
             </div>
 
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-2">
               <div>
                 <p className="text-xs text-gray-400">Saldo</p>
                 <p className="text-xl font-bold text-gray-800">{fmt(c.saldo_actual)}</p>
@@ -578,10 +618,11 @@ export default function Cobranza() {
                 <p className="text-xs text-gray-400">Plan</p>
                 <p className="text-sm text-gray-600">{c.plan_actual?.replace(/_/g, ' ')}</p>
                 {estaVencida(c) && (
-                  <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Vencido</span>
+                  <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Plan vencido</span>
                 )}
               </div>
             </div>
+            <div className="mb-3">{badgeCumplimiento(c)}</div>
 
             <button
               onClick={() => abrirModal(c)}
@@ -610,6 +651,7 @@ export default function Cobranza() {
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Frecuencia</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Saldo</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Último pago</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Cumplimiento</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Estado</th>
                   <th className="px-6 py-3"></th>
                 </tr>
@@ -633,11 +675,12 @@ export default function Cobranza() {
                       {c.horario_preferido && <p className="text-gray-400">{c.horario_preferido}</p>}
                     </td>
                     <td className="px-6 py-4 font-bold text-gray-800">{fmt(c.saldo_actual)}</td>
-                    <td className="px-6 py-4 text-gray-500">
+                    <td className="px-6 py-4 text-gray-500 text-xs">
                       {c.fecha_ultimo_pago
                         ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX')
                         : 'Sin pagos'}
                     </td>
+                    <td className="px-6 py-4">{badgeCumplimiento(c)}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cuenta]}`}>
                         {c.estado_cuenta}

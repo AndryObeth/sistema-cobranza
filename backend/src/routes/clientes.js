@@ -129,6 +129,40 @@ router.post('/', auth, async (req, res) => {
   }
 })
 
+// GET /api/clientes/sin-coordenadas — clientes sin lat/lng
+router.get('/sin-coordenadas', auth, async (req, res) => {
+  try {
+    const where = { activo: true, OR: [{ latitud: null }, { longitud: null }] }
+    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
+      where.ruta = req.usuario.ruta_asignada
+    }
+    const clientes = await prisma.cliente.findMany({
+      where,
+      select: { id_cliente: true, nombre: true, direccion: true, municipio: true, colonia: true, ruta: true }
+    })
+    res.json(clientes)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener clientes', detalle: error.message })
+  }
+})
+
+// PUT /api/clientes/:id/coordenadas — guardar lat/lng de un cliente
+router.put('/:id/coordenadas', auth, async (req, res) => {
+  try {
+    const { latitud, longitud } = req.body
+    if (latitud == null || longitud == null) {
+      return res.status(400).json({ error: 'Se requieren latitud y longitud' })
+    }
+    const cliente = await prisma.cliente.update({
+      where: { id_cliente: parseInt(req.params.id) },
+      data: { latitud: parseFloat(latitud), longitud: parseFloat(longitud) }
+    })
+    res.json({ ok: true, latitud: cliente.latitud, longitud: cliente.longitud })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar coordenadas', detalle: error.message })
+  }
+})
+
 // PUT /api/clientes/:id — actualizar cliente
 router.put('/:id', auth, async (req, res) => {
   try {
