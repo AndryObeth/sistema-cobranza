@@ -93,69 +93,33 @@ export default function Mapa() {
     })))
   }
 
-  // Geocodificar todos los clientes sin coordenadas
+  // Geocodificar desde el backend (evita restricciones de dominio en la API key)
   const geocodificarTodos = useCallback(async () => {
-    if (!isLoaded) return
     const sinCoords = cuentas.filter(c => !c.cliente?.latitud || !c.cliente?.longitud)
     if (sinCoords.length === 0) { alert('Todos los clientes ya tienen coordenadas.'); return }
 
     setGeocodificando(true)
-    setProgreso({ total: sinCoords.length, hecho: 0 })
+    setProgreso({ total: sinCoords.length, hecho: sinCoords.length })
 
-    const nuevos = [...marcadores]
-    let hecho = 0
-    let exitosos = 0
-    const fallidos = []
+    try {
+      const res = await api.post('/clientes/geocodificar-lote')
+      const { exitosos, fallidos, total } = res.data
 
-    for (const cuenta of sinCoords) {
-      const c = cuenta.cliente
-      if (!c) { hecho++; setProgreso({ total: sinCoords.length, hecho }); continue }
+      // Recargar cuentas para obtener las nuevas coordenadas guardadas
+      const resC = await api.get('/pagos/todas-cuentas')
+      setCuentas(resC.data)
+      procesarMarcadores(resC.data)
 
-      // Intentar con dirección completa, luego solo con municipio como fallback
-      const intentos = [
-        [c.direccion, c.colonia, c.municipio, 'Oaxaca, México'].filter(Boolean).join(', '),
-        [c.municipio, 'Oaxaca, México'].filter(Boolean).join(', '),
-      ]
-
-      let colocado = false
-      for (const direccion of intentos) {
-        if (!direccion.trim() || colocado) continue
-        try {
-          const resp = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(direccion)}&key=${GOOGLE_API_KEY}`
-          )
-          const data = await resp.json()
-          console.log(`[Geocode] "${direccion}" → status: ${data.status}`, data.results?.[0]?.formatted_address)
-          if (data.status === 'OK' && data.results?.[0]) {
-            const { lat, lng } = data.results[0].geometry.location
-            await api.put(`/clientes/${c.id_cliente}/coordenadas`, { latitud: lat, longitud: lng })
-            nuevos.push({ cuenta, latitud: lat, longitud: lng })
-            exitosos++
-            colocado = true
-          } else if (data.status === 'REQUEST_DENIED') {
-            console.error('[Geocode] REQUEST_DENIED — verifica que Geocoding API esté habilitada y la API key sea válida', data.error_message)
-            fallidos.push(`${c.nombre}: ${data.error_message || data.status}`)
-            break // no reintentar si la key está mal
-          }
-        } catch (e) {
-          console.error('[Geocode] Error de red:', e)
-        }
-      }
-
-      if (!colocado) fallidos.push(c.nombre)
-
-      hecho++
-      setProgreso({ total: sinCoords.length, hecho })
+      const msg = exitosos > 0
+        ? `✅ ${exitosos} de ${total} clientes localizados en el mapa.${fallidos.length ? `\n⚠️ Sin resultado: ${fallidos.slice(0, 5).join(', ')}${fallidos.length > 5 ? '...' : ''}` : ''}`
+        : `❌ No se pudo geocodificar ningún cliente.\nVerifica que GOOGLE_MAPS_KEY esté configurada en Render.\nFallidos: ${fallidos.slice(0, 3).join(', ')}`
+      alert(msg)
+    } catch (e) {
+      alert(`Error: ${e.response?.data?.error || e.message}`)
+    } finally {
+      setGeocodificando(false)
     }
-
-    setMarcadores(nuevos)
-    setGeocodificando(false)
-
-    const msg = exitosos > 0
-      ? `✅ ${exitosos} cliente(s) localizados en el mapa.${fallidos.length ? `\n⚠️ ${fallidos.length} no encontrados: ${fallidos.slice(0, 3).join(', ')}${fallidos.length > 3 ? '...' : ''}` : ''}`
-      : `❌ No se pudo geocodificar ningún cliente.\nRevisa la consola del navegador (F12) para ver el error exacto.\nFallidos: ${fallidos.slice(0, 3).join(', ')}`
-    alert(msg)
-  }, [isLoaded, cuentas, marcadores])
+  }, [cuentas])
 
   const handleOptimizar = () => {
     const conCoords = marcadores.filter(m => m.latitud && m.longitud)

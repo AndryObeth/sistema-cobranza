@@ -129,6 +129,53 @@ router.post('/', auth, async (req, res) => {
   }
 })
 
+// POST /api/clientes/geocodificar-lote — geocodifica clientes sin coordenadas (server-side)
+router.post('/geocodificar-lote', auth, async (req, res) => {
+  const apiKey = process.env.GOOGLE_MAPS_KEY
+  if (!apiKey) return res.status(500).json({ error: 'GOOGLE_MAPS_KEY no configurada en el servidor' })
+
+  const where = { activo: true, OR: [{ latitud: null }, { longitud: null }] }
+  if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
+    where.ruta = req.usuario.ruta_asignada
+  }
+  const clientes = await prisma.cliente.findMany({
+    where,
+    select: { id_cliente: true, nombre: true, direccion: true, colonia: true, municipio: true }
+  })
+
+  let exitosos = 0
+  const fallidos = []
+
+  for (const c of clientes) {
+    const intentos = [
+      [c.direccion, c.colonia, c.municipio, 'Oaxaca, México'].filter(Boolean).join(', '),
+      [c.municipio, 'Oaxaca, México'].filter(Boolean).join(', '),
+    ]
+
+    let colocado = false
+    for (const dir of intentos) {
+      if (!dir.trim() || colocado) continue
+      try {
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(dir)}&key=${apiKey}`
+        const resp = await fetch(url)
+        const data = await resp.json()
+        if (data.status === 'OK' && data.results?.[0]) {
+          const { lat, lng } = data.results[0].geometry.location
+          await prisma.cliente.update({
+            where: { id_cliente: c.id_cliente },
+            data: { latitud: lat, longitud: lng }
+          })
+          exitosos++
+          colocado = true
+        }
+      } catch { /* continuar */ }
+    }
+    if (!colocado) fallidos.push(c.nombre)
+  }
+
+  res.json({ total: clientes.length, exitosos, fallidos })
+})
+
 // GET /api/clientes/sin-coordenadas — clientes sin lat/lng
 router.get('/sin-coordenadas', auth, async (req, res) => {
   try {
