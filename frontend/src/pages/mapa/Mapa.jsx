@@ -103,16 +103,26 @@ export default function Mapa() {
 
     try {
       const res = await api.post('/clientes/geocodificar-lote')
-      const { exitosos, fallidos, total } = res.data
+      const { exitosos, fallidos, total, errores_detalle } = res.data
 
       // Recargar cuentas para obtener las nuevas coordenadas guardadas
       const resC = await api.get('/pagos/todas-cuentas')
       setCuentas(resC.data)
       procesarMarcadores(resC.data)
 
-      const msg = exitosos > 0
-        ? `✅ ${exitosos} de ${total} clientes localizados en el mapa.${fallidos.length ? `\n⚠️ Sin resultado: ${fallidos.slice(0, 5).join(', ')}${fallidos.length > 5 ? '...' : ''}` : ''}`
-        : `❌ No se pudo geocodificar ningún cliente.\nVerifica que GOOGLE_MAPS_KEY esté configurada en Render.\nFallidos: ${fallidos.slice(0, 3).join(', ')}`
+      let msg
+      if (exitosos > 0) {
+        msg = `✅ ${exitosos} de ${total} clientes localizados en el mapa.`
+        if (fallidos.length) msg += `\n⚠️ Sin resultado: ${fallidos.slice(0, 5).join(', ')}${fallidos.length > 5 ? '...' : ''}`
+      } else {
+        msg = `❌ No se pudo geocodificar ningún cliente (${total} intentados).`
+        if (errores_detalle?.length) {
+          const primerError = errores_detalle[0]
+          msg += `\n\nError de ejemplo: ${primerError.nombre} → ${primerError.status}`
+          if (primerError.status === 'REQUEST_DENIED') msg += '\n→ La API key no tiene Geocoding API habilitada o tiene restricciones de IP/referrer.'
+          if (primerError.status === 'ZERO_RESULTS') msg += '\n→ Las direcciones no producen resultados.'
+        }
+      }
       alert(msg)
     } catch (e) {
       alert(`Error: ${e.response?.data?.error || e.message}`)

@@ -145,6 +145,7 @@ router.post('/geocodificar-lote', auth, async (req, res) => {
 
   let exitosos = 0
   const fallidos = []
+  const errores_detalle = []
 
   for (const c of clientes) {
     const intentos = [
@@ -153,12 +154,14 @@ router.post('/geocodificar-lote', auth, async (req, res) => {
     ]
 
     let colocado = false
+    let ultimoStatus = null
     for (const dir of intentos) {
       if (!dir.trim() || colocado) continue
       try {
         const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(dir)}&key=${apiKey}`
         const resp = await fetch(url)
         const data = await resp.json()
+        ultimoStatus = data.status
         if (data.status === 'OK' && data.results?.[0]) {
           const { lat, lng } = data.results[0].geometry.location
           await prisma.cliente.update({
@@ -168,12 +171,17 @@ router.post('/geocodificar-lote', auth, async (req, res) => {
           exitosos++
           colocado = true
         }
-      } catch { /* continuar */ }
+      } catch (err) {
+        ultimoStatus = err.message
+      }
     }
-    if (!colocado) fallidos.push(c.nombre)
+    if (!colocado) {
+      fallidos.push(c.nombre)
+      errores_detalle.push({ nombre: c.nombre, status: ultimoStatus })
+    }
   }
 
-  res.json({ total: clientes.length, exitosos, fallidos })
+  res.json({ total: clientes.length, exitosos, fallidos, errores_detalle })
 })
 
 // GET /api/clientes/sin-coordenadas — clientes sin lat/lng
