@@ -66,12 +66,12 @@ router.post('/importar-lote', auth, async (req, res) => {
   const resultados = { creados: 0, reactivados: 0, omitidos: [], errores: [] }
 
   for (const data of clientes) {
-    if (!data.numero_cuenta) { resultados.errores.push({ cliente: data.nombre, error: 'Falta numero_cuenta' }); continue }
+    if (!data.numero_expediente) { resultados.errores.push({ cliente: data.nombre, error: 'Falta numero_expediente' }); continue }
     try {
-      const existente = await prisma.cliente.findUnique({ where: { numero_cuenta: data.numero_cuenta } })
+      const existente = await prisma.cliente.findUnique({ where: { numero_expediente: data.numero_expediente } })
       if (existente) {
         if (existente.activo) {
-          resultados.omitidos.push({ numero_cuenta: data.numero_cuenta, nombre: data.nombre, motivo: 'Ya existe y está activo' })
+          resultados.omitidos.push({ numero_expediente: data.numero_expediente, nombre: data.nombre, motivo: 'Ya existe y está activo' })
           continue
         }
         await prisma.cliente.update({
@@ -96,32 +96,32 @@ router.post('/importar-lote', auth, async (req, res) => {
 // POST /api/clientes — crear cliente
 router.post('/', auth, async (req, res) => {
   try {
-    const { numero_cuenta, ...resto } = req.body
+    const { numero_expediente, ...resto } = req.body
 
-    if (!numero_cuenta || !numero_cuenta.trim()) {
-      return res.status(400).json({ error: 'El número de cuenta es obligatorio' })
+    if (!numero_expediente || !numero_expediente.trim()) {
+      return res.status(400).json({ error: 'El número de expediente es obligatorio' })
     }
 
-    const nc = numero_cuenta.trim()
+    const nc = numero_expediente.trim()
     // Evitar que campos enum vacíos generen error en Prisma
     if (!resto.nivel_riesgo) resto.nivel_riesgo = null
 
     // Verificar si ya existe ese número de cuenta
-    const existente = await prisma.cliente.findUnique({ where: { numero_cuenta: nc } })
+    const existente = await prisma.cliente.findUnique({ where: { numero_expediente: nc } })
     if (existente) {
       if (existente.activo) {
-        return res.status(400).json({ error: 'El número de cuenta ya está en uso por un cliente activo' })
+        return res.status(400).json({ error: 'El número de expediente ya está en uso por un cliente activo' })
       }
       // Reutilizar registro inactivo
       const cliente = await prisma.cliente.update({
         where: { id_cliente: existente.id_cliente },
-        data: { ...resto, numero_cuenta: nc, activo: true, id_vendedor_alta: req.usuario.id }
+        data: { ...resto, numero_expediente: nc, activo: true, id_vendedor_alta: req.usuario.id }
       })
       return res.status(201).json(cliente)
     }
 
     const cliente = await prisma.cliente.create({
-      data: { ...resto, numero_cuenta: nc, id_vendedor_alta: req.usuario.id }
+      data: { ...resto, numero_expediente: nc, id_vendedor_alta: req.usuario.id }
     })
     res.status(201).json(cliente)
   } catch (error) {

@@ -49,7 +49,7 @@ enum RolUsuario {
 // ─────────────────────────────────────────
 model Cliente {
   id_cliente               Int      @id @default(autoincrement())
-  numero_cuenta            String   @unique
+  numero_expediente        String   @unique
   nombre                   String
   alias                    String?
   telefono                 String?
@@ -216,6 +216,7 @@ model DetalleVenta {
 model Cuenta {
   id_cuenta            Int      @id @default(autoincrement())
   folio_cuenta         String   @unique
+  numero_cuenta        String?
   id_venta             Int      @unique
   id_cliente           Int
   plan_inicial         PlanVenta

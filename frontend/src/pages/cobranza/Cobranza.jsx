@@ -160,7 +160,7 @@ export default function Cobranza() {
     const {
       id_pago, fecha_pago, monto_pago, saldo_anterior, saldo_nuevo,
       tipo_pago, origen_pago,
-      cliente_nombre, numero_cuenta, folio_cuenta, plan_actual,
+      cliente_nombre, numero_expediente, numero_cuenta, folio_cuenta, plan_actual,
       cobrador_nombre,
       precio_original_total, precio_final_total
     } = datos
@@ -248,8 +248,9 @@ export default function Cobranza() {
   <div class="sep-sol"></div>
 
   <div class="row"><span>Cliente:</span><span class="bold">${cliente_nombre}</span></div>
-  <div class="row"><span>No. cuenta:</span><span>${numero_cuenta}</span></div>
-  <div class="row"><span>Folio cuenta:</span><span>${folio_cuenta}</span></div>
+  <div class="row"><span>Expediente:</span><span>${numero_expediente}</span></div>
+  ${numero_cuenta ? `<div class="row"><span>No. cuenta:</span><span class="bold">${numero_cuenta}</span></div>` : ''}
+  <div class="row"><span>Folio sistema:</span><span>${folio_cuenta}</span></div>
   <div class="row"><span>Plan:</span><span>${plan_actual.replace(/_/g, ' ')}</span></div>
 
   ${precioOrig > 0 ? `
@@ -365,8 +366,9 @@ export default function Cobranza() {
           tipo_pago:       res.data.pago.tipo_pago,
           origen_pago:     res.data.pago.origen_pago,
           cliente_nombre:  cuentaSeleccionada.cliente?.nombre,
-          numero_cuenta:   cuentaSeleccionada.cliente?.numero_cuenta,
-          folio_cuenta:    cuentaSeleccionada.folio_cuenta,
+          numero_expediente: cuentaSeleccionada.cliente?.numero_expediente,
+          numero_cuenta:     cuentaSeleccionada.numero_cuenta,
+          folio_cuenta:      cuentaSeleccionada.folio_cuenta,
           plan_actual:     cuentaSeleccionada.plan_actual,
           cobrador_nombre:       usuario?.nombre || 'Cobrador',
           precio_original_total: cuentaSeleccionada.venta?.precio_original_total,
@@ -542,7 +544,7 @@ export default function Cobranza() {
       return (
         c.cliente?.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
         c.folio_cuenta.toLowerCase().includes(busqueda.toLowerCase()) ||
-        c.cliente?.numero_cuenta.toLowerCase().includes(busqueda.toLowerCase())
+        c.cliente?.numero_expediente?.toLowerCase().includes(busqueda.toLowerCase())
       )
     })
     .sort((a, b) => prioridadCumplimiento(a) - prioridadCumplimiento(b))
@@ -583,7 +585,7 @@ export default function Cobranza() {
       <div className="mb-4">
         <input
           type="text"
-          placeholder="Buscar por cliente, folio o número de cuenta..."
+          placeholder="Buscar por cliente, folio o expediente..."
           value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
           className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"

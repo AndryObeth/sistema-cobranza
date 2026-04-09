@@ -51,6 +51,7 @@ router.post('/', auth, async (req, res) => {
       enganche_recibido_total, observaciones,
       fecha_venta,
       frecuencia_pago, fecha_primer_cobro, horario_preferido,
+      numero_cuenta,
       detalles
     } = req.body
 
@@ -116,6 +117,7 @@ router.post('/', auth, async (req, res) => {
       await prisma.cuenta.create({
         data: {
           folio_cuenta: 'CTA-' + Date.now(),
+          numero_cuenta: numero_cuenta || null,
           id_venta: venta.id_venta,
           id_cliente,
           plan_inicial: plan_venta,

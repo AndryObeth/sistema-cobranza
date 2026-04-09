@@ -123,7 +123,7 @@ export default function Visitas() {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="font-medium text-gray-800">{v.cliente?.nombre}</p>
-                        <p className="text-gray-400 text-xs font-mono">{v.cliente?.numero_cuenta}</p>
+                        <p className="text-gray-400 text-xs font-mono">{v.cliente?.numero_expediente}</p>
                       </div>
                       <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-medium ${visitaColor[v.tipo_seguimiento]}`}>
                         {visitaLabel[v.tipo_seguimiento]}
@@ -157,7 +157,7 @@ export default function Visitas() {
                     <tr key={v.id_seguimiento} className="hover:bg-gray-50 transition">
                       <td className="px-6 py-3">
                         <p className="font-medium text-gray-800">{v.cliente?.nombre}</p>
-                        <p className="text-gray-400 text-xs font-mono">{v.cliente?.numero_cuenta}</p>
+                        <p className="text-gray-400 text-xs font-mono">{v.cliente?.numero_expediente}</p>
                       </td>
                       <td className="px-6 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${visitaColor[v.tipo_seguimiento]}`}>

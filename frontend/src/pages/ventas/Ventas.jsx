@@ -28,6 +28,7 @@ export default function Ventas() {
     frecuencia_pago: 'semanal',
     fecha_primer_cobro: '',
     horario_preferido: '',
+    numero_cuenta: '',
   })
 
   const [productosSeleccionados, setProductosSeleccionados] = useState([])
@@ -123,7 +124,7 @@ export default function Ventas() {
 
   const cerrarModal = () => {
     setModalAbierto(false)
-    setForm({ id_cliente: '', tipo_venta: 'contado', plan_venta: 'contado_directo', enganche_recibido_total: '', observaciones: '', fecha_venta: hoyISO(), frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '' })
+    setForm({ id_cliente: '', tipo_venta: 'contado', plan_venta: 'contado_directo', enganche_recibido_total: '', observaciones: '', fecha_venta: hoyISO(), frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '', numero_cuenta: '' })
     setProductosSeleccionados([])
     setCalculos(null)
     setPrecioOverride('')
@@ -170,6 +171,7 @@ export default function Ventas() {
         payload.frecuencia_pago    = form.frecuencia_pago
         payload.fecha_primer_cobro = form.fecha_primer_cobro || null
         payload.horario_preferido  = form.horario_preferido  || null
+        payload.numero_cuenta      = form.numero_cuenta       || null
       }
 
       await api.post('/ventas', payload)
@@ -436,7 +438,7 @@ export default function Ventas() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">Seleccionar cliente...</option>
                     {clientes.map(c => (
-                      <option key={c.id_cliente} value={c.id_cliente}>{c.nombre} — {c.numero_cuenta}</option>
+                      <option key={c.id_cliente} value={c.id_cliente}>{c.nombre} — Exp. {c.numero_expediente}</option>
                     ))}
                   </select>
                 </div>
@@ -558,6 +560,15 @@ export default function Ventas() {
                       <input type="text" value={form.horario_preferido}
                         onChange={e => setForm({...form, horario_preferido: e.target.value})}
                         placeholder="Ej: Mañanas, 10–12 am"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Número de cuenta <span className="text-gray-400 font-normal">(folio físico del negocio, opcional)</span>
+                      </label>
+                      <input type="text" value={form.numero_cuenta}
+                        onChange={e => setForm({...form, numero_cuenta: e.target.value})}
+                        placeholder="Ej: 001, A-045, 2024-001"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
                     </div>
                   </div>

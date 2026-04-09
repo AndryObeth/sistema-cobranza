@@ -58,7 +58,7 @@ function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
         <div className="flex items-start justify-between p-6 border-b">
           <div>
             <h2 className="text-xl font-bold text-gray-800">{cliente.nombre}</h2>
-            <p className="text-sm text-gray-400 font-mono mt-0.5">{cliente.numero_cuenta}</p>
+            <p className="text-sm text-gray-400 font-mono mt-0.5">Exp. {cliente.numero_expediente}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">✕</button>
         </div>
@@ -186,7 +186,12 @@ function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
                 {cliente.cuentas?.map(c => (
                   <div key={c.id_cuenta} className="border rounded-xl p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="font-mono text-sm text-gray-500">{c.folio_cuenta}</p>
+                      <div>
+                        <p className="font-mono text-sm text-gray-500">{c.folio_cuenta}</p>
+                        {c.numero_cuenta && (
+                          <p className="text-xs text-blue-600 font-medium mt-0.5">No. cuenta: {c.numero_cuenta}</p>
+                        )}
+                      </div>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${estadoCuentaColor[c.estado_cuenta]}`}>
                         {c.estado_cuenta}
                       </span>
@@ -247,7 +252,7 @@ function Campo({ label, children }) {
 const INPUT = 'w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm'
 
 const FORM_VACIO = {
-  numero_cuenta: '',
+  numero_expediente: '',
   nombre: '', alias: '', telefono: '',
   municipio: '', colonia: '', direccion: '',
   referencias: '', ruta: '',
@@ -284,7 +289,7 @@ export default function Clientes() {
 
   const clientesFiltrados = clientes.filter(c =>
     c.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-    c.numero_cuenta.toLowerCase().includes(busqueda.toLowerCase()) ||
+    c.numero_expediente.toLowerCase().includes(busqueda.toLowerCase()) ||
     (c.telefono && c.telefono.includes(busqueda))
   )
 
@@ -299,7 +304,7 @@ export default function Clientes() {
     e.stopPropagation()
     setClienteEditando(c.id_cliente)
     setForm({
-      numero_cuenta:           c.numero_cuenta || '',
+      numero_expediente:           c.numero_expediente || '',
       nombre:                  c.nombre || '',
       alias:                   c.alias || '',
       telefono:                c.telefono || '',
@@ -325,7 +330,7 @@ export default function Clientes() {
 
   const handleGuardar = async (e) => {
     e.preventDefault()
-    if (!form.numero_cuenta.trim()) { setError('El número de cuenta es obligatorio'); return }
+    if (!form.numero_expediente.trim()) { setError('El número de expediente es obligatorio'); return }
     setGuardando(true)
     setError('')
     try {
@@ -373,7 +378,7 @@ export default function Clientes() {
       </div>
 
       <div className="mb-4">
-        <input type="text" placeholder="Buscar por nombre, número de cuenta o teléfono..."
+        <input type="text" placeholder="Buscar por nombre, número de expediente o teléfono..."
           value={busqueda} onChange={e => setBusqueda(e.target.value)}
           className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
@@ -389,7 +394,7 @@ export default function Clientes() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium whitespace-nowrap">Cuenta</th>
+                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium whitespace-nowrap">Expediente</th>
                   <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Nombre</th>
                   <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Teléfono</th>
                   <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Municipio</th>
@@ -402,7 +407,7 @@ export default function Clientes() {
                 {clientesFiltrados.map(c => (
                   <tr key={c.id_cliente} onClick={() => abrirExpediente(c.id_cliente)}
                     className="hover:bg-blue-50 transition cursor-pointer">
-                    <td className="px-4 md:px-6 py-4 font-mono text-gray-500 text-xs whitespace-nowrap">{c.numero_cuenta}</td>
+                    <td className="px-4 md:px-6 py-4 font-mono text-gray-500 text-xs whitespace-nowrap">{c.numero_expediente}</td>
                     <td className="px-4 md:px-6 py-4 font-medium text-gray-800">
                       {c.nombre}
                       {c.alias && <span className="text-gray-400 font-normal ml-2 hidden sm:inline">({c.alias})</span>}
@@ -453,7 +458,7 @@ export default function Clientes() {
                   {clienteEditando ? 'Editar cliente' : 'Nuevo cliente'}
                 </h3>
                 {clienteEditando && !esAdmin && (
-                  <p className="text-xs text-gray-400 mt-0.5">El número de cuenta no se puede modificar</p>
+                  <p className="text-xs text-gray-400 mt-0.5">El número de expediente no se puede modificar</p>
                 )}
               </div>
               <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
@@ -462,9 +467,9 @@ export default function Clientes() {
             <form onSubmit={handleGuardar} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <Campo label="Número de cuenta *">
-                    <input type="text" required value={form.numero_cuenta}
-                      onChange={e => setForm({...form, numero_cuenta: e.target.value})}
+                  <Campo label="Número de expediente *">
+                    <input type="text" required value={form.numero_expediente}
+                      onChange={e => setForm({...form, numero_expediente: e.target.value})}
                       placeholder="Ej: 001, 1234, A-001"
                       disabled={clienteEditando && !esAdmin}
                       className={`${INPUT} ${clienteEditando && !esAdmin ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''}`} />
