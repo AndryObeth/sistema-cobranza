@@ -96,32 +96,17 @@ router.post('/importar-lote', auth, async (req, res) => {
 // POST /api/clientes — crear cliente
 router.post('/', auth, async (req, res) => {
   try {
-    const { numero_expediente, ...resto } = req.body
+    const { numero_expediente: _ignorado, ...resto } = req.body
 
-    if (!numero_expediente || !numero_expediente.trim()) {
-      return res.status(400).json({ error: 'El número de expediente es obligatorio' })
-    }
-
-    const nc = numero_expediente.trim()
     // Evitar que campos enum vacíos generen error en Prisma
     if (!resto.nivel_riesgo) resto.nivel_riesgo = null
 
-    // Verificar si ya existe ese número de cuenta
-    const existente = await prisma.cliente.findUnique({ where: { numero_expediente: nc } })
-    if (existente) {
-      if (existente.activo) {
-        return res.status(400).json({ error: 'El número de expediente ya está en uso por un cliente activo' })
-      }
-      // Reutilizar registro inactivo
-      const cliente = await prisma.cliente.update({
-        where: { id_cliente: existente.id_cliente },
-        data: { ...resto, numero_expediente: nc, activo: true, id_vendedor_alta: req.usuario.id }
-      })
-      return res.status(201).json(cliente)
-    }
+    // Auto-generar ID Expediente: total de clientes (incl. inactivos) + 1, con 4 dígitos
+    const total = await prisma.cliente.count()
+    const numero_expediente = String(total + 1).padStart(4, '0')
 
     const cliente = await prisma.cliente.create({
-      data: { ...resto, numero_expediente: nc, id_vendedor_alta: req.usuario.id }
+      data: { ...resto, numero_expediente, id_vendedor_alta: req.usuario.id }
     })
     res.status(201).json(cliente)
   } catch (error) {

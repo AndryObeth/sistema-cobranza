@@ -252,7 +252,6 @@ function Campo({ label, children }) {
 const INPUT = 'w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm'
 
 const FORM_VACIO = {
-  numero_expediente: '',
   nombre: '', alias: '', telefono: '',
   municipio: '', colonia: '', direccion: '',
   referencias: '', ruta: '',
@@ -304,7 +303,6 @@ export default function Clientes() {
     e.stopPropagation()
     setClienteEditando(c.id_cliente)
     setForm({
-      numero_expediente:           c.numero_expediente || '',
       nombre:                  c.nombre || '',
       alias:                   c.alias || '',
       telefono:                c.telefono || '',
@@ -330,7 +328,6 @@ export default function Clientes() {
 
   const handleGuardar = async (e) => {
     e.preventDefault()
-    if (!form.numero_expediente.trim()) { setError('El número de expediente es obligatorio'); return }
     setGuardando(true)
     setError('')
     try {
@@ -457,8 +454,8 @@ export default function Clientes() {
                 <h3 className="text-lg font-bold text-gray-800">
                   {clienteEditando ? 'Editar cliente' : 'Nuevo cliente'}
                 </h3>
-                {clienteEditando && !esAdmin && (
-                  <p className="text-xs text-gray-400 mt-0.5">El número de expediente no se puede modificar</p>
+                {!clienteEditando && (
+                  <p className="text-xs text-gray-400 mt-0.5">El ID Expediente se asigna automáticamente</p>
                 )}
               </div>
               <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
@@ -466,15 +463,6 @@ export default function Clientes() {
 
             <form onSubmit={handleGuardar} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Campo label="ID Expediente *">
-                    <input type="text" required value={form.numero_expediente}
-                      onChange={e => setForm({...form, numero_expediente: e.target.value})}
-                      placeholder="Ej: 001, 1234, A-001"
-                      disabled={clienteEditando && !esAdmin}
-                      className={`${INPUT} ${clienteEditando && !esAdmin ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''}`} />
-                  </Campo>
-                </div>
                 <div className="col-span-2">
                   <Campo label="Nombre completo *">
                     <input type="text" required value={form.nombre}

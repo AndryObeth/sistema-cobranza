@@ -55,7 +55,7 @@ async function cargarCuentaCompleta(id_cuenta) {
   return prisma.cuenta.findUnique({
     where: { id_cuenta },
     include: {
-      cliente: { select: { nombre: true, numero_cuenta: true } },
+      cliente: { select: { nombre: true, numero_expediente: true } },
       venta: {
         include: {
           detalles: {
@@ -159,7 +159,7 @@ router.get('/verificar-vencimientos', auth, async (req, res) => {
         fecha_limite:   { lt: ahora },
       },
       include: {
-        cliente: { select: { nombre: true, numero_cuenta: true } },
+        cliente: { select: { nombre: true, numero_expediente: true } },
         venta: {
           include: {
             detalles: {

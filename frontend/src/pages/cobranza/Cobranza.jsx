@@ -544,6 +544,7 @@ export default function Cobranza() {
       return (
         c.cliente?.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
         c.folio_cuenta.toLowerCase().includes(busqueda.toLowerCase()) ||
+        c.numero_cuenta?.toLowerCase().includes(busqueda.toLowerCase()) ||
         c.cliente?.numero_expediente?.toLowerCase().includes(busqueda.toLowerCase())
       )
     })
@@ -603,7 +604,10 @@ export default function Cobranza() {
             <div className="flex items-start justify-between gap-2 mb-3">
               <div className="min-w-0">
                 <p className="font-semibold text-gray-800 truncate">{c.cliente?.nombre}</p>
-                <p className="text-gray-400 text-xs font-mono">{c.folio_cuenta}</p>
+                {c.numero_cuenta
+                  ? <p className="text-blue-600 text-xs font-mono font-semibold">Cta. {c.numero_cuenta}</p>
+                  : <p className="text-gray-400 text-xs font-mono">{c.folio_cuenta}</p>
+                }
                 {estadoSemanas(c.semanas_atraso)}
               </div>
               <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cuenta]}`}>
@@ -648,7 +652,7 @@ export default function Cobranza() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Cliente</th>
-                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Folio</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Cuenta</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Frecuencia</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Saldo</th>
@@ -665,7 +669,12 @@ export default function Cobranza() {
                       <p className="font-medium text-gray-800">{c.cliente?.nombre}</p>
                       {estadoSemanas(c.semanas_atraso)}
                     </td>
-                    <td className="px-6 py-4 font-mono text-gray-500 text-xs">{c.folio_cuenta}</td>
+                    <td className="px-6 py-4 font-mono text-xs">
+                      {c.numero_cuenta
+                        ? <span className="text-blue-600 font-semibold">{c.numero_cuenta}</span>
+                        : <span className="text-gray-400">{c.folio_cuenta}</span>
+                      }
+                    </td>
                     <td className="px-6 py-4 text-xs">
                       <span className="text-gray-600">{c.plan_actual?.replace(/_/g, ' ')}</span>
                       {estaVencida(c) && (
@@ -713,7 +722,12 @@ export default function Cobranza() {
             <div className="flex items-center justify-between p-4 md:p-6 border-b">
               <div>
                 <h3 className="text-lg font-bold text-gray-800">{cuentaSeleccionada.cliente?.nombre}</h3>
-                <p className="text-gray-500 text-sm">{cuentaSeleccionada.folio_cuenta}</p>
+                <p className="text-gray-500 text-sm">
+                  {cuentaSeleccionada.numero_cuenta
+                    ? <span className="text-blue-600 font-semibold">No. cuenta: {cuentaSeleccionada.numero_cuenta}</span>
+                    : cuentaSeleccionada.folio_cuenta
+                  }
+                </p>
               </div>
               <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
             </div>
