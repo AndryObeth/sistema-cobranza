@@ -66,6 +66,7 @@ model Cliente {
   observaciones_generales  String?
   latitud                  Float?
   longitud                 Float?
+  foto_fachada             String?
   activo                   Boolean  @default(true)
 
   // Relaciones

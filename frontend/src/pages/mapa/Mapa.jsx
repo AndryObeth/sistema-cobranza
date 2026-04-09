@@ -64,6 +64,59 @@ export default function Mapa() {
   const [cargando, setCargando] = useState(true)
 
   const mapRef = useRef(null)
+  const [modoEdicion, setModoEdicion] = useState(false)
+  const [clienteEditandoCoords, setClienteEditandoCoords] = useState(null)
+  const [toast, setToast] = useState(null)
+
+  const mostrarToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
+
+  const iniciarEdicionUbicacion = (marcador) => {
+    setSeleccionado(null)
+    setClienteEditandoCoords(marcador)
+    setModoEdicion(true)
+  }
+
+  const cancelarEdicion = () => { setModoEdicion(false); setClienteEditandoCoords(null) }
+
+  const handleMapClick = async (e) => {
+    if (!modoEdicion || !clienteEditandoCoords) return
+    const lat = e.latLng.lat()
+    const lng = e.latLng.lng()
+    const idCliente = clienteEditandoCoords.cuenta.cliente.id_cliente
+    try {
+      await api.put(`/clientes/${idCliente}/coordenadas`, { latitud: lat, longitud: lng })
+      setMarcadores(prev => prev.map(m =>
+        m.cuenta.cliente?.id_cliente === idCliente ? { ...m, latitud: lat, longitud: lng } : m
+      ))
+      setModoEdicion(false)
+      setClienteEditandoCoords(null)
+      mostrarToast('Ubicación actualizada correctamente')
+    } catch {
+      mostrarToast('Error al actualizar la ubicación')
+      cancelarEdicion()
+    }
+  }
+
+  const handleFotoUpload = async (file, idCliente) => {
+    const formData = new FormData()
+    formData.append('foto', file)
+    const res = await api.post(`/uploads/fachada/${idCliente}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    const foto = res.data.foto_fachada
+    setSeleccionado(prev => ({
+      ...prev,
+      cuenta: { ...prev.cuenta, cliente: { ...prev.cuenta.cliente, foto_fachada: foto } }
+    }))
+    setMarcadores(prev => prev.map(m =>
+      m.cuenta.cliente?.id_cliente === idCliente
+        ? { ...m, cuenta: { ...m.cuenta, cliente: { ...m.cuenta.cliente, foto_fachada: foto } } }
+        : m
+    ))
+    mostrarToast('Foto actualizada correctamente')
+  }
+
+  const puedeEditar = usuario?.rol === 'administrador' || usuario?.rol === 'jefe_camioneta'
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_API_KEY,
@@ -149,6 +202,13 @@ export default function Mapa() {
 
   return (
     <Layout>
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-4 right-4 z-[100] bg-green-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium">
+          {toast}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
@@ -198,7 +258,22 @@ export default function Mapa() {
       </div>
 
       {/* Mapa */}
-      <div className="rounded-2xl overflow-hidden shadow" style={{ height: 'calc(100vh - 280px)', minHeight: 400 }}>
+      <div className="relative rounded-2xl overflow-hidden shadow" style={{ height: 'calc(100vh - 280px)', minHeight: 400 }}>
+        {/* Overlay modo edición */}
+        {modoEdicion && (
+          <div style={{
+            position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(0,0,0,0.75)', color: 'white', padding: '8px 16px',
+            borderRadius: 8, zIndex: 10, fontSize: 13, whiteSpace: 'nowrap',
+            display: 'flex', alignItems: 'center', gap: 12, pointerEvents: 'none'
+          }}>
+            <span>Haz clic en el mapa para ubicar a <strong>{clienteEditandoCoords?.cuenta.cliente?.nombre}</strong></span>
+            <button
+              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', cursor: 'pointer', borderRadius: 4, padding: '2px 10px', pointerEvents: 'all' }}
+              onClick={cancelarEdicion}
+            >Cancelar</button>
+          </div>
+        )}
         {!isLoaded || cargando ? (
           <div className="w-full h-full bg-gray-100 flex items-center justify-center">
             <p className="text-gray-400">Cargando mapa…</p>
@@ -209,7 +284,13 @@ export default function Mapa() {
             center={CENTRO_TUXTEPEC}
             zoom={13}
             onLoad={map => { mapRef.current = map }}
-            options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: true }}
+            onClick={modoEdicion ? handleMapClick : undefined}
+            options={{
+              streetViewControl: false,
+              mapTypeControl: false,
+              fullscreenControl: true,
+              draggableCursor: modoEdicion ? 'crosshair' : undefined,
+            }}
           >
             {marcadores.map((m, idx) => {
               const estado = m.cuenta.estado_cuenta
@@ -230,20 +311,59 @@ export default function Mapa() {
                 position={{ lat: seleccionado.latitud, lng: seleccionado.longitud }}
                 onCloseClick={() => setSeleccionado(null)}
               >
-                <div style={{ minWidth: 200 }} className="text-sm">
-                  <p className="font-bold text-gray-800 mb-1">{seleccionado.cuenta.cliente?.nombre}</p>
-                  <p className="text-gray-500 text-xs mb-2">{seleccionado.cuenta.cliente?.direccion || 'Sin dirección'}</p>
-                  <div className="space-y-1 mb-3">
-                    <p className="text-gray-700">💰 Saldo: <strong>{fmt(seleccionado.cuenta.saldo_actual)}</strong></p>
-                    <p className="text-gray-700">📋 Plan: {seleccionado.cuenta.plan_actual?.replace(/_/g, ' ')}</p>
-                    <p className="text-gray-700">🔄 Frecuencia: {seleccionado.cuenta.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</p>
+                <div style={{ minWidth: 210, maxWidth: 240 }}>
+                  {/* Foto de fachada */}
+                  {seleccionado.cuenta.cliente?.foto_fachada && (
+                    <img
+                      src={seleccionado.cuenta.cliente.foto_fachada}
+                      alt="Fachada"
+                      style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 6, marginBottom: 8 }}
+                    />
+                  )}
+
+                  <p style={{ fontWeight: 700, fontSize: 14, margin: '0 0 2px' }}>{seleccionado.cuenta.cliente?.nombre}</p>
+                  <p style={{ color: '#6b7280', fontSize: 11, margin: '0 0 8px' }}>{seleccionado.cuenta.cliente?.direccion || 'Sin dirección'}</p>
+
+                  <div style={{ fontSize: 12, marginBottom: 10, lineHeight: 1.6 }}>
+                    <p>💰 Saldo: <strong>{fmt(seleccionado.cuenta.saldo_actual)}</strong></p>
+                    <p>📋 Plan: {seleccionado.cuenta.plan_actual?.replace(/_/g, ' ')}</p>
+                    <p>🔄 Frecuencia: {seleccionado.cuenta.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</p>
                   </div>
+
                   <button
                     onClick={() => navigate('/cobranza')}
-                    style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', width: '100%', fontWeight: 600 }}
+                    style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', width: '100%', fontWeight: 600, fontSize: 12, marginBottom: 6 }}
                   >
                     Registrar pago →
                   </button>
+
+                  {puedeEditar && (
+                    <>
+                      <button
+                        onClick={() => iniciarEdicionUbicacion(seleccionado)}
+                        style={{ background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', width: '100%', fontSize: 12, marginBottom: 4 }}
+                      >
+                        📍 Corregir ubicación
+                      </button>
+                      <label style={{ display: 'block', background: '#f3f4f6', color: '#374151', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', width: '100%', fontSize: 12, textAlign: 'center', boxSizing: 'border-box' }}>
+                        📷 {seleccionado.cuenta.cliente?.foto_fachada ? 'Cambiar foto' : 'Agregar foto'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={async (e) => {
+                            const file = e.target.files[0]
+                            if (!file) return
+                            try {
+                              await handleFotoUpload(file, seleccionado.cuenta.cliente.id_cliente)
+                            } catch {
+                              mostrarToast('Error al subir la foto')
+                            }
+                          }}
+                        />
+                      </label>
+                    </>
+                  )}
                 </div>
               </InfoWindow>
             )}

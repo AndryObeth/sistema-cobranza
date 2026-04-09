@@ -27,8 +27,29 @@ const estadoClienteOpciones = ['activo', 'moroso', 'bloqueado', 'inactivo']
 const nivelRiesgoOpciones   = ['', 'bajo', 'medio', 'alto']
 
 // ─── Modal Expediente ────────────────────────────
-function ModalExpediente({ cliente, onClose }) {
+function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
   const [tab, setTab] = useState('datos')
+  const [subiendoFoto, setSubiendoFoto] = useState(false)
+
+  const puedeEditar = usuario?.rol === 'administrador' || usuario?.rol === 'jefe_camioneta'
+
+  const handleFotoUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setSubiendoFoto(true)
+    try {
+      const formData = new FormData()
+      formData.append('foto', file)
+      const res = await api.post(`/uploads/fachada/${cliente.id_cliente}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      onFotoUpdated?.(res.data.foto_fachada)
+    } catch {
+      alert('Error al subir la foto')
+    } finally {
+      setSubiendoFoto(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -85,6 +106,28 @@ function ModalExpediente({ cliente, onClose }) {
                 <div className="col-span-2">
                   <p className="text-xs text-gray-400 mb-0.5">Observaciones</p>
                   <p className="text-gray-700">{cliente.observaciones_generales}</p>
+                </div>
+              )}
+
+              {/* Foto de fachada */}
+              {(cliente.foto_fachada || puedeEditar) && (
+                <div className="col-span-2 pt-2 border-t mt-2">
+                  <p className="text-xs text-gray-400 mb-2">Foto de fachada</p>
+                  {cliente.foto_fachada ? (
+                    <img
+                      src={cliente.foto_fachada}
+                      alt="Fachada"
+                      className="w-full max-h-56 object-cover rounded-xl mb-3"
+                    />
+                  ) : (
+                    <p className="text-xs text-gray-400 italic mb-3">Sin foto registrada</p>
+                  )}
+                  {puedeEditar && (
+                    <label className={`inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 cursor-pointer ${subiendoFoto ? 'opacity-50 pointer-events-none' : ''}`}>
+                      📷 {cliente.foto_fachada ? 'Cambiar foto' : 'Agregar foto'}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleFotoUpload} disabled={subiendoFoto} />
+                    </label>
+                  )}
                 </div>
               )}
             </div>
@@ -392,7 +435,12 @@ export default function Clientes() {
 
       {/* Modal expediente */}
       {clienteExpediente && (
-        <ModalExpediente cliente={clienteExpediente} onClose={() => setClienteExpediente(null)} />
+        <ModalExpediente
+          cliente={clienteExpediente}
+          onClose={() => setClienteExpediente(null)}
+          usuario={usuario}
+          onFotoUpdated={(foto) => setClienteExpediente(prev => ({ ...prev, foto_fachada: foto }))}
+        />
       )}
 
       {/* Modal nuevo / editar cliente */}
