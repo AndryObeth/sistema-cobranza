@@ -282,7 +282,7 @@ export default function Ventas() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Folio</th>
+                <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Cuenta</th>
                 <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Cliente</th>
                 <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Tipo</th>
                 <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
@@ -297,7 +297,11 @@ export default function Ventas() {
                 const liquidada = v.estatus_venta === 'liquidada'
                 return (
                   <tr key={v.id_venta} className={`transition ${liquidada ? 'opacity-50 bg-gray-50' : 'hover:bg-gray-50'}`}>
-                    <td className="hidden md:table-cell px-6 py-4 font-mono text-gray-400 text-xs">{v.folio_venta}</td>
+                    <td className="hidden md:table-cell px-6 py-4 font-mono text-xs">
+                      {v.cuenta?.numero_cuenta
+                        ? <span className="font-semibold text-gray-700">{v.cuenta.numero_cuenta}</span>
+                        : <span className="text-gray-300">—</span>}
+                    </td>
                     <td className={`px-4 md:px-6 py-4 font-medium ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{v.cliente?.nombre}</td>
                     <td className="hidden sm:table-cell px-6 py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -344,7 +348,7 @@ export default function Ventas() {
             <div className="flex items-center justify-between p-6 border-b">
               <div>
                 <h3 className="text-lg font-bold text-gray-800">Editar venta</h3>
-                <p className="text-xs text-gray-400 mt-0.5 font-mono">{ventaEditando.folio_venta} · {ventaEditando.cliente?.nombre}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{ventaEditando.cliente?.nombre} {ventaEditando.cuenta?.numero_cuenta ? `· Cta. ${ventaEditando.cuenta.numero_cuenta}` : ''}</p>
               </div>
               <button onClick={() => setVentaEditando(null)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
             </div>
@@ -438,7 +442,7 @@ export default function Ventas() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">Seleccionar cliente...</option>
                     {clientes.map(c => (
-                      <option key={c.id_cliente} value={c.id_cliente}>{c.nombre} — Exp. {c.numero_expediente}</option>
+                      <option key={c.id_cliente} value={c.id_cliente}>{c.nombre} — ID Exp. {c.numero_expediente}</option>
                     ))}
                   </select>
                 </div>

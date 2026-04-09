@@ -58,7 +58,7 @@ function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
         <div className="flex items-start justify-between p-6 border-b">
           <div>
             <h2 className="text-xl font-bold text-gray-800">{cliente.nombre}</h2>
-            <p className="text-sm text-gray-400 font-mono mt-0.5">Exp. {cliente.numero_expediente}</p>
+            <p className="text-sm text-gray-400 font-mono mt-0.5">ID Exp. {cliente.numero_expediente}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">✕</button>
         </div>
@@ -394,7 +394,7 @@ export default function Clientes() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium whitespace-nowrap">Expediente</th>
+                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium whitespace-nowrap">ID Expediente</th>
                   <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Nombre</th>
                   <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Teléfono</th>
                   <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Municipio</th>
@@ -467,7 +467,7 @@ export default function Clientes() {
             <form onSubmit={handleGuardar} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <Campo label="Número de expediente *">
+                  <Campo label="ID Expediente *">
                     <input type="text" required value={form.numero_expediente}
                       onChange={e => setForm({...form, numero_expediente: e.target.value})}
                       placeholder="Ej: 001, 1234, A-001"

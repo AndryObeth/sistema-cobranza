@@ -11,7 +11,8 @@ router.get('/', auth, async (req, res) => {
       include: {
         cliente: true,
         vendedor: true,
-        detalles: true
+        detalles: true,
+        cuenta: { select: { numero_cuenta: true, folio_cuenta: true } }
       },
       orderBy: { fecha_venta: 'desc' }
     })
