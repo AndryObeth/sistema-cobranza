@@ -112,12 +112,18 @@ export default function Layout({ children }) {
       ].join(' ')}>
 
         {/* Header */}
-        <div className={`flex items-center border-b border-gray-700 px-3 py-4 ${colapsado ? 'justify-center' : 'justify-between gap-3'}`}>
+        <div className={`flex items-center border-b border-gray-700 px-3 py-3 ${colapsado ? 'justify-center' : 'justify-between gap-2'}`}>
           {!colapsado && (
-            <div className="min-w-0 flex-1">
-              <h1 className="font-bold text-base leading-tight truncate">Novedades Cancún</h1>
-              <p className="text-gray-400 text-xs mt-0.5 capitalize">{usuario?.rol}</p>
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain shrink-0" />
+              <div className="min-w-0">
+                <h1 className="font-bold text-sm leading-tight truncate">Novedades Cancún</h1>
+                <p className="text-gray-400 text-xs mt-0.5 capitalize">{usuario?.rol}</p>
+              </div>
             </div>
+          )}
+          {colapsado && (
+            <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
           )}
           {/* Desktop toggle */}
           <button
