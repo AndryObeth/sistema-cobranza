@@ -91,7 +91,9 @@ router.put('/cuenta/:id/frecuencia', auth, async (req, res) => {
 // POST /api/pagos — registrar pago
 router.post('/', auth, async (req, res) => {
   try {
-    const { id_cuenta, monto_pago, tipo_pago, origen_pago, observaciones } = req.body
+    const { id_cuenta, monto_pago, tipo_pago, origen_pago, observaciones, fecha_pago } = req.body
+    const esAdmin = req.usuario.rol === 'administrador'
+    const fechaPago = esAdmin && fecha_pago ? new Date(fecha_pago) : new Date()
 
     const monto = parseFloat(monto_pago)
 
@@ -160,6 +162,7 @@ router.post('/', auth, async (req, res) => {
         id_cuenta: parseInt(id_cuenta),
         id_cliente: cuenta.id_cliente,
         id_cobrador: req.usuario.id,
+        fecha_pago: fechaPago,
         monto_pago: monto,
         saldo_anterior,
         saldo_nuevo,

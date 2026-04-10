@@ -54,6 +54,7 @@ router.post('/', auth, async (req, res) => {
       fecha_venta,
       frecuencia_pago, fecha_primer_cobro, horario_preferido,
       numero_cuenta,
+      saldo_inicial_override,
       detalles,
       id_vendedor: id_vendedor_body
     } = req.body
@@ -133,8 +134,8 @@ router.post('/', auth, async (req, res) => {
           precio_original_total,
           precio_plan_actual: precio_final_usado,
           abono_inicial: enganche_recibido_total || 0,
-          saldo_inicial: precio_final_usado - (enganche_recibido_total || 0),
-          saldo_actual: precio_final_usado - (enganche_recibido_total || 0),
+          saldo_inicial: esAdmin && saldo_inicial_override != null ? parseFloat(saldo_inicial_override) : precio_final_usado - (enganche_recibido_total || 0),
+          saldo_actual:  esAdmin && saldo_inicial_override != null ? parseFloat(saldo_inicial_override) : precio_final_usado - (enganche_recibido_total || 0),
           semanas_plazo: semanas,
           fecha_limite: new Date(Date.now() + semanas * 7 * 24 * 60 * 60 * 1000),
           frecuencia_pago:    frecuencia_pago    || 'semanal',

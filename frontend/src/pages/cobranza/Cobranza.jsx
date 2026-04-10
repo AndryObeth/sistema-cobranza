@@ -85,6 +85,10 @@ export default function Cobranza() {
   const [historialPagos, setHistorialPagos]     = useState([])
   const [historialVisitas, setHistorialVisitas] = useState([])
 
+  // Pago histórico (solo admin)
+  const [pagoHistorico, setPagoHistorico]           = useState(false)
+  const [fechaPagoHistorico, setFechaPagoHistorico] = useState('')
+
   useEffect(() => {
     cargarCuentas()
     // Detectar filtro de vencidas desde el dashboard
@@ -144,6 +148,8 @@ export default function Cobranza() {
     setDatosPago(null)
     setHistorialPagos([])
     setHistorialVisitas([])
+    setPagoHistorico(false)
+    setFechaPagoHistorico('')
   }
 
   const cambiarFlujo = (sinPago) => {
@@ -341,7 +347,8 @@ export default function Cobranza() {
         const res = await api.post('/pagos', {
           id_cuenta: cuentaSeleccionada.id_cuenta,
           ...formPago,
-          monto_pago: monto
+          monto_pago: monto,
+          ...(pagoHistorico && fechaPagoHistorico && { fecha_pago: fechaPagoHistorico })
         })
 
         // Si checkbox activo y hay comentario, registrar visita tipo "visita"
@@ -1012,6 +1019,39 @@ export default function Cobranza() {
                       />
                     </div>
                   </div>
+
+                  {/* Pago histórico — solo administrador */}
+                  {usuario?.rol === 'administrador' && (
+                    <div className="border border-amber-200 rounded-xl overflow-hidden bg-amber-50">
+                      <label className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-amber-100 transition">
+                        <input
+                          type="checkbox"
+                          checked={pagoHistorico}
+                          onChange={e => {
+                            setPagoHistorico(e.target.checked)
+                            if (!e.target.checked) setFechaPagoHistorico('')
+                          }}
+                          className="w-4 h-4 accent-amber-600"
+                        />
+                        <span className="text-sm font-medium text-amber-800">📅 Pago histórico (fecha personalizada)</span>
+                      </label>
+                      {pagoHistorico && (
+                        <div className="px-4 pb-4 border-t border-amber-200">
+                          <p className="text-xs text-amber-700 mt-3 mb-2">
+                            Ingresa la fecha real en que se realizó el pago.
+                          </p>
+                          <input
+                            type="date"
+                            value={fechaPagoHistorico}
+                            onChange={e => setFechaPagoHistorico(e.target.value)}
+                            max={new Date().toISOString().split('T')[0]}
+                            required={pagoHistorico}
+                            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Checkbox visita opcional */}
                   <div className="border border-gray-200 rounded-xl overflow-hidden">

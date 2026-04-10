@@ -44,6 +44,7 @@ export default function Ventas() {
   // Campos exclusivos admin — nueva venta
   const [precioOverride, setPrecioOverride] = useState('')
   const [observacionAjuste, setObservacionAjuste] = useState('')
+  const [saldoInicialOverride, setSaldoInicialOverride] = useState('')
 
   // Edición de venta existente
   const [ventaEditando, setVentaEditando] = useState(null)
@@ -54,8 +55,8 @@ export default function Ventas() {
   useEffect(() => { cargarDatos() }, [])
   useEffect(() => { calcularVenta() }, [form, productosSeleccionados])
 
-  // Limpiar override cuando cambian productos o plan (el precio calculado cambió)
-  useEffect(() => { setPrecioOverride(''); setObservacionAjuste('') }, [form.tipo_venta, form.plan_venta, productosSeleccionados])
+  // Limpiar overrides cuando cambian productos o plan
+  useEffect(() => { setPrecioOverride(''); setObservacionAjuste(''); setSaldoInicialOverride('') }, [form.tipo_venta, form.plan_venta, productosSeleccionados])
 
   const cargarDatos = async () => {
     // Cada petición independiente: un fallo no afecta las demás
@@ -136,6 +137,7 @@ export default function Ventas() {
     setCalculos(null)
     setPrecioOverride('')
     setObservacionAjuste('')
+    setSaldoInicialOverride('')
     setError('')
   }
 
@@ -183,6 +185,9 @@ export default function Ventas() {
         payload.fecha_primer_cobro = form.fecha_primer_cobro || null
         payload.horario_preferido  = form.horario_preferido  || null
         payload.numero_cuenta      = form.numero_cuenta       || null
+        if (esAdmin && saldoInicialOverride && parseFloat(saldoInicialOverride) >= 0) {
+          payload.saldo_inicial_override = parseFloat(saldoInicialOverride)
+        }
       }
 
       await api.post('/ventas', payload)
@@ -619,6 +624,24 @@ export default function Ventas() {
                         placeholder="Ej: 001, A-045, 2024-001"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
                     </div>
+
+                    {/* Saldo inicial real — solo admin, para migración */}
+                    {esAdmin && (
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Saldo inicial real <span className="text-gray-400 font-normal">(opcional — para migración de datos)</span>
+                        </label>
+                        <input type="number" step="0.01" min="0" value={saldoInicialOverride}
+                          onChange={e => setSaldoInicialOverride(e.target.value)}
+                          placeholder={calculos ? `${(calculos.precio_final_total - (parseFloat(form.enganche_recibido_total) || 0)).toFixed(2)} (calculado)` : '0.00'}
+                          className="w-full border border-amber-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-amber-50"/>
+                        {saldoInicialOverride && calculos && parseFloat(saldoInicialOverride) !== (calculos.precio_final_total - (parseFloat(form.enganche_recibido_total) || 0)) && (
+                          <p className="text-xs text-amber-700 mt-1">
+                            ⚠️ Saldo personalizado. Calculado automáticamente: {fmt(calculos.precio_final_total - (parseFloat(form.enganche_recibido_total) || 0))}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
