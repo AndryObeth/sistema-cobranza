@@ -58,31 +58,21 @@ export default function Ventas() {
   useEffect(() => { setPrecioOverride(''); setObservacionAjuste('') }, [form.tipo_venta, form.plan_venta, productosSeleccionados])
 
   const cargarDatos = async () => {
-    try {
-      const [rv, rc, rp] = await Promise.all([
-        api.get('/ventas'),
-        api.get('/clientes'),
-        api.get('/productos'),
-      ])
-      setVentas(rv.data)
-      setClientes(rc.data)
-      setProductos(rp.data)
-    } catch {
-      console.error('Error al cargar datos')
-    } finally {
-      setCargando(false)
-    }
-    // Usuarios por separado — no bloquea la carga principal
-    try {
-      const [rvend, rjefes] = await Promise.all([
-        api.get('/usuarios?rol=vendedor'),
-        api.get('/usuarios?rol=jefe_camioneta'),
-      ])
-      setVendedores(rvend.data.filter(u => u.activo))
-      setJefesCamioneta(rjefes.data.filter(u => u.activo))
-    } catch {
-      console.error('Error al cargar usuarios')
-    }
+    // Cada petición independiente: un fallo no afecta las demás
+    const resultados = await Promise.allSettled([
+      api.get('/ventas'),
+      api.get('/clientes'),
+      api.get('/productos'),
+      api.get('/usuarios?rol=vendedor'),
+      api.get('/usuarios?rol=jefe_camioneta'),
+    ])
+    const [rv, rc, rp, rvend, rjefes] = resultados
+    if (rv.status === 'fulfilled')    setVentas(rv.value.data)
+    if (rc.status === 'fulfilled')    setClientes(rc.value.data)
+    if (rp.status === 'fulfilled')    setProductos(rp.value.data)
+    if (rvend.status === 'fulfilled') setVendedores(rvend.value.data.filter(u => u.activo))
+    if (rjefes.status === 'fulfilled') setJefesCamioneta(rjefes.value.data.filter(u => u.activo))
+    setCargando(false)
   }
 
   const calcularVenta = () => {
