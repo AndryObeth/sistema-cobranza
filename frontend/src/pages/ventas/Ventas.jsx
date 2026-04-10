@@ -13,14 +13,18 @@ export default function Ventas() {
 
   const [ventas, setVentas] = useState([])
   const [clientes, setClientes] = useState([])
-  const [productos, setProductos] = useState([])
-  const [vendedores, setVendedores] = useState([])
-  const [jefesCamioneta, setJefesCamioneta] = useState([])
   const [cargando, setCargando] = useState(true)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [mostrarLiquidadas, setMostrarLiquidadas] = useState(false)
+
+  // Datos del modal — se cargan al abrirlo
+  const [productos, setProductos] = useState([])
+  const [vendedores, setVendedores] = useState([])
+  const [jefesCamioneta, setJefesCamioneta] = useState([])
+  const [cargandoModal, setCargandoModal] = useState(false)
+  const [errorModal, setErrorModal] = useState('')
 
   const [form, setForm] = useState({
     id_cliente: '',
@@ -59,21 +63,29 @@ export default function Ventas() {
   useEffect(() => { setPrecioOverride(''); setObservacionAjuste(''); setSaldoInicialOverride('') }, [form.tipo_venta, form.plan_venta, productosSeleccionados])
 
   const cargarDatos = async () => {
-    // Cada petición independiente: un fallo no afecta las demás
-    const resultados = await Promise.allSettled([
+    const [rv, rc] = await Promise.allSettled([
       api.get('/ventas'),
       api.get('/clientes'),
+    ])
+    if (rv.status === 'fulfilled') setVentas(rv.value.data)
+    if (rc.status === 'fulfilled') setClientes(rc.value.data)
+    setCargando(false)
+  }
+
+  const cargarDatosModal = async () => {
+    setCargandoModal(true)
+    setErrorModal('')
+    const [rp, rvend, rjefes] = await Promise.allSettled([
       api.get('/productos'),
       api.get('/usuarios?rol=vendedor'),
       api.get('/usuarios?rol=jefe_camioneta'),
     ])
-    const [rv, rc, rp, rvend, rjefes] = resultados
-    if (rv.status === 'fulfilled')    setVentas(rv.value.data)
-    if (rc.status === 'fulfilled')    setClientes(rc.value.data)
+    const ok = rp.status === 'fulfilled' && rvend.status === 'fulfilled' && rjefes.status === 'fulfilled'
     if (rp.status === 'fulfilled')    setProductos(rp.value.data)
     if (rvend.status === 'fulfilled') setVendedores(rvend.value.data.filter(u => u.activo))
     if (rjefes.status === 'fulfilled') setJefesCamioneta(rjefes.value.data.filter(u => u.activo))
-    setCargando(false)
+    if (!ok) setErrorModal('Error al cargar algunos datos. Verifica tu conexión.')
+    setCargandoModal(false)
   }
 
   const calcularVenta = () => {
@@ -139,6 +151,7 @@ export default function Ventas() {
     setObservacionAjuste('')
     setSaldoInicialOverride('')
     setError('')
+    setErrorModal('')
   }
 
   const handleGuardar = async (e) => {
@@ -281,7 +294,7 @@ export default function Ventas() {
             </div>
             <span className="text-sm text-gray-600">Mostrar liquidadas</span>
           </label>
-          <button onClick={() => setModalAbierto(true)}
+          <button onClick={() => { setModalAbierto(true); cargarDatosModal() }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
             + Nueva venta
           </button>
@@ -443,7 +456,16 @@ export default function Ventas() {
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b">
-              <h3 className="text-lg font-bold text-gray-800">Nueva venta</h3>
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">Nueva venta</h3>
+                {cargandoModal && <p className="text-xs text-blue-500 mt-0.5">Cargando productos y usuarios...</p>}
+                {errorModal && (
+                  <p className="text-xs text-red-500 mt-0.5">
+                    {errorModal}{' '}
+                    <button onClick={cargarDatosModal} className="underline font-medium">Reintentar</button>
+                  </p>
+                )}
+              </div>
               <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
             </div>
 
