@@ -211,7 +211,7 @@ router.post('/', auth, async (req, res) => {
       const neto_vendedor  = parseFloat((monto - comision_cob).toFixed(2))
       // Regla: si hay un vendedor real asignado (rol='vendedor'), él recibe el enganche.
       // Si no hay vendedor real (solo jefe de grupo), el jefe recibe el enganche.
-      const tieneVendedorReal = venta.vendedor?.rol === 'vendedor'
+      const tieneVendedorReal = venta.vendedor?.rol === 'vendedor' || venta.vendedor?.rol === 'cobrador'
       const id_beneficiario = tieneVendedorReal
         ? venta.id_vendedor
         : (venta.id_jefe_camioneta || venta.id_vendedor)

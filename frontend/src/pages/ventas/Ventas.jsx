@@ -75,14 +75,21 @@ export default function Ventas() {
   const cargarDatosModal = async () => {
     setCargandoModal(true)
     setErrorModal('')
-    const [rp, rvend, rjefes] = await Promise.allSettled([
+    const [rp, rvend, rjefes, rcob] = await Promise.allSettled([
       api.get('/productos'),
       api.get('/usuarios?rol=vendedor'),
       api.get('/usuarios?rol=jefe_camioneta'),
+      api.get('/usuarios?rol=cobrador'),
     ])
     const ok = rp.status === 'fulfilled' && rvend.status === 'fulfilled' && rjefes.status === 'fulfilled'
     if (rp.status === 'fulfilled')    setProductos(rp.value.data)
-    if (rvend.status === 'fulfilled') setVendedores(rvend.value.data.filter(u => u.activo))
+    if (rvend.status === 'fulfilled' && rcob.status === 'fulfilled') {
+      const vendedoresFiltrados = rvend.value.data.filter(u => u.activo).map(u => ({ ...u, _etiqueta: 'Vendedor' }))
+      const cobradoresFiltrados = rcob.value.data.filter(u => u.activo).map(u => ({ ...u, _etiqueta: 'Cobrador' }))
+      setVendedores([...vendedoresFiltrados, ...cobradoresFiltrados])
+    } else if (rvend.status === 'fulfilled') {
+      setVendedores(rvend.value.data.filter(u => u.activo).map(u => ({ ...u, _etiqueta: 'Vendedor' })))
+    }
     if (rjefes.status === 'fulfilled') setJefesCamioneta(rjefes.value.data.filter(u => u.activo))
     if (!ok) setErrorModal('Error al cargar algunos datos. Verifica tu conexión.')
     setCargandoModal(false)
@@ -222,6 +229,7 @@ export default function Ventas() {
       enganche_recibido_total: parseFloat(v.enganche_recibido_total || 0).toFixed(2),
       observaciones:           v.observaciones || '',
       estatus_venta:           v.estatus_venta,
+      frecuencia_pago:         v.cuenta?.frecuencia_pago || 'semanal',
     })
     setErrorEdicion('')
   }
@@ -231,13 +239,23 @@ export default function Ventas() {
     setGuardandoEdicion(true)
     setErrorEdicion('')
     try {
-      await api.put(`/ventas/${ventaEditando.id_venta}`, {
-        fecha_venta:             formEdicion.fecha_venta,
-        precio_final_total:      parseFloat(formEdicion.precio_final_total),
-        enganche_recibido_total: parseFloat(formEdicion.enganche_recibido_total),
-        observaciones:           formEdicion.observaciones,
-        estatus_venta:           formEdicion.estatus_venta,
-      })
+      const promesas = [
+        api.put(`/ventas/${ventaEditando.id_venta}`, {
+          fecha_venta:             formEdicion.fecha_venta,
+          precio_final_total:      parseFloat(formEdicion.precio_final_total),
+          enganche_recibido_total: parseFloat(formEdicion.enganche_recibido_total),
+          observaciones:           formEdicion.observaciones,
+          estatus_venta:           formEdicion.estatus_venta,
+        })
+      ]
+      // Si es a plazo y tiene cuenta, actualizar frecuencia si cambió
+      if (ventaEditando.tipo_venta === 'plazo' && ventaEditando.cuenta?.id_cuenta &&
+          formEdicion.frecuencia_pago !== ventaEditando.cuenta.frecuencia_pago) {
+        promesas.push(api.put(`/pagos/cuenta/${ventaEditando.cuenta.id_cuenta}/frecuencia`, {
+          frecuencia_pago: formEdicion.frecuencia_pago
+        }))
+      }
+      await Promise.all(promesas)
       setVentaEditando(null)
       cargarDatos()
     } catch (err) {
@@ -416,6 +434,19 @@ export default function Ventas() {
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 )}
+                {ventaEditando.tipo_venta === 'plazo' && ventaEditando.cuenta && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Frecuencia de pago</label>
+                    <select value={formEdicion.frecuencia_pago}
+                      onChange={e => setFormEdicion({...formEdicion, frecuencia_pago: e.target.value})}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="semanal">Semanal</option>
+                      <option value="quincenal">Quincenal</option>
+                      <option value="mensual">Mensual</option>
+                      <option value="dos_meses">Cada 2 meses</option>
+                    </select>
+                  </div>
+                )}
                 <div className={ventaEditando.tipo_venta === 'plazo' ? 'col-span-2' : ''}>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Estatus</label>
                   <select value={formEdicion.estatus_venta}
@@ -497,7 +528,7 @@ export default function Ventas() {
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">— Sin asignar —</option>
                         {vendedores.map(u => (
-                          <option key={u.id_usuario} value={u.id_usuario}>{u.nombre}</option>
+                          <option key={u.id_usuario} value={u.id_usuario}>{u.nombre} ({u._etiqueta})</option>
                         ))}
                       </select>
                     </div>
