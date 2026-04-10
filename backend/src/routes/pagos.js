@@ -134,6 +134,20 @@ router.post('/', auth, async (req, res) => {
       : cuenta.semanas_atraso > 1 ? 'atraso'
       : 'activa'
 
+    // Si es recuperación de enganche, cargar la venta para obtener id_vendedor y enganche_regado
+    const esRecuperacion = tipo_pago === 'recuperacion_enganche'
+    let venta = null
+    if (esRecuperacion) {
+      venta = await prisma.venta.findUnique({
+        where: { id_venta: cuenta.id_venta },
+        select: { id_venta: true, id_vendedor: true, enganche_regado: true }
+      })
+    }
+
+    const aplica_a_enganche_regado  = esRecuperacion
+    const monto_aplicado_enganche   = esRecuperacion ? monto : 0
+    const monto_aplicado_saldo      = esRecuperacion ? 0 : monto
+
     // Crear pago
     const pago = await prisma.pago.create({
       data: {
@@ -145,7 +159,9 @@ router.post('/', auth, async (req, res) => {
         saldo_nuevo,
         tipo_pago: tipo_pago || 'abono',
         origen_pago: origen_pago || 'domicilio',
-        monto_aplicado_saldo: monto,
+        aplica_a_enganche_regado,
+        monto_aplicado_enganche_regado: monto_aplicado_enganche,
+        monto_aplicado_saldo,
         observaciones
       }
     })
@@ -179,12 +195,32 @@ router.post('/', auth, async (req, res) => {
       }
     })
 
+    // Si es recuperación de enganche: crear RecuperacionEnganche
+    // Funciona igual para vendedor y jefe_camioneta (ambos son id_vendedor de la venta)
+    if (esRecuperacion && venta) {
+      const comision_cob   = parseFloat((monto * 0.12).toFixed(2))
+      const neto_vendedor  = parseFloat((monto - comision_cob).toFixed(2))
+      await prisma.recuperacionEnganche.create({
+        data: {
+          id_venta:            venta.id_venta,
+          id_pago:             pago.id_pago,
+          id_vendedor:         venta.id_vendedor,
+          id_cobrador:         req.usuario.id,
+          monto_recuperado:    monto,
+          comision_cobrador:   comision_cob,
+          monto_neto_vendedor: neto_vendedor,
+          estado_corte:        'pendiente_corte'
+        }
+      })
+    }
+
     res.status(201).json({
       mensaje: 'Pago registrado',
       pago,
       saldo_nuevo,
       estado_nuevo: nuevo_estado,
-      comision_cobrador: comision
+      comision_cobrador: comision,
+      ...(esRecuperacion && { recuperacion_enganche: true })
     })
   } catch (error) {
     res.status(500).json({ error: 'Error al registrar pago', detalle: error.message })
