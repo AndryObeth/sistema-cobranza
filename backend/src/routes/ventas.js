@@ -97,7 +97,7 @@ router.post('/', auth, async (req, res) => {
         ruta,
         tipo_venta,
         plan_venta,
-        fecha_venta: fecha_venta ? new Date(fecha_venta) : new Date(),
+        fecha_venta: fecha_venta ? new Date(fecha_venta + 'T12:00:00') : new Date(),
         precio_original_total,
         precio_final_total: precio_final_usado,
         enganche_recibido_total: enganche_recibido_total || 0,
@@ -139,7 +139,7 @@ router.post('/', auth, async (req, res) => {
           semanas_plazo: semanas,
           fecha_limite: new Date(Date.now() + semanas * 7 * 24 * 60 * 60 * 1000),
           frecuencia_pago:    frecuencia_pago    || 'semanal',
-          fecha_primer_cobro: fecha_primer_cobro ? new Date(fecha_primer_cobro) : null,
+          fecha_primer_cobro: fecha_primer_cobro ? new Date(fecha_primer_cobro + 'T12:00:00') : null,
           horario_preferido:  horario_preferido  || null
         }
       })
@@ -168,7 +168,7 @@ router.put('/:id', auth, async (req, res) => {
     if (!ventaActual) return res.status(404).json({ error: 'Venta no encontrada' })
 
     const dataUpdate = {}
-    if (fecha_venta !== undefined)           dataUpdate.fecha_venta            = new Date(fecha_venta)
+    if (fecha_venta !== undefined)           dataUpdate.fecha_venta            = new Date(fecha_venta + 'T12:00:00')
     if (precio_final_total !== undefined)    dataUpdate.precio_final_total      = parseFloat(precio_final_total)
     if (enganche_recibido_total !== undefined) dataUpdate.enganche_recibido_total = parseFloat(enganche_recibido_total)
     if (observaciones !== undefined)         dataUpdate.observaciones           = observaciones
