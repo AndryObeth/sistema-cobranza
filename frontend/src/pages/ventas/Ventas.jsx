@@ -230,6 +230,7 @@ export default function Ventas() {
       observaciones:           v.observaciones || '',
       estatus_venta:           v.estatus_venta,
       frecuencia_pago:         v.cuenta?.frecuencia_pago || 'semanal',
+      numero_cuenta:           v.cuenta?.numero_cuenta || '',
     })
     setErrorEdicion('')
   }
@@ -249,11 +250,15 @@ export default function Ventas() {
         })
       ]
       // Si es a plazo y tiene cuenta, actualizar frecuencia si cambió
-      if (ventaEditando.tipo_venta === 'plazo' && ventaEditando.cuenta?.id_cuenta &&
-          formEdicion.frecuencia_pago !== ventaEditando.cuenta.frecuencia_pago) {
-        promesas.push(api.put(`/pagos/cuenta/${ventaEditando.cuenta.id_cuenta}/frecuencia`, {
-          frecuencia_pago: formEdicion.frecuencia_pago
-        }))
+      if (ventaEditando.tipo_venta === 'plazo' && ventaEditando.cuenta?.id_cuenta) {
+        const cuentaData = {}
+        if (formEdicion.frecuencia_pago !== ventaEditando.cuenta.frecuencia_pago)
+          cuentaData.frecuencia_pago = formEdicion.frecuencia_pago
+        if (formEdicion.numero_cuenta !== (ventaEditando.cuenta.numero_cuenta || ''))
+          cuentaData.numero_cuenta = formEdicion.numero_cuenta
+        if (Object.keys(cuentaData).length > 0) {
+          promesas.push(api.put(`/pagos/cuenta/${ventaEditando.cuenta.id_cuenta}/frecuencia`, cuentaData))
+        }
       }
       await Promise.all(promesas)
       setVentaEditando(null)
@@ -435,17 +440,31 @@ export default function Ventas() {
                   </div>
                 )}
                 {ventaEditando.tipo_venta === 'plazo' && ventaEditando.cuenta && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Frecuencia de pago</label>
-                    <select value={formEdicion.frecuencia_pago}
-                      onChange={e => setFormEdicion({...formEdicion, frecuencia_pago: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="semanal">Semanal</option>
-                      <option value="quincenal">Quincenal</option>
-                      <option value="mensual">Mensual</option>
-                      <option value="dos_meses">Cada 2 meses</option>
-                    </select>
-                  </div>
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Frecuencia de pago</label>
+                      <select value={formEdicion.frecuencia_pago}
+                        onChange={e => setFormEdicion({...formEdicion, frecuencia_pago: e.target.value})}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="semanal">Semanal</option>
+                        <option value="quincenal">Quincenal</option>
+                        <option value="mensual">Mensual</option>
+                        <option value="dos_meses">Cada 2 meses</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Número de cuenta
+                        {!ventaEditando.cuenta.numero_cuenta && (
+                          <span className="ml-1 text-amber-500 font-normal text-xs">sin asignar</span>
+                        )}
+                      </label>
+                      <input type="text" value={formEdicion.numero_cuenta}
+                        onChange={e => setFormEdicion({...formEdicion, numero_cuenta: e.target.value})}
+                        placeholder="Ej. 60-D"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </>
                 )}
                 <div className={ventaEditando.tipo_venta === 'plazo' ? 'col-span-2' : ''}>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Estatus</label>

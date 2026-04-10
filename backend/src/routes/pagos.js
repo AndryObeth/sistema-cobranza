@@ -71,18 +71,19 @@ router.get('/todas-cuentas', auth, async (req, res) => {
 router.put('/cuenta/:id/frecuencia', auth, async (req, res) => {
   try {
     const id_cuenta = parseInt(req.params.id)
-    const { fecha_primer_cobro, horario_preferido, frecuencia_pago } = req.body
+    const { fecha_primer_cobro, horario_preferido, frecuencia_pago, numero_cuenta } = req.body
 
     const data = {}
     if (frecuencia_pago    !== undefined) data.frecuencia_pago    = frecuencia_pago
     if (horario_preferido  !== undefined) data.horario_preferido  = horario_preferido
     if (fecha_primer_cobro !== undefined) data.fecha_primer_cobro = fecha_primer_cobro ? new Date(fecha_primer_cobro) : null
+    if (numero_cuenta      !== undefined) data.numero_cuenta      = numero_cuenta || null
 
     const cuenta = await prisma.cuenta.update({
       where: { id_cuenta },
       data
     })
-    res.json({ mensaje: 'Frecuencia actualizada', cuenta })
+    res.json({ mensaje: 'Cuenta actualizada', cuenta })
   } catch (error) {
     res.status(500).json({ error: 'Error al actualizar frecuencia', detalle: error.message })
   }
