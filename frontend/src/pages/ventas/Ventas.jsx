@@ -59,22 +59,29 @@ export default function Ventas() {
 
   const cargarDatos = async () => {
     try {
-      const [rv, rc, rp, rvend, rjefes] = await Promise.all([
+      const [rv, rc, rp] = await Promise.all([
         api.get('/ventas'),
         api.get('/clientes'),
         api.get('/productos'),
-        api.get('/usuarios?rol=vendedor'),
-        api.get('/usuarios?rol=jefe_camioneta'),
       ])
       setVentas(rv.data)
       setClientes(rc.data)
       setProductos(rp.data)
-      setVendedores(rvend.data.filter(u => u.activo))
-      setJefesCamioneta(rjefes.data.filter(u => u.activo))
     } catch {
       console.error('Error al cargar datos')
     } finally {
       setCargando(false)
+    }
+    // Usuarios por separado — no bloquea la carga principal
+    try {
+      const [rvend, rjefes] = await Promise.all([
+        api.get('/usuarios?rol=vendedor'),
+        api.get('/usuarios?rol=jefe_camioneta'),
+      ])
+      setVendedores(rvend.data.filter(u => u.activo))
+      setJefesCamioneta(rjefes.data.filter(u => u.activo))
+    } catch {
+      console.error('Error al cargar usuarios')
     }
   }
 
