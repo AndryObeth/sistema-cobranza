@@ -140,7 +140,7 @@ router.post('/', auth, async (req, res) => {
     if (esRecuperacion) {
       venta = await prisma.venta.findUnique({
         where: { id_venta: cuenta.id_venta },
-        select: { id_venta: true, id_vendedor: true, enganche_regado: true }
+        select: { id_venta: true, id_vendedor: true, id_jefe_camioneta: true, enganche_regado: true }
       })
     }
 
@@ -200,11 +200,13 @@ router.post('/', auth, async (req, res) => {
     if (esRecuperacion && venta) {
       const comision_cob   = parseFloat((monto * 0.12).toFixed(2))
       const neto_vendedor  = parseFloat((monto - comision_cob).toFixed(2))
+      // El beneficiario es el jefe de grupo si está asignado, si no el vendedor
+      const id_beneficiario = venta.id_jefe_camioneta || venta.id_vendedor
       await prisma.recuperacionEnganche.create({
         data: {
           id_venta:            venta.id_venta,
           id_pago:             pago.id_pago,
-          id_vendedor:         venta.id_vendedor,
+          id_vendedor:         id_beneficiario,
           id_cobrador:         req.usuario.id,
           monto_recuperado:    monto,
           comision_cobrador:   comision_cob,
