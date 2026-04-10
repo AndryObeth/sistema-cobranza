@@ -8,10 +8,14 @@ const hoyISO = () => new Date().toISOString().split('T')[0]
 export default function Ventas() {
   const { usuario } = useAuth()
   const esAdmin = usuario?.rol === 'administrador'
+  const esSecretaria = usuario?.rol === 'secretaria'
+  const puedeAsignar = esAdmin || esSecretaria
 
   const [ventas, setVentas] = useState([])
   const [clientes, setClientes] = useState([])
   const [productos, setProductos] = useState([])
+  const [vendedores, setVendedores] = useState([])
+  const [jefesCamioneta, setJefesCamioneta] = useState([])
   const [cargando, setCargando] = useState(true)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
@@ -20,6 +24,8 @@ export default function Ventas() {
 
   const [form, setForm] = useState({
     id_cliente: '',
+    id_vendedor: '',
+    id_jefe_camioneta: '',
     tipo_venta: 'contado',
     plan_venta: 'contado_directo',
     enganche_recibido_total: '',
@@ -53,14 +59,18 @@ export default function Ventas() {
 
   const cargarDatos = async () => {
     try {
-      const [rv, rc, rp] = await Promise.all([
+      const [rv, rc, rp, rvend, rjefes] = await Promise.all([
         api.get('/ventas'),
         api.get('/clientes'),
-        api.get('/productos')
+        api.get('/productos'),
+        api.get('/usuarios?rol=vendedor'),
+        api.get('/usuarios?rol=jefe_camioneta'),
       ])
       setVentas(rv.data)
       setClientes(rc.data)
       setProductos(rp.data)
+      setVendedores(rvend.data.filter(u => u.activo))
+      setJefesCamioneta(rjefes.data.filter(u => u.activo))
     } catch {
       console.error('Error al cargar datos')
     } finally {
@@ -124,7 +134,7 @@ export default function Ventas() {
 
   const cerrarModal = () => {
     setModalAbierto(false)
-    setForm({ id_cliente: '', tipo_venta: 'contado', plan_venta: 'contado_directo', enganche_recibido_total: '', observaciones: '', fecha_venta: hoyISO(), frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '', numero_cuenta: '' })
+    setForm({ id_cliente: '', id_vendedor: '', id_jefe_camioneta: '', tipo_venta: 'contado', plan_venta: 'contado_directo', enganche_recibido_total: '', observaciones: '', fecha_venta: hoyISO(), frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '', numero_cuenta: '' })
     setProductosSeleccionados([])
     setCalculos(null)
     setPrecioOverride('')
@@ -161,6 +171,10 @@ export default function Ventas() {
         fecha_venta: form.fecha_venta,
         detalles
       }
+
+      // Asignación de vendedor (solo admin/secretaria pueden sobreescribir)
+      if (puedeAsignar && form.id_vendedor) payload.id_vendedor = parseInt(form.id_vendedor)
+      if (form.id_jefe_camioneta) payload.id_jefe_camioneta = parseInt(form.id_jefe_camioneta)
 
       if (esAdmin && precioOverride && parseFloat(precioOverride) !== calculos.precio_final_total) {
         payload.precio_final_total_override = parseFloat(precioOverride)
@@ -446,6 +460,39 @@ export default function Ventas() {
                     ))}
                   </select>
                 </div>
+
+                {/* Vendedor y jefe de grupo — visibles para admin y secretaria */}
+                {puedeAsignar && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Vendedor <span className="text-gray-400 font-normal">(opcional)</span>
+                      </label>
+                      <select value={form.id_vendedor}
+                        onChange={e => setForm({...form, id_vendedor: e.target.value})}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">— Sin asignar —</option>
+                        {vendedores.map(u => (
+                          <option key={u.id_usuario} value={u.id_usuario}>{u.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Jefe de grupo <span className="text-gray-400 font-normal">(opcional)</span>
+                      </label>
+                      <select value={form.id_jefe_camioneta}
+                        onChange={e => setForm({...form, id_jefe_camioneta: e.target.value})}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">— Sin asignar —</option>
+                        {jefesCamioneta.map(u => (
+                          <option key={u.id_usuario} value={u.id_usuario}>{u.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de venta</label>
                   <select value={form.tipo_venta}

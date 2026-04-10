@@ -10,7 +10,8 @@ router.get('/', auth, async (req, res) => {
     const ventas = await prisma.venta.findMany({
       include: {
         cliente: true,
-        vendedor: true,
+        vendedor: { select: { nombre: true } },
+        jefe_camioneta: { select: { nombre: true } },
         detalles: true,
         cuenta: { select: { numero_cuenta: true, folio_cuenta: true } }
       },
@@ -45,7 +46,7 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const {
-      id_cliente, id_cobrador, ruta,
+      id_cliente, id_cobrador, id_jefe_camioneta, ruta,
       tipo_venta, plan_venta,
       precio_original_total, precio_final_total,
       precio_final_total_override, observacion_ajuste,
@@ -53,11 +54,16 @@ router.post('/', auth, async (req, res) => {
       fecha_venta,
       frecuencia_pago, fecha_primer_cobro, horario_preferido,
       numero_cuenta,
-      detalles
+      detalles,
+      id_vendedor: id_vendedor_body
     } = req.body
 
-    // Si el admin envía un override de precio, usarlo; si no, usar el calculado
     const esAdmin = req.usuario.rol === 'administrador'
+    const esSecretaria = req.usuario.rol === 'secretaria'
+    // Admin/secretaria pueden asignar otro vendedor; el resto usa su propio id
+    const id_vendedor_final = (esAdmin || esSecretaria) && id_vendedor_body
+      ? parseInt(id_vendedor_body)
+      : req.usuario.id
     const precio_final_usado = esAdmin && precio_final_total_override != null
       ? parseFloat(precio_final_total_override)
       : parseFloat(precio_final_total)
@@ -84,8 +90,9 @@ router.post('/', auth, async (req, res) => {
       data: {
         folio_venta,
         id_cliente,
-        id_vendedor: req.usuario.id,
+        id_vendedor: id_vendedor_final,
         id_cobrador,
+        id_jefe_camioneta: id_jefe_camioneta ? parseInt(id_jefe_camioneta) : null,
         ruta,
         tipo_venta,
         plan_venta,

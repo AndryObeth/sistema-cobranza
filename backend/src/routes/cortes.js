@@ -148,8 +148,9 @@ router.get('/vendedor/pendientes', auth, async (req, res) => {
       include: {
         venta: {
           include: {
-            vendedor: { select: { id_usuario: true, nombre: true } },
-            cliente:  { select: { nombre: true } }
+            vendedor:        { select: { id_usuario: true, nombre: true } },
+            jefe_camioneta:  { select: { nombre: true } },
+            cliente:         { select: { nombre: true } }
           }
         }
       },
@@ -174,6 +175,7 @@ router.get('/vendedor/pendientes', auth, async (req, res) => {
       porVendedor[id_v].recuperaciones.push({
         id_recuperacion: rec.id_recuperacion,
         cliente: rec.venta.cliente.nombre,
+        jefe_camioneta: rec.venta.jefe_camioneta?.nombre || null,
         monto_recuperado: parseFloat(rec.monto_recuperado),
         comision_cobrador: parseFloat(rec.comision_cobrador),
         monto_neto_vendedor: parseFloat(rec.monto_neto_vendedor),

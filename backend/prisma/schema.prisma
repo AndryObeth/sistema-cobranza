@@ -22,9 +22,10 @@ model Usuario {
   fecha_creacion DateTime @default(now())
 
   // Relaciones
-  ventas_como_vendedor  Venta[]              @relation("VendedorVenta")
-  ventas_como_cobrador  Venta[]              @relation("CobradorVenta")
-  clientes_registrados  Cliente[]
+  ventas_como_vendedor       Venta[]              @relation("VendedorVenta")
+  ventas_como_cobrador       Venta[]              @relation("CobradorVenta")
+  ventas_como_jefe_camioneta Venta[]              @relation("JefeCamionetaVenta")
+  clientes_registrados       Cliente[]
   pagos_registrados     Pago[]
   seguimientos          SeguimientoCliente[]
   comisiones_vendedor   ComisionVendedor[]
@@ -139,6 +140,7 @@ model Venta {
   id_cliente                  Int
   id_vendedor                 Int
   id_cobrador                 Int?
+  id_jefe_camioneta           Int?
   ruta                        String?
   tipo_venta                  TipoVenta
   plan_venta                  PlanVenta
@@ -160,6 +162,7 @@ model Venta {
   cliente              Cliente          @relation(fields: [id_cliente], references: [id_cliente])
   vendedor             Usuario          @relation("VendedorVenta", fields: [id_vendedor], references: [id_usuario])
   cobrador             Usuario?         @relation("CobradorVenta", fields: [id_cobrador], references: [id_usuario])
+  jefe_camioneta       Usuario?         @relation("JefeCamionetaVenta", fields: [id_jefe_camioneta], references: [id_usuario])
   detalles             DetalleVenta[]
   cuenta               Cuenta?
   comision_vendedor    ComisionVendedor?

@@ -361,6 +361,13 @@ function TabVendedor() {
               <p className="text-sm text-gray-500">
                 {v.cantidad_recuperaciones} recuperación{v.cantidad_recuperaciones !== 1 ? 'es' : ''} · Total: <strong className="text-green-600">{fmt(v.total_a_pagar)}</strong>
               </p>
+              {/* Jefes de grupo únicos involucrados en estas recuperaciones */}
+              {(() => {
+                const jefes = [...new Set(v.recuperaciones.map(r => r.jefe_camioneta).filter(Boolean))]
+                return jefes.length > 0 ? (
+                  <p className="text-xs text-gray-400 mt-0.5">Jefe(s): {jefes.join(', ')}</p>
+                ) : null
+              })()}
             </div>
             <button
               onClick={() => pagarCorte(v)}
@@ -377,6 +384,7 @@ function TabVendedor() {
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <tr>
                   <th className="text-left px-4 py-2">Cliente</th>
+                  <th className="text-left px-4 py-2">Jefe de grupo</th>
                   <th className="text-right px-4 py-2">Recuperado</th>
                   <th className="text-right px-4 py-2">Com. cobrador</th>
                   <th className="text-right px-4 py-2">Neto vendedor</th>
@@ -387,6 +395,7 @@ function TabVendedor() {
                 {v.recuperaciones.map(r => (
                   <tr key={r.id_recuperacion} className="hover:bg-gray-50">
                     <td className="px-4 py-2 font-medium">{r.cliente}</td>
+                    <td className="px-4 py-2 text-gray-500">{r.jefe_camioneta || <span className="text-gray-300">—</span>}</td>
                     <td className="px-4 py-2 text-right">{fmt(r.monto_recuperado)}</td>
                     <td className="px-4 py-2 text-right text-orange-600">-{fmt(r.comision_cobrador)}</td>
                     <td className="px-4 py-2 text-right text-green-600 font-semibold">{fmt(r.monto_neto_vendedor)}</td>

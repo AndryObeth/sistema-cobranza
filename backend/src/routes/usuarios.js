@@ -15,10 +15,13 @@ const SELECT_USUARIO = {
   fecha_creacion: true
 }
 
-// GET /api/usuarios — listar todos (activos e inactivos)
+// GET /api/usuarios — listar todos (activos e inactivos); ?rol=vendedor para filtrar
 router.get('/', auth, async (req, res) => {
   try {
+    const where = {}
+    if (req.query.rol) where.rol = req.query.rol
     const usuarios = await prisma.usuario.findMany({
+      where,
       orderBy: { nombre: 'asc' },
       select: SELECT_USUARIO
     })
