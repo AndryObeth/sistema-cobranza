@@ -179,16 +179,23 @@ router.put('/:id', auth, async (req, res) => {
       data: dataUpdate
     })
 
-    // Si cambió el precio y hay cuenta asociada, ajustar saldo proporcionalmente
-    if (precio_final_total !== undefined && ventaActual.cuenta) {
-      const diferencia = parseFloat(precio_final_total) - parseFloat(ventaActual.precio_final_total)
-      const nuevo_saldo_actual = Math.max(0, parseFloat(ventaActual.cuenta.saldo_actual) + diferencia)
-      const nuevo_saldo_inicial = Math.max(0, parseFloat(ventaActual.cuenta.saldo_inicial) + diferencia)
+    // Si cambió el precio o el enganche y hay cuenta asociada, ajustar saldos
+    if ((precio_final_total !== undefined || enganche_recibido_total !== undefined) && ventaActual.cuenta) {
+      const precioNuevo    = precio_final_total       !== undefined ? parseFloat(precio_final_total)       : parseFloat(ventaActual.precio_final_total)
+      const engancheNuevo  = enganche_recibido_total  !== undefined ? parseFloat(enganche_recibido_total)  : parseFloat(ventaActual.enganche_recibido_total || 0)
+      const precioViejo    = parseFloat(ventaActual.precio_final_total)
+      const engancheViejo  = parseFloat(ventaActual.enganche_recibido_total || 0)
+
+      // saldo_inicial se recalcula desde cero; saldo_actual preserva los pagos ya hechos
+      const nuevo_saldo_inicial = Math.max(0, precioNuevo - engancheNuevo)
+      const delta = (precioNuevo - precioViejo) - (engancheNuevo - engancheViejo)
+      const nuevo_saldo_actual  = Math.max(0, parseFloat(ventaActual.cuenta.saldo_actual) + delta)
 
       await prisma.cuenta.update({
         where: { id_cuenta: ventaActual.cuenta.id_cuenta },
         data: {
-          precio_plan_actual: parseFloat(precio_final_total),
+          precio_plan_actual: precioNuevo,
+          abono_inicial:      engancheNuevo,
           saldo_inicial:      nuevo_saldo_inicial,
           saldo_actual:       nuevo_saldo_actual,
           estado_cuenta:      nuevo_saldo_actual === 0 ? 'liquidada' : ventaActual.cuenta.estado_cuenta
