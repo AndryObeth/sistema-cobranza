@@ -50,6 +50,10 @@ export default function Ventas() {
   const [observacionAjuste, setObservacionAjuste] = useState('')
   const [saldoInicialOverride, setSaldoInicialOverride] = useState('')
 
+  // Buscador de cliente en modal nueva venta
+  const [busquedaCliente, setBusquedaCliente] = useState('')
+  const [clienteDropdown, setClienteDropdown] = useState(false)
+
   // Edición de venta existente
   const [ventaEditando, setVentaEditando] = useState(null)
   const [formEdicion, setFormEdicion] = useState({})
@@ -152,6 +156,8 @@ export default function Ventas() {
   const cerrarModal = () => {
     setModalAbierto(false)
     setForm({ id_cliente: '', id_vendedor: '', id_jefe_camioneta: '', tipo_venta: 'contado', plan_venta: 'contado_directo', enganche_recibido_total: '', observaciones: '', fecha_venta: hoyISO(), frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '', numero_cuenta: '' })
+    setBusquedaCliente('')
+    setClienteDropdown(false)
     setProductosSeleccionados([])
     setCalculos(null)
     setPrecioOverride('')
@@ -523,16 +529,56 @@ export default function Ventas() {
 
               {/* Cliente, tipo, plan y fecha */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+                <div className="col-span-2 relative">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Cliente *</label>
-                  <select required value={form.id_cliente}
-                    onChange={e => setForm({...form, id_cliente: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">Seleccionar cliente...</option>
-                    {clientes.map(c => (
-                      <option key={c.id_cliente} value={c.id_cliente}>{c.nombre} — ID Exp. {c.numero_expediente}</option>
-                    ))}
-                  </select>
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre o expediente..."
+                    value={busquedaCliente}
+                    onFocus={() => setClienteDropdown(true)}
+                    onBlur={() => setTimeout(() => setClienteDropdown(false), 150)}
+                    onChange={e => {
+                      setBusquedaCliente(e.target.value)
+                      setForm({...form, id_cliente: ''})
+                      setClienteDropdown(true)
+                    }}
+                    className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${
+                      form.id_cliente ? 'border-blue-400 bg-blue-50' : 'border-gray-300'
+                    }`}
+                  />
+                  {/* Campo oculto para validación required */}
+                  <input type="text" required value={form.id_cliente} onChange={() => {}} className="sr-only" />
+                  {clienteDropdown && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                      {clientes
+                        .filter(c => c.activo !== false && (
+                          c.nombre.toLowerCase().includes(busquedaCliente.toLowerCase()) ||
+                          c.numero_expediente?.toLowerCase().includes(busquedaCliente.toLowerCase())
+                        ))
+                        .slice(0, 20)
+                        .map(c => (
+                          <button
+                            key={c.id_cliente}
+                            type="button"
+                            onMouseDown={() => {
+                              setForm({...form, id_cliente: c.id_cliente})
+                              setBusquedaCliente(`${c.nombre} — Exp. ${c.numero_expediente}`)
+                              setClienteDropdown(false)
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 border-b border-gray-50 last:border-0"
+                          >
+                            <span className="font-medium text-gray-800">{c.nombre}</span>
+                            <span className="text-gray-400 text-xs ml-2">Exp. {c.numero_expediente}</span>
+                          </button>
+                        ))}
+                      {clientes.filter(c => c.activo !== false && (
+                        c.nombre.toLowerCase().includes(busquedaCliente.toLowerCase()) ||
+                        c.numero_expediente?.toLowerCase().includes(busquedaCliente.toLowerCase())
+                      )).length === 0 && (
+                        <p className="px-3 py-2 text-sm text-gray-400">Sin resultados</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Vendedor y jefe de grupo — visibles para admin y secretaria */}
