@@ -80,6 +80,36 @@ router.get('/todas-pendientes', auth, async (req, res) => {
   }
 })
 
+// GET /api/visitas/cobros-sugeridos — cuentas activas con info de frecuencia y cobrador
+router.get('/cobros-sugeridos', auth, async (req, res) => {
+  try {
+    const where = { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] } }
+    if (req.usuario.rol === 'cobrador') {
+      where.venta = { id_cobrador: req.usuario.id }
+    }
+
+    const cuentas = await prisma.cuenta.findMany({
+      where,
+      select: {
+        id_cuenta:         true,
+        numero_cuenta:     true,
+        frecuencia_pago:   true,
+        fecha_primer_cobro: true,
+        fecha_ultimo_pago: true,
+        horario_preferido: true,
+        saldo_actual:      true,
+        estado_cuenta:     true,
+        cliente: { select: { nombre: true, numero_expediente: true } },
+        venta:   { select: { cobrador: { select: { id_usuario: true, nombre: true } } } }
+      }
+    })
+
+    res.json(cuentas)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener cobros sugeridos', detalle: error.message })
+  }
+})
+
 // GET /api/visitas/cuenta/:id_cuenta — historial de visitas de una cuenta
 router.get('/cuenta/:id_cuenta', auth, async (req, res) => {
   try {
