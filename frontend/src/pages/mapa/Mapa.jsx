@@ -64,6 +64,8 @@ export default function Mapa() {
   const [cargando, setCargando] = useState(true)
 
   const mapRef = useRef(null)
+  const [miUbicacion, setMiUbicacion] = useState(null)
+  const [buscandoUbicacion, setBuscandoUbicacion] = useState(false)
   const [modoEdicion, setModoEdicion] = useState(false)
   const [clienteEditandoCoords, setClienteEditandoCoords] = useState(null)
   const [toast, setToast] = useState(null)
@@ -184,6 +186,24 @@ export default function Mapa() {
     }
   }, [cuentas])
 
+  const obtenerMiUbicacion = () => {
+    if (!navigator.geolocation) { mostrarToast('Tu dispositivo no soporta geolocalización'); return }
+    setBuscandoUbicacion(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        setMiUbicacion(coords)
+        mapRef.current?.panTo(coords)
+        setBuscandoUbicacion(false)
+      },
+      () => {
+        mostrarToast('No se pudo obtener tu ubicación')
+        setBuscandoUbicacion(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
   const handleOptimizar = () => {
     const conCoords = marcadores.filter(m => m.latitud && m.longitud)
     if (conCoords.length === 0) { alert('No hay clientes con coordenadas para optimizar.'); return }
@@ -221,6 +241,13 @@ export default function Mapa() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={obtenerMiUbicacion}
+            disabled={buscandoUbicacion}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+          >
+            {buscandoUbicacion ? 'Buscando…' : '🎯 Mi ubicación'}
+          </button>
           {sinCoordenadas > 0 && (
             <button
               onClick={geocodificarTodos}
@@ -305,6 +332,18 @@ export default function Mapa() {
                 />
               )
             })}
+
+            {miUbicacion && (
+              <Marker
+                position={miUbicacion}
+                icon={{
+                  url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+                  scaledSize: new window.google.maps.Size(40, 40),
+                }}
+                title="Mi ubicación actual"
+                zIndex={999}
+              />
+            )}
 
             {seleccionado && (
               <InfoWindow
