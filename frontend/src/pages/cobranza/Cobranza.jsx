@@ -798,17 +798,20 @@ export default function Cobranza() {
                     </p>
                   </div>
                   {usuario?.rol === 'administrador' && (
-                    <div className="flex gap-2 shrink-0">
-                      <button type="button" onClick={abrirCambiarPlan}
-                        className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition min-h-[44px]">
-                        Cambiar plan
-                      </button>
-                      <button type="button" onClick={abrirFusion}
-                        className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition min-h-[44px]">
-                        Fusionar cuentas
-                      </button>
-                    </div>
+                    <button type="button" onClick={abrirCambiarPlan}
+                      className="shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition min-h-[44px]">
+                      Cambiar plan
+                    </button>
                   )}
+                </div>
+              )}
+
+              {usuario?.rol === 'administrador' && (
+                <div className="flex justify-end mb-3">
+                  <button type="button" onClick={abrirFusion}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                    Fusionar cuentas
+                  </button>
                 </div>
               )}
 
