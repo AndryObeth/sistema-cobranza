@@ -307,9 +307,11 @@ export default function Ventas() {
     ]
   }
 
-  const ventasFiltradas = ventas.filter(v =>
-    mostrarLiquidadas ? true : v.estatus_venta !== 'liquidada'
-  )
+  const ventasFiltradas = ventas.filter(v => {
+    // Ocultar ventas cuya cuenta fue cancelada por fusión
+    if (v.cuenta?.estado_cuenta === 'cancelada' && v.cuenta?.observaciones?.startsWith('Fusionada con')) return false
+    return mostrarLiquidadas ? true : v.estatus_venta !== 'liquidada'
+  })
 
   // Precio efectivo que se usará al guardar (override o calculado)
   const precioEfectivo = esAdmin && precioOverride && parseFloat(precioOverride) > 0

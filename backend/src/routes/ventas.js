@@ -13,7 +13,7 @@ router.get('/', auth, async (req, res) => {
         vendedor: { select: { nombre: true } },
         jefe_camioneta: { select: { nombre: true } },
         detalles: true,
-        cuenta: { select: { numero_cuenta: true, folio_cuenta: true, id_cuenta: true, frecuencia_pago: true } }
+        cuenta: { select: { numero_cuenta: true, folio_cuenta: true, id_cuenta: true, frecuencia_pago: true, estado_cuenta: true, observaciones: true } }
       },
       orderBy: { fecha_venta: 'desc' }
     })
