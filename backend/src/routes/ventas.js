@@ -163,7 +163,7 @@ router.put('/:id', auth, async (req, res) => {
 
     const ventaActual = await prisma.venta.findUnique({
       where: { id_venta },
-      include: { cuenta: true }
+      include: { cuenta: { include: { pagos: { orderBy: { fecha_pago: 'asc' } } } } }
     })
     if (!ventaActual) return res.status(404).json({ error: 'Venta no encontrada' })
 
@@ -201,6 +201,19 @@ router.put('/:id', auth, async (req, res) => {
           estado_cuenta:      nuevo_saldo_actual === 0 ? 'liquidada' : ventaActual.cuenta.estado_cuenta
         }
       })
+
+      // Propagar el delta a todos los pagos para que el historial sea consistente
+      if (delta !== 0 && ventaActual.cuenta.pagos.length > 0) {
+        for (const pago of ventaActual.cuenta.pagos) {
+          await prisma.pago.update({
+            where: { id_pago: pago.id_pago },
+            data: {
+              saldo_anterior: Math.max(0, parseFloat(pago.saldo_anterior) + delta),
+              saldo_nuevo:    Math.max(0, parseFloat(pago.saldo_nuevo) + delta),
+            }
+          })
+        }
+      }
     }
 
     res.json({ mensaje: 'Venta actualizada', venta })
