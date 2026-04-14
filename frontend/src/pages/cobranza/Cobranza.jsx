@@ -89,6 +89,13 @@ export default function Cobranza() {
   const [pagoHistorico, setPagoHistorico]           = useState(false)
   const [fechaPagoHistorico, setFechaPagoHistorico] = useState('')
 
+  // Fusión de cuentas (solo admin)
+  const [modalFusion, setModalFusion]               = useState(false)
+  const [cuentasCliente, setCuentasCliente]         = useState([])
+  const [cuentasSecSel, setCuentasSecSel]           = useState([])
+  const [guardandoFusion, setGuardandoFusion]       = useState(false)
+  const [errorFusion, setErrorFusion]               = useState('')
+
   useEffect(() => {
     cargarCuentas()
     // Detectar filtro de vencidas desde el dashboard
@@ -455,6 +462,45 @@ export default function Cobranza() {
     !['liquidada', 'cancelada'].includes(c.estado_cuenta) &&
     c.plan_actual !== 'largo_plazo'
 
+  const abrirFusion = async () => {
+    try {
+      const res = await api.get(`/cuentas/cliente/${cuentaSeleccionada.id_cliente}`)
+      const otras = res.data.filter(c => c.id_cuenta !== cuentaSeleccionada.id_cuenta)
+      setCuentasCliente(otras)
+      setCuentasSecSel([])
+      setErrorFusion('')
+      setModalFusion(true)
+    } catch {
+      setErrorFusion('Error al cargar cuentas del cliente')
+    }
+  }
+
+  const toggleCuentaSec = (id) => {
+    setCuentasSecSel(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  const handleFusionar = async () => {
+    if (cuentasSecSel.length === 0) { setErrorFusion('Selecciona al menos una cuenta a fusionar'); return }
+    setGuardandoFusion(true)
+    setErrorFusion('')
+    try {
+      const res = await api.post('/cuentas/fusionar', {
+        id_cuenta_principal:   cuentaSeleccionada.id_cuenta,
+        id_cuentas_secundarias: cuentasSecSel,
+      })
+      setModalFusion(false)
+      cerrarModal()
+      cargarCuentas()
+      alert(`✅ Fusión completada.\nSaldo anterior: $${res.data.saldo_anterior.toFixed(2)}\nSaldo sumado: $${res.data.saldo_sumado.toFixed(2)}\nNuevo saldo: $${res.data.saldo_nuevo.toFixed(2)}`)
+    } catch (err) {
+      setErrorFusion(err.response?.data?.error || 'Error al fusionar cuentas')
+    } finally {
+      setGuardandoFusion(false)
+    }
+  }
+
   const abrirCambiarPlan = async () => {
     // Obtener preview del cambio desde el backend
     try {
@@ -752,13 +798,16 @@ export default function Cobranza() {
                     </p>
                   </div>
                   {usuario?.rol === 'administrador' && (
-                    <button
-                      type="button"
-                      onClick={abrirCambiarPlan}
-                      className="shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition min-h-[44px]"
-                    >
-                      Cambiar plan
-                    </button>
+                    <div className="flex gap-2 shrink-0">
+                      <button type="button" onClick={abrirCambiarPlan}
+                        className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition min-h-[44px]">
+                        Cambiar plan
+                      </button>
+                      <button type="button" onClick={abrirFusion}
+                        className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition min-h-[44px]">
+                        Fusionar cuentas
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -1325,6 +1374,86 @@ export default function Cobranza() {
                   className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg text-sm font-medium transition disabled:opacity-50">
                   {guardandoPlan ? 'Aplicando...' : 'Confirmar cambio de plan'}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──── MINI MODAL: Fusionar cuentas ──── */}
+      {modalFusion && cuentaSeleccionada && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-5 border-b">
+              <div>
+                <h3 className="text-base font-bold text-gray-800">Fusionar cuentas</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Cuenta principal: <span className="font-semibold text-purple-700">{cuentaSeleccionada.numero_cuenta || cuentaSeleccionada.folio_cuenta}</span> — Saldo: {fmt(cuentaSeleccionada.saldo_actual)}
+                </p>
+              </div>
+              <button onClick={() => setModalFusion(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {cuentasCliente.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  Este cliente no tiene otras cuentas activas para fusionar.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600">Selecciona las cuentas a fusionar en la principal. Su saldo se sumará y quedarán canceladas.</p>
+                  <div className="space-y-2">
+                    {cuentasCliente.map(c => (
+                      <label key={c.id_cuenta}
+                        className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition ${
+                          cuentasSecSel.includes(c.id_cuenta) ? 'border-purple-400 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
+                        }`}>
+                        <div className="flex items-center gap-3">
+                          <input type="checkbox" checked={cuentasSecSel.includes(c.id_cuenta)}
+                            onChange={() => toggleCuentaSec(c.id_cuenta)}
+                            className="w-4 h-4 accent-purple-600" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{c.numero_cuenta || c.folio_cuenta}</p>
+                            <p className="text-xs text-gray-400">{c.plan_actual?.replace(/_/g, ' ')} · {c.estado_cuenta}</p>
+                          </div>
+                        </div>
+                        <span className="text-sm font-bold text-gray-700">{fmt(c.saldo_actual)}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  {cuentasSecSel.length > 0 && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-sm">
+                      <div className="flex justify-between text-gray-600">
+                        <span>Saldo principal:</span>
+                        <span>{fmt(cuentaSeleccionada.saldo_actual)}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-600">
+                        <span>+ Saldo a fusionar:</span>
+                        <span>{fmt(cuentasCliente.filter(c => cuentasSecSel.includes(c.id_cuenta)).reduce((s, c) => s + parseFloat(c.saldo_actual), 0))}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-purple-700 border-t border-purple-200 mt-2 pt-2">
+                        <span>Nuevo saldo total:</span>
+                        <span>{fmt(parseFloat(cuentaSeleccionada.saldo_actual) + cuentasCliente.filter(c => cuentasSecSel.includes(c.id_cuenta)).reduce((s, c) => s + parseFloat(c.saldo_actual), 0))}</span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {errorFusion && <p className="text-red-500 text-sm">{errorFusion}</p>}
+
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setModalFusion(false)}
+                  className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50 transition">
+                  Cancelar
+                </button>
+                {cuentasCliente.length > 0 && (
+                  <button type="button" onClick={handleFusionar} disabled={guardandoFusion || cuentasSecSel.length === 0}
+                    className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                    {guardandoFusion ? 'Fusionando...' : `Fusionar ${cuentasSecSel.length > 0 ? `(${cuentasSecSel.length})` : ''}`}
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -375,4 +375,102 @@ router.post('/procesar-vencimientos', auth, async (req, res) => {
   }
 })
 
+// ── 4. GET /api/cuentas/cliente/:id_cliente — cuentas activas de un cliente ───
+
+router.get('/cliente/:id_cliente', auth, async (req, res) => {
+  try {
+    const cuentas = await prisma.cuenta.findMany({
+      where: {
+        id_cliente: parseInt(req.params.id_cliente),
+        estado_cuenta: { in: ['activa', 'atraso', 'moroso'] }
+      },
+      select: {
+        id_cuenta:      true,
+        numero_cuenta:  true,
+        folio_cuenta:   true,
+        saldo_actual:   true,
+        plan_actual:    true,
+        estado_cuenta:  true,
+      }
+    })
+    res.json(cuentas)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener cuentas del cliente' })
+  }
+})
+
+// ── 5. POST /api/cuentas/fusionar ─────────────────────────────────────────────
+
+router.post('/fusionar', auth, async (req, res) => {
+  try {
+    if (req.usuario.rol !== 'administrador') {
+      return res.status(403).json({ error: 'Solo el administrador puede fusionar cuentas' })
+    }
+
+    const { id_cuenta_principal, id_cuentas_secundarias } = req.body
+
+    if (!id_cuenta_principal || !Array.isArray(id_cuentas_secundarias) || id_cuentas_secundarias.length === 0) {
+      return res.status(400).json({ error: 'Se requiere id_cuenta_principal y al menos una cuenta secundaria' })
+    }
+
+    // Cargar cuenta principal
+    const principal = await prisma.cuenta.findUnique({
+      where: { id_cuenta: parseInt(id_cuenta_principal) }
+    })
+    if (!principal) return res.status(404).json({ error: 'Cuenta principal no encontrada' })
+
+    // Cargar cuentas secundarias y validar que sean del mismo cliente
+    const secundarias = await prisma.cuenta.findMany({
+      where: { id_cuenta: { in: id_cuentas_secundarias.map(Number) } }
+    })
+
+    const clienteDistinto = secundarias.find(c => c.id_cliente !== principal.id_cliente)
+    if (clienteDistinto) {
+      return res.status(400).json({ error: 'Todas las cuentas deben pertenecer al mismo cliente' })
+    }
+
+    const saldo_a_sumar = secundarias.reduce((s, c) => s + parseFloat(c.saldo_actual), 0)
+    const nuevo_saldo   = parseFloat((parseFloat(principal.saldo_actual) + saldo_a_sumar).toFixed(2))
+
+    const hoyStr  = new Date().toLocaleDateString('es-MX')
+    const cuentasStr = secundarias.map(c => c.numero_cuenta || c.folio_cuenta).join(', ')
+    const nota    = `Fusión el ${hoyStr}: se anexaron cuentas [${cuentasStr}] — saldo sumado: $${saldo_a_sumar.toFixed(2)}`
+    const obsNueva = principal.observaciones ? `${principal.observaciones} | ${nota}` : nota
+
+    await prisma.$transaction(async (tx) => {
+      // Actualizar cuenta principal
+      await tx.cuenta.update({
+        where: { id_cuenta: principal.id_cuenta },
+        data: {
+          saldo_actual:  nuevo_saldo,
+          saldo_inicial: parseFloat(principal.saldo_inicial) + saldo_a_sumar,
+          observaciones: obsNueva,
+        }
+      })
+
+      // Cancelar cuentas secundarias
+      for (const sec of secundarias) {
+        await tx.cuenta.update({
+          where: { id_cuenta: sec.id_cuenta },
+          data: {
+            estado_cuenta:  'cancelada',
+            saldo_actual:   0,
+            observaciones:  `Fusionada con cuenta ${principal.numero_cuenta || principal.folio_cuenta} el ${hoyStr}`,
+          }
+        })
+      }
+    })
+
+    res.json({
+      mensaje:           'Cuentas fusionadas correctamente',
+      saldo_anterior:    parseFloat(principal.saldo_actual),
+      saldo_sumado:      saldo_a_sumar,
+      saldo_nuevo:       nuevo_saldo,
+      cuentas_canceladas: secundarias.length,
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al fusionar cuentas', detalle: error.message })
+  }
+})
+
 module.exports = router
