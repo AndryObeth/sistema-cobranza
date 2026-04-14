@@ -1255,18 +1255,36 @@ export default function Cobranza() {
                       </div>
                     ))}
                     {/* Pagos sincronizados */}
-                    {historialPagos.map(p => (
-                      <div key={p.id_pago} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2 text-sm">
-                        <div>
-                          <span className="font-medium text-gray-800">{fmt(p.monto_pago)}</span>
-                          <span className="text-gray-400 ml-2 text-xs">{p.tipo_pago}</span>
+                    {historialPagos.map(p => {
+                      const esFusion = p.observaciones?.startsWith('Fusión:')
+                      if (esFusion) {
+                        return (
+                          <div key={p.id_pago} className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-lg px-4 py-2 text-sm">
+                            <div>
+                              <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">Anexo</span>
+                              <span className="font-medium text-purple-800 ml-2">+{fmt(p.monto_pago)}</span>
+                              <p className="text-purple-500 text-xs mt-0.5">{p.observaciones.replace('Fusión: cuentas anexadas ', '')}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX')}</p>
+                              <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
+                            </div>
+                          </div>
+                        )
+                      }
+                      return (
+                        <div key={p.id_pago} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2 text-sm">
+                          <div>
+                            <span className="font-medium text-gray-800">{fmt(p.monto_pago)}</span>
+                            <span className="text-gray-400 ml-2 text-xs">{p.tipo_pago}</span>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX')}</p>
+                            <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX')}</p>
-                          <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )

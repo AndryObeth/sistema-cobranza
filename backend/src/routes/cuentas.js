@@ -459,6 +459,23 @@ router.post('/fusionar', auth, async (req, res) => {
           }
         })
       }
+
+      // Registrar pago de ajuste por fusión
+      await tx.pago.create({
+        data: {
+          id_cuenta:             principal.id_cuenta,
+          id_cliente:            principal.id_cliente,
+          id_cobrador:           req.usuario.id_usuario,
+          fecha_pago:            new Date(),
+          monto_pago:            saldo_a_sumar,
+          saldo_anterior:        parseFloat(principal.saldo_actual),
+          saldo_nuevo:           nuevo_saldo,
+          tipo_pago:             'pago_extra',
+          monto_aplicado_saldo:  saldo_a_sumar,
+          observaciones:         `Fusión: cuentas anexadas [${cuentasStr}]`,
+          origen_pago:           'oficina',
+        }
+      })
     })
 
     res.json({
