@@ -1234,7 +1234,14 @@ export default function Cobranza() {
               if (!hayHistorial) return null
               return (
                 <div className="px-6 pb-4 border-t pt-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-3">Últimos pagos</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-3">
+                    Últimos pagos
+                    {cuentaSeleccionada?.numero_cuenta && (
+                      <span className="ml-2 text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                        No. {cuentaSeleccionada.numero_cuenta}
+                      </span>
+                    )}
+                  </p>
                   <div className="space-y-2">
                     {/* Pagos en cola offline */}
                     {pagosCola.map(op => (
