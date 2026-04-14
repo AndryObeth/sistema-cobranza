@@ -775,22 +775,22 @@ export default function Cobranza() {
             <div className="flex items-center justify-between p-4 md:p-6 border-b">
               <div>
                 <h3 className="text-lg font-bold text-gray-800">{cuentaSeleccionada.cliente?.nombre}</h3>
-                <p className="text-gray-500 text-sm">
-                  {cuentaSeleccionada.numero_cuenta
-                    ? <span className="text-blue-600 font-semibold">No. cuenta: {cuentaSeleccionada.numero_cuenta}</span>
-                    : cuentaSeleccionada.folio_cuenta
-                  }
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-gray-500 text-sm">
+                    {cuentaSeleccionada.numero_cuenta
+                      ? <span className="text-blue-600 font-semibold">No. cuenta: {cuentaSeleccionada.numero_cuenta}</span>
+                      : cuentaSeleccionada.folio_cuenta
+                    }
+                  </p>
+                  {usuario?.rol === 'administrador' && (
+                    <button type="button" onClick={abrirFusion}
+                      className="text-xs text-gray-400 hover:text-purple-600 transition underline underline-offset-2">
+                      fusionar
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {usuario?.rol === 'administrador' && (
-                  <button type="button" onClick={abrirFusion}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition">
-                    Fusionar
-                  </button>
-                )}
-                <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
-              </div>
+              <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
             </div>
 
             {/* Info de la cuenta */}
