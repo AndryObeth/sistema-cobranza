@@ -782,7 +782,15 @@ export default function Cobranza() {
                   }
                 </p>
               </div>
-              <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              <div className="flex items-center gap-2">
+                {usuario?.rol === 'administrador' && (
+                  <button type="button" onClick={abrirFusion}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                    Fusionar
+                  </button>
+                )}
+                <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              </div>
             </div>
 
             {/* Info de la cuenta */}
@@ -803,15 +811,6 @@ export default function Cobranza() {
                       Cambiar plan
                     </button>
                   )}
-                </div>
-              )}
-
-              {usuario?.rol === 'administrador' && (
-                <div className="flex justify-end mb-3">
-                  <button type="button" onClick={abrirFusion}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition">
-                    Fusionar cuentas
-                  </button>
                 </div>
               )}
 
