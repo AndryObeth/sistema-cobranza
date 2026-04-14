@@ -43,6 +43,8 @@ export default function Ventas() {
 
   const [productosSeleccionados, setProductosSeleccionados] = useState([])
   const [productoActual, setProductoActual] = useState('')
+  const [productoCustomNombre, setProductoCustomNombre] = useState('')
+  const [productoCustomPrecio, setProductoCustomPrecio] = useState('')
   const [calculos, setCalculos] = useState(null)
 
   // Campos exclusivos admin — nueva venta
@@ -144,13 +146,28 @@ export default function Ventas() {
     if (!productoActual) return
     const prod = productos.find(p => p.id_producto === parseInt(productoActual))
     if (!prod) return
-    if (productosSeleccionados.find(p => p.id_producto === prod.id_producto)) return
-    setProductosSeleccionados([...productosSeleccionados, { ...prod, cantidad: 1 }])
+    if (productosSeleccionados.find(p => p._key === `cat-${prod.id_producto}`)) return
+    setProductosSeleccionados([...productosSeleccionados, { ...prod, _key: `cat-${prod.id_producto}`, cantidad: 1 }])
     setProductoActual('')
   }
 
-  const quitarProducto = (id) => {
-    setProductosSeleccionados(productosSeleccionados.filter(p => p.id_producto !== id))
+  const agregarProductoCustom = () => {
+    const precio = parseFloat(productoCustomPrecio)
+    if (!productoCustomNombre.trim() || !precio || precio <= 0) return
+    setProductosSeleccionados([...productosSeleccionados, {
+      _key:           `custom-${Date.now()}`,
+      _esCustom:      true,
+      nombre_comercial: productoCustomNombre.trim(),
+      codigo_producto: 'ESPECIAL',
+      precio_original: precio,
+      cantidad:        1,
+    }])
+    setProductoCustomNombre('')
+    setProductoCustomPrecio('')
+  }
+
+  const quitarProducto = (key) => {
+    setProductosSeleccionados(productosSeleccionados.filter(p => p._key !== key))
   }
 
   const cerrarModal = () => {
@@ -158,6 +175,8 @@ export default function Ventas() {
     setForm({ id_cliente: '', id_vendedor: '', id_jefe_camioneta: '', tipo_venta: 'contado', plan_venta: 'contado_directo', enganche_recibido_total: '', observaciones: '', fecha_venta: hoyISO(), frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '', numero_cuenta: '' })
     setBusquedaCliente('')
     setClienteDropdown(false)
+    setProductoCustomNombre('')
+    setProductoCustomPrecio('')
     setProductosSeleccionados([])
     setCalculos(null)
     setPrecioOverride('')
@@ -175,8 +194,8 @@ export default function Ventas() {
     setError('')
     try {
       const detalles = productosSeleccionados.map(p => ({
-        id_producto: p.id_producto,
-        codigo_producto: p.codigo_producto,
+        ...(p._esCustom ? {} : { id_producto: p.id_producto }),
+        codigo_producto: p.codigo_producto || 'ESPECIAL',
         producto: p.nombre_comercial,
         cantidad: p.cantidad,
         precio_original_unitario: parseFloat(p.precio_original),
@@ -646,11 +665,13 @@ export default function Ventas() {
               {/* Productos */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Productos</label>
-                <div className="flex gap-2 mb-3">
+
+                {/* Catálogo */}
+                <div className="flex gap-2 mb-2">
                   <select value={productoActual}
                     onChange={e => setProductoActual(e.target.value)}
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">Seleccionar producto...</option>
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                    <option value="">Seleccionar del catálogo...</option>
                     {productos.map(p => (
                       <option key={p.id_producto} value={p.id_producto}>
                         {p.nombre_comercial} — {fmt(p.precio_original)}
@@ -663,31 +684,59 @@ export default function Ventas() {
                   </button>
                 </div>
 
+                {/* Producto especial */}
+                <div className="flex gap-2 mb-3 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                  <input type="text" placeholder="Producto especial (nombre)"
+                    value={productoCustomNombre}
+                    onChange={e => setProductoCustomNombre(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), agregarProductoCustom())}
+                    className="flex-1 border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white" />
+                  <input type="number" placeholder="Precio" min="0.01" step="0.01"
+                    value={productoCustomPrecio}
+                    onChange={e => setProductoCustomPrecio(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), agregarProductoCustom())}
+                    className="w-28 border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white" />
+                  <button type="button" onClick={agregarProductoCustom}
+                    className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap">
+                    + Especial
+                  </button>
+                </div>
+
                 {productosSeleccionados.length > 0 && (
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="text-left px-4 py-2 text-gray-600">Producto</th>
-                          <th className="text-left px-4 py-2 text-gray-600">Precio</th>
+                          <th className="text-left px-4 py-2 text-gray-600">Precio unit.</th>
                           <th className="text-left px-4 py-2 text-gray-600">Cant.</th>
                           <th className="px-4 py-2"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {productosSeleccionados.map(p => (
-                          <tr key={p.id_producto}>
-                            <td className="px-4 py-2 font-medium">{p.nombre_comercial}</td>
-                            <td className="px-4 py-2 text-gray-600">{fmt(p.precio_original)}</td>
+                          <tr key={p._key} className={p._esCustom ? 'bg-amber-50' : ''}>
+                            <td className="px-4 py-2 font-medium">
+                              {p.nombre_comercial}
+                              {p._esCustom && <span className="ml-1 text-xs text-amber-600 font-normal">especial</span>}
+                            </td>
+                            <td className="px-4 py-2">
+                              <input type="number" min="0.01" step="0.01"
+                                value={p.precio_original}
+                                onChange={e => setProductosSeleccionados(productosSeleccionados.map(x =>
+                                  x._key === p._key ? {...x, precio_original: parseFloat(e.target.value) || 0} : x
+                                ))}
+                                className="w-24 border border-gray-300 rounded px-2 py-1 text-right text-sm" />
+                            </td>
                             <td className="px-4 py-2">
                               <input type="number" min="1" value={p.cantidad}
                                 onChange={e => setProductosSeleccionados(productosSeleccionados.map(x =>
-                                  x.id_producto === p.id_producto ? {...x, cantidad: parseInt(e.target.value) || 1} : x
+                                  x._key === p._key ? {...x, cantidad: parseInt(e.target.value) || 1} : x
                                 ))}
-                                className="w-16 border border-gray-300 rounded px-2 py-1 text-center"/>
+                                className="w-16 border border-gray-300 rounded px-2 py-1 text-center text-sm" />
                             </td>
                             <td className="px-4 py-2">
-                              <button type="button" onClick={() => quitarProducto(p.id_producto)}
+                              <button type="button" onClick={() => quitarProducto(p._key)}
                                 className="text-red-400 hover:text-red-600">✕</button>
                             </td>
                           </tr>

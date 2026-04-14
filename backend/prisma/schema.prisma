@@ -197,7 +197,7 @@ enum EstatusVenta {
 model DetalleVenta {
   id_detalle_venta       Int     @id @default(autoincrement())
   id_venta               Int
-  id_producto            Int
+  id_producto            Int?
   codigo_producto        String
   producto               String
   cantidad               Int     @default(1)
@@ -207,8 +207,8 @@ model DetalleVenta {
   subtotal_final         Decimal @db.Decimal(10, 2)
 
   // Relaciones
-  venta    Venta    @relation(fields: [id_venta], references: [id_venta])
-  producto_rel Producto @relation(fields: [id_producto], references: [id_producto])
+  venta    Venta     @relation(fields: [id_venta], references: [id_venta])
+  producto_rel Producto? @relation(fields: [id_producto], references: [id_producto])
 
   @@map("detalle_venta")
 }
