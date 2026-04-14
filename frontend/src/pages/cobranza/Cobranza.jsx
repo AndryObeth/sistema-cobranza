@@ -775,20 +775,12 @@ export default function Cobranza() {
             <div className="flex items-center justify-between p-4 md:p-6 border-b">
               <div>
                 <h3 className="text-lg font-bold text-gray-800">{cuentaSeleccionada.cliente?.nombre}</h3>
-                <div className="flex items-center gap-2">
-                  <p className="text-gray-500 text-sm">
-                    {cuentaSeleccionada.numero_cuenta
-                      ? <span className="text-blue-600 font-semibold">No. cuenta: {cuentaSeleccionada.numero_cuenta}</span>
-                      : cuentaSeleccionada.folio_cuenta
-                    }
-                  </p>
-                  {usuario?.rol === 'administrador' && (
-                    <button type="button" onClick={abrirFusion}
-                      className="text-xs text-gray-400 hover:text-purple-600 transition underline underline-offset-2">
-                      fusionar
-                    </button>
-                  )}
-                </div>
+                <p className="text-gray-500 text-sm">
+                  {cuentaSeleccionada.numero_cuenta
+                    ? <span className="text-blue-600 font-semibold">No. cuenta: {cuentaSeleccionada.numero_cuenta}</span>
+                    : cuentaSeleccionada.folio_cuenta
+                  }
+                </p>
               </div>
               <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
             </div>
@@ -830,6 +822,19 @@ export default function Cobranza() {
                   </span>
                 </div>
               </div>
+
+              {/* Fusionar cuentas (solo admin) */}
+              {usuario?.rol === 'administrador' && (
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={abrirFusion}
+                    className="text-xs bg-purple-50 text-purple-600 border border-purple-200 px-3 py-1.5 rounded-lg font-medium active:bg-purple-100"
+                  >
+                    Fusionar cuentas
+                  </button>
+                </div>
+              )}
 
               {/* Precio original vs plan */}
               {cuentaSeleccionada.venta && (
