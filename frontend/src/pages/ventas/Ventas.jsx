@@ -43,6 +43,8 @@ export default function Ventas() {
 
   const [productosSeleccionados, setProductosSeleccionados] = useState([])
   const [productoActual, setProductoActual] = useState('')
+  const [busquedaProducto, setBusquedaProducto] = useState('')
+  const [productoDropdown, setProductoDropdown] = useState(false)
   const [productoCustomNombre, setProductoCustomNombre] = useState('')
   const [productoCustomPrecio, setProductoCustomPrecio] = useState('')
   const [calculos, setCalculos] = useState(null)
@@ -142,13 +144,13 @@ export default function Ventas() {
     })
   }
 
-  const agregarProducto = () => {
-    if (!productoActual) return
-    const prod = productos.find(p => p.id_producto === parseInt(productoActual))
+  const agregarProducto = (prod) => {
     if (!prod) return
     if (productosSeleccionados.find(p => p._key === `cat-${prod.id_producto}`)) return
     setProductosSeleccionados([...productosSeleccionados, { ...prod, _key: `cat-${prod.id_producto}`, cantidad: 1 }])
     setProductoActual('')
+    setBusquedaProducto('')
+    setProductoDropdown(false)
   }
 
   const agregarProductoCustom = () => {
@@ -668,22 +670,35 @@ export default function Ventas() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Productos</label>
 
-                {/* Catálogo */}
-                <div className="flex gap-2 mb-2">
-                  <select value={productoActual}
-                    onChange={e => setProductoActual(e.target.value)}
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-                    <option value="">Seleccionar del catálogo...</option>
-                    {productos.map(p => (
-                      <option key={p.id_producto} value={p.id_producto}>
-                        {p.nombre_comercial} — {fmt(p.precio_original)}
-                      </option>
-                    ))}
-                  </select>
-                  <button type="button" onClick={agregarProducto}
-                    className="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-700 transition">
-                    Agregar
-                  </button>
+                {/* Catálogo — buscador */}
+                <div className="relative mb-2">
+                  <input
+                    type="text"
+                    value={busquedaProducto}
+                    onChange={e => { setBusquedaProducto(e.target.value); setProductoDropdown(true) }}
+                    onFocus={() => setProductoDropdown(true)}
+                    onBlur={() => setTimeout(() => setProductoDropdown(false), 150)}
+                    placeholder="Buscar producto del catálogo..."
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                  {productoDropdown && (
+                    <ul className="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                      {productos
+                        .filter(p => p.nombre_comercial.toLowerCase().includes(busquedaProducto.toLowerCase()))
+                        .map(p => (
+                          <li key={p.id_producto}
+                            onMouseDown={() => agregarProducto(p)}
+                            className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm flex justify-between">
+                            <span>{p.nombre_comercial}</span>
+                            <span className="text-gray-400">{fmt(p.precio_original)}</span>
+                          </li>
+                        ))
+                      }
+                      {productos.filter(p => p.nombre_comercial.toLowerCase().includes(busquedaProducto.toLowerCase())).length === 0 && (
+                        <li className="px-3 py-2 text-gray-400 text-sm">Sin resultados</li>
+                      )}
+                    </ul>
+                  )}
                 </div>
 
                 {/* Producto especial */}
