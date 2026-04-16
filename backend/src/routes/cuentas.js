@@ -490,4 +490,41 @@ router.post('/fusionar', auth, async (req, res) => {
   }
 })
 
+// ── 6. GET /api/cuentas/listado-simple ───────────────────────────────────────
+
+router.get('/listado-simple', auth, async (req, res) => {
+  try {
+    const cuentas = await prisma.cuenta.findMany({
+      where: { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] } },
+      select: {
+        numero_cuenta: true,
+        folio_cuenta:  true,
+        saldo_actual:  true,
+        plan_actual:   true,
+        estado_cuenta: true,
+        cliente: {
+          select: {
+            nombre:             true,
+            numero_expediente:  true,
+          }
+        }
+      },
+      orderBy: { numero_cuenta: 'asc' }
+    })
+
+    const listado = cuentas.map(c => ({
+      numero_cuenta:      c.numero_cuenta || c.folio_cuenta,
+      nombre_cliente:     c.cliente?.nombre || '',
+      numero_expediente:  c.cliente?.numero_expediente || '',
+      saldo_actual:       parseFloat(c.saldo_actual),
+      plan_actual:        c.plan_actual,
+      estado_cuenta:      c.estado_cuenta,
+    }))
+
+    res.json(listado)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener listado', detalle: error.message })
+  }
+})
+
 module.exports = router
