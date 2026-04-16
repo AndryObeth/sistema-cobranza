@@ -10,6 +10,7 @@ import Usuarios from './pages/usuarios/Usuarios.jsx'
 import Visitas from './pages/visitas/Visitas.jsx'
 import Cortes from './pages/cortes/Cortes.jsx'
 import Mapa from './pages/mapa/Mapa.jsx'
+import Listado from './pages/listado/Listado.jsx'
 
 function paginaInicio(rol) {
   if (rol === 'cobrador') return '/cobranza'
@@ -36,6 +37,7 @@ function AppRoutes() {
       <Route path="/visitas"  element={<RutaProtegida roles={['cobrador', 'administrador']}><Visitas /></RutaProtegida>} />
       <Route path="/cortes"   element={<RutaProtegida roles={['administrador']}><Cortes /></RutaProtegida>} />
       <Route path="/mapa"     element={<RutaProtegida roles={['cobrador', 'jefe_camioneta', 'administrador']}><Mapa /></RutaProtegida>} />
+      <Route path="/listado"  element={<RutaProtegida roles={['administrador']}><Listado /></RutaProtegida>} />
     </Routes>
   )
 }

@@ -11,6 +11,7 @@ const menu = [
   { path: '/cobranza',  label: 'Cobranza',   icono: '💰', roles: ['cobrador', 'administrador'] },
   { path: '/visitas',   label: 'Agenda',     icono: '📅', roles: ['cobrador', 'administrador'] },
   { path: '/mapa',      label: 'Mapa',       icono: '🗺️',  roles: ['cobrador', 'jefe_camioneta', 'administrador'] },
+  { path: '/listado',   label: 'Listado',    icono: '📋', roles: ['administrador'] },
   { path: '/cortes',    label: 'Cortes',     icono: '✂️',  roles: ['administrador'] },
   { path: '/usuarios',  label: 'Usuarios',   icono: '👤', roles: ['administrador'] },
 ]
