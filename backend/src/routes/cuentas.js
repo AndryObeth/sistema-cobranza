@@ -494,32 +494,46 @@ router.post('/fusionar', auth, async (req, res) => {
 
 router.get('/listado-simple', auth, async (req, res) => {
   try {
+    const { orderBy = 'numero_cuenta' } = req.query
+
+    // Determinar ordenamiento en DB (para campos simples)
+    let dbOrderBy = {}
+    if (orderBy === 'nombre_cliente') dbOrderBy = { cliente: { nombre: 'asc' } }
+    else if (orderBy === 'saldo')     dbOrderBy = { saldo_actual: 'desc' }
+    else if (orderBy === 'ultimo_pago') dbOrderBy = { fecha_ultimo_pago: 'desc' }
+    // numero_cuenta se ordena en JS (es texto con formato "10-D", "2-D", etc.)
+
     const cuentas = await prisma.cuenta.findMany({
       where: { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] } },
       select: {
-        numero_cuenta: true,
-        folio_cuenta:  true,
-        saldo_actual:  true,
-        plan_actual:   true,
-        estado_cuenta: true,
+        numero_cuenta:    true,
+        folio_cuenta:     true,
+        saldo_actual:     true,
+        plan_actual:      true,
+        estado_cuenta:    true,
+        fecha_ultimo_pago: true,
         cliente: {
-          select: {
-            nombre:             true,
-            numero_expediente:  true,
-          }
+          select: { nombre: true, numero_expediente: true }
         }
       },
-      orderBy: { numero_cuenta: 'asc' }
+      orderBy: Object.keys(dbOrderBy).length ? dbOrderBy : undefined
     })
 
-    const listado = cuentas.map(c => ({
+    let listado = cuentas.map(c => ({
       numero_cuenta:      c.numero_cuenta || c.folio_cuenta,
       nombre_cliente:     c.cliente?.nombre || '',
       numero_expediente:  c.cliente?.numero_expediente || '',
       saldo_actual:       parseFloat(c.saldo_actual),
       plan_actual:        c.plan_actual,
       estado_cuenta:      c.estado_cuenta,
+      fecha_ultimo_pago:  c.fecha_ultimo_pago,
     }))
+
+    // Orden numérico por numero_cuenta ("2-D" < "10-D" < "100-D")
+    if (orderBy === 'numero_cuenta') {
+      const numPart = str => parseInt((str || '').replace(/\D.*/, ''), 10) || 0
+      listado.sort((a, b) => numPart(a.numero_cuenta) - numPart(b.numero_cuenta))
+    }
 
     res.json(listado)
   } catch (error) {

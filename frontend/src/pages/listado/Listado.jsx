@@ -14,18 +14,26 @@ const ESTADO_COLOR = {
   moroso:  'bg-red-100 text-red-700',
 }
 
+const ORDEN_OPCIONES = [
+  { value: 'numero_cuenta', label: 'Número de cuenta (menor a mayor)' },
+  { value: 'nombre_cliente', label: 'Nombre del cliente (A-Z)' },
+  { value: 'saldo',         label: 'Saldo (mayor a menor)' },
+  { value: 'ultimo_pago',   label: 'Fecha último pago' },
+]
+
 export default function Listado() {
-  const [cuentas, setCuentas]     = useState([])
-  const [cargando, setCargando]   = useState(true)
-  const [busqueda, setBusqueda]   = useState('')
+  const [cuentas, setCuentas]         = useState([])
+  const [cargando, setCargando]       = useState(true)
+  const [busqueda, setBusqueda]       = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
+  const [orden, setOrden]             = useState('numero_cuenta')
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar(orden) }, [orden])
 
-  const cargar = async () => {
+  const cargar = async (orderBy) => {
     setCargando(true)
     try {
-      const res = await api.get('/cuentas/listado-simple')
+      const res = await api.get(`/cuentas/listado-simple?orderBy=${orderBy}`)
       setCuentas(res.data)
     } finally {
       setCargando(false)
@@ -43,7 +51,7 @@ export default function Listado() {
   })
 
   const exportarCSV = () => {
-    const encabezado = ['No. Cuenta', 'Nombre Cliente', 'No. Expediente', 'Saldo Actual', 'Plan', 'Estado']
+    const encabezado = ['No. Cuenta', 'Nombre Cliente', 'No. Expediente', 'Saldo Actual', 'Plan', 'Estado', 'Último pago']
     const filas = filtradas.map(c => [
       c.numero_cuenta,
       c.nombre_cliente,
@@ -51,6 +59,7 @@ export default function Listado() {
       parseFloat(c.saldo_actual).toFixed(2),
       PLAN_LABEL[c.plan_actual] || c.plan_actual,
       c.estado_cuenta,
+      c.fecha_ultimo_pago ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX') : '',
     ])
     const csv = [encabezado, ...filas]
       .map(fila => fila.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
@@ -106,6 +115,15 @@ export default function Listado() {
             <option value="atraso">En atraso</option>
             <option value="moroso">Moroso</option>
           </select>
+          <select
+            value={orden}
+            onChange={e => setOrden(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {ORDEN_OPCIONES.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
         </div>
 
         {/* Tabla */}
@@ -125,6 +143,7 @@ export default function Listado() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Expediente</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Plan</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Último pago</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Saldo</th>
                   </tr>
                 </thead>
@@ -141,13 +160,16 @@ export default function Listado() {
                           {c.estado_cuenta}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">
+                        {c.fecha_ultimo_pago ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX') : '—'}
+                      </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-800">{fmt(c.saldo_actual)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot className="bg-gray-50 border-t">
                   <tr>
-                    <td colSpan={6} className="px-4 py-3 text-sm font-semibold text-gray-600">Total</td>
+                    <td colSpan={7} className="px-4 py-3 text-sm font-semibold text-gray-600">Total</td>
                     <td className="px-4 py-3 text-right font-bold text-gray-800">{fmt(totalSaldo)}</td>
                   </tr>
                 </tfoot>
