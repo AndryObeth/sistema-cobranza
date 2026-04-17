@@ -1,5 +1,8 @@
 {
   "rewrites": [
+    { "source": "/manifest.webmanifest", "destination": "/manifest.webmanifest" },
+    { "source": "/sw.js", "destination": "/sw.js" },
+    { "source": "/workbox-(.*)", "destination": "/workbox-$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
