@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { OpenLocationCode } from 'open-location-code'
-const olc = new OpenLocationCode()
+import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX') : '—'
@@ -356,7 +355,7 @@ export default function Clientes() {
     setVerificandoPC(true)
     navigator.geolocation.getCurrentPosition(({ coords }) => {
       try {
-        const pc = olc.encode(coords.latitude, coords.longitude, 10)
+        const pc = encodePlusCode(coords.latitude, coords.longitude)
         setForm(f => ({ ...f, plus_code: pc }))
         setPreviewPC({ lat: coords.latitude, lng: coords.longitude })
       } catch { alert('Error al generar Plus Code') }
@@ -365,19 +364,17 @@ export default function Clientes() {
     { enableHighAccuracy: true, timeout: 10000 })
   }, [])
 
-  const verificarPlusCode = useCallback(async () => {
+  const verificarPlusCode = useCallback(() => {
     if (!form.plus_code?.trim()) return
     setVerificandoPC(true)
     try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(form.plus_code.trim())}&key=${GMAPS_KEY}`
-      const res = await fetch(url)
-      const data = await res.json()
-      if (data.status === 'OK' && data.results?.[0]) {
-        const { lat, lng } = data.results[0].geometry.location
-        setPreviewPC({ lat, lng })
-      } else {
-        alert('Plus Code no reconocido. Verifica que sea correcto.')
+      const code = form.plus_code.trim().toUpperCase()
+      if (!isValidPlusCode(code)) {
+        alert('Plus Code no válido. Debe tener formato como: 76C97H6P+QF')
+        return
       }
+      const { lat, lng } = decodePlusCode(code)
+      setPreviewPC({ lat, lng })
     } catch { alert('Error al verificar Plus Code') }
     finally { setVerificandoPC(false) }
   }, [form.plus_code])
