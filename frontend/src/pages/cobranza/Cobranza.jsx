@@ -105,6 +105,20 @@ export default function Cobranza() {
   const [buscandoGPS, setBuscandoGPS]         = useState(false)
   const [guardandoUbic, setGuardandoUbic]     = useState(false)
 
+  // Modal detalle
+  const [modalDetalle, setModalDetalle]               = useState(false)
+  const [cuentaDetalle, setCuentaDetalle]             = useState(null)
+  const [historialPagosDetalle, setHistorialPagosDetalle]   = useState([])
+  const [historialVisitasDetalle, setHistorialVisitasDetalle] = useState([])
+  const [cargandoDetalle, setCargandoDetalle]         = useState(false)
+  const [panelUbicDet, setPanelUbicDet]               = useState(false)
+  const [modoUbicDet, setModoUbicDet]                 = useState(null)
+  const [ubicPendDet, setUbicPendDet]                 = useState(null)
+  const [ubicInputDet, setUbicInputDet]               = useState('')
+  const [buscandoGPSDet, setBuscandoGPSDet]           = useState(false)
+  const [guardandoUbicDet, setGuardandoUbicDet]       = useState(false)
+  const [exitoUbicDet, setExitoUbicDet]               = useState('')
+
   useEffect(() => {
     cargarCuentas()
     // Detectar filtro de vencidas desde el dashboard
@@ -226,6 +240,82 @@ export default function Cobranza() {
       alert('Error al guardar la ubicación')
     } finally {
       setGuardandoUbic(false)
+    }
+  }
+
+  const abrirDetalle = async (cuenta) => {
+    setCargandoDetalle(true)
+    setModalDetalle(true)
+    try {
+      const [resCuenta, resVisitas] = await Promise.all([
+        api.get(`/pagos/cuenta/${cuenta.id_cuenta}`),
+        api.get(`/visitas/cuenta/${cuenta.id_cuenta}`)
+      ])
+      setCuentaDetalle(resCuenta.data)
+      setHistorialPagosDetalle(resCuenta.data.pagos || [])
+      setHistorialVisitasDetalle(resVisitas.data)
+    } catch {
+      console.error('Error al cargar detalle')
+    } finally {
+      setCargandoDetalle(false)
+    }
+  }
+
+  const cerrarDetalle = () => {
+    setModalDetalle(false)
+    setCuentaDetalle(null)
+    setHistorialPagosDetalle([])
+    setHistorialVisitasDetalle([])
+    setPanelUbicDet(false)
+    setModoUbicDet(null)
+    setUbicPendDet(null)
+    setUbicInputDet('')
+    setExitoUbicDet('')
+  }
+
+  const usarGPSDetalle = () => {
+    if (!navigator.geolocation) { alert('Tu dispositivo no soporta GPS'); return }
+    setBuscandoGPSDet(true)
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const pc = encodePlusCode(coords.latitude, coords.longitude)
+        setUbicPendDet({ lat: coords.latitude, lng: coords.longitude, plus_code: pc })
+        setModoUbicDet('confirmar')
+        setBuscandoGPSDet(false)
+      },
+      () => { alert('No se pudo obtener la ubicación GPS'); setBuscandoGPSDet(false) },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
+  const usarPlusCodeManualDetalle = () => {
+    const code = ubicInputDet.trim().toUpperCase()
+    if (!isValidPlusCode(code)) { alert('Plus Code no válido. Ej: 76C97H6P+QF'); return }
+    const { lat, lng } = decodePlusCode(code)
+    setUbicPendDet({ lat, lng, plus_code: code })
+    setModoUbicDet('confirmar')
+  }
+
+  const guardarUbicacionDetalle = async () => {
+    if (!ubicPendDet) return
+    setGuardandoUbicDet(true)
+    try {
+      const idCliente = cuentaDetalle.cliente?.id_cliente
+      await api.put(`/clientes/${idCliente}/coordenadas`, {
+        latitud:   ubicPendDet.lat,
+        longitud:  ubicPendDet.lng,
+        plus_code: ubicPendDet.plus_code,
+      })
+      setPanelUbicDet(false)
+      setModoUbicDet(null)
+      setUbicPendDet(null)
+      setUbicInputDet('')
+      setExitoUbicDet('Ubicación actualizada ✅')
+      setTimeout(() => setExitoUbicDet(''), 4000)
+    } catch {
+      alert('Error al guardar la ubicación')
+    } finally {
+      setGuardandoUbicDet(false)
     }
   }
 
@@ -753,12 +843,20 @@ export default function Cobranza() {
             </div>
             <div className="mb-3">{badgeCumplimiento(c)}</div>
 
-            <button
-              onClick={() => abrirModal(c)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition"
-            >
-              Registrar pago
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => abrirDetalle(c)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-sm font-semibold transition"
+              >
+                Ver detalle
+              </button>
+              <button
+                onClick={() => abrirModal(c)}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition"
+              >
+                Registrar pago
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -821,12 +919,20 @@ export default function Cobranza() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <button
-                        onClick={() => abrirModal(c)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition"
-                      >
-                        Registrar pago
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => abrirDetalle(c)}
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                        >
+                          Ver detalle
+                        </button>
+                        <button
+                          onClick={() => abrirModal(c)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                        >
+                          Registrar pago
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1672,6 +1778,240 @@ export default function Cobranza() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──── MODAL DETALLE ──── */}
+      {modalDetalle && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-end sm:items-center justify-center z-50 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl h-[95vh] sm:h-auto sm:max-h-[95vh] overflow-y-auto">
+
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 md:p-6 border-b sticky top-0 bg-white z-10">
+              <div>
+                {cargandoDetalle
+                  ? <p className="text-gray-400 text-sm animate-pulse">Cargando...</p>
+                  : <>
+                      <h3 className="text-lg font-bold text-gray-800">{cuentaDetalle?.cliente?.nombre}</h3>
+                      <p className="text-gray-500 text-sm">
+                        {cuentaDetalle?.numero_cuenta
+                          ? <span className="text-blue-600 font-semibold">No. cuenta: {cuentaDetalle.numero_cuenta}</span>
+                          : cuentaDetalle?.folio_cuenta}
+                        {cuentaDetalle?.cliente?.numero_expediente &&
+                          <span className="ml-2 text-gray-400 text-xs">Exp. {cuentaDetalle.cliente.numero_expediente}</span>}
+                      </p>
+                    </>
+                }
+              </div>
+              <div className="flex items-center gap-2">
+                {!cargandoDetalle && cuentaDetalle && ['cobrador','jefe_camioneta','administrador'].includes(usuario?.rol) && (
+                  <button
+                    type="button"
+                    onClick={() => { setPanelUbicDet(!panelUbicDet); setModoUbicDet('opciones'); setUbicPendDet(null); setUbicInputDet('') }}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-medium transition min-h-[36px] ${
+                      panelUbicDet ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    📍 {panelUbicDet ? 'Cancelar' : 'Corregir ubicación'}
+                  </button>
+                )}
+                <button onClick={cerrarDetalle} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              </div>
+            </div>
+
+            {/* Panel corrección de ubicación (detalle) */}
+            {panelUbicDet && cuentaDetalle && (
+              <div className="px-4 md:px-6 py-4 border-b bg-blue-50">
+                {exitoUbicDet && (
+                  <p className="text-green-700 text-sm font-medium mb-2">{exitoUbicDet}</p>
+                )}
+                {modoUbicDet === 'opciones' && (
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800 mb-3">¿Cómo quieres corregir la ubicación?</p>
+                    <div className="flex flex-col gap-2">
+                      <button type="button" onClick={usarGPSDetalle} disabled={buscandoGPSDet}
+                        className="flex items-center gap-3 bg-white border border-blue-200 rounded-xl px-4 py-3 text-left hover:bg-blue-50 transition disabled:opacity-50">
+                        <span className="text-2xl">🎯</span>
+                        <div>
+                          <p className="font-semibold text-gray-800 text-sm">{buscandoGPSDet ? 'Obteniendo GPS…' : 'Usar mi ubicación actual'}</p>
+                          <p className="text-xs text-gray-500">Captura las coordenadas GPS de tu celular</p>
+                        </div>
+                      </button>
+                      <button type="button" onClick={() => setModoUbicDet('manual')}
+                        className="flex items-center gap-3 bg-white border border-blue-200 rounded-xl px-4 py-3 text-left hover:bg-blue-50 transition">
+                        <span className="text-2xl">⌨️</span>
+                        <div>
+                          <p className="font-semibold text-gray-800 text-sm">Ingresar Plus Code</p>
+                          <p className="text-xs text-gray-500">Escribe manualmente el código de ubicación</p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {modoUbicDet === 'manual' && (
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800 mb-2">Ingresa el Plus Code</p>
+                    <div className="flex gap-2">
+                      <input type="text" value={ubicInputDet} onChange={e => setUbicInputDet(e.target.value)}
+                        placeholder="Ej: 76C97H6P+QF"
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <button type="button" onClick={usarPlusCodeManualDetalle}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                        Verificar
+                      </button>
+                    </div>
+                    <button type="button" onClick={() => setModoUbicDet('opciones')} className="mt-2 text-xs text-gray-500 hover:text-gray-700">← Volver</button>
+                  </div>
+                )}
+                {modoUbicDet === 'confirmar' && ubicPendDet && (
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800 mb-3">¿Guardar esta ubicación para {cuentaDetalle.cliente?.nombre}?</p>
+                    <div className="bg-white border border-blue-200 rounded-xl px-4 py-3 mb-3">
+                      <p className="text-xs text-gray-500 mb-1">Plus Code generado</p>
+                      <p className="font-mono font-bold text-blue-700 text-base">{ubicPendDet.plus_code}</p>
+                      <p className="text-xs text-gray-400 mt-1">{ubicPendDet.lat.toFixed(6)}, {ubicPendDet.lng.toFixed(6)}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setModoUbicDet('opciones')}
+                        className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm">Cambiar</button>
+                      <button type="button" onClick={guardarUbicacionDetalle} disabled={guardandoUbicDet}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50">
+                        {guardandoUbicDet ? 'Guardando…' : 'Guardar ubicación ✅'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {cargandoDetalle ? (
+              <div className="p-8 text-center text-gray-400 animate-pulse">Cargando detalle...</div>
+            ) : cuentaDetalle ? (
+              <>
+                {/* Resumen financiero */}
+                <div className="p-4 md:p-6 border-b bg-gray-50">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Resumen financiero</p>
+                  <div className="grid grid-cols-3 gap-3 text-center mb-4">
+                    <div className="bg-white rounded-xl p-3 border border-gray-100">
+                      <p className="text-xs text-gray-400 mb-1">Precio del plan</p>
+                      <p className="text-base font-bold text-gray-700">{fmt(cuentaDetalle.venta?.precio_final_total || 0)}</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-3 border border-green-100">
+                      <p className="text-xs text-gray-400 mb-1">Total pagado</p>
+                      <p className="text-base font-bold text-green-600">
+                        {fmt(Math.max(0, parseFloat(cuentaDetalle.venta?.precio_final_total || 0) - parseFloat(cuentaDetalle.saldo_actual || 0)))}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-xl p-3 border border-blue-100">
+                      <p className="text-xs text-gray-400 mb-1">Saldo restante</p>
+                      <p className="text-base font-bold text-blue-700">{fmt(cuentaDetalle.saldo_actual)}</p>
+                    </div>
+                  </div>
+
+                  {cuentaDetalle.venta && parseFloat(cuentaDetalle.venta.precio_original_total) > parseFloat(cuentaDetalle.venta.precio_final_total) && (
+                    <p className="text-xs text-center text-green-600 font-medium mb-3">
+                      Ahorro del cliente: {fmt(parseFloat(cuentaDetalle.venta.precio_original_total) - parseFloat(cuentaDetalle.venta.precio_final_total))}
+                      <span className="text-gray-400 ml-1">(precio original: {fmt(cuentaDetalle.venta.precio_original_total)})</span>
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[cuentaDetalle.estado_cuenta]}`}>
+                      {cuentaDetalle.estado_cuenta}
+                    </span>
+                    <span className="text-xs text-gray-500">Plan: <span className="font-medium text-gray-700">{cuentaDetalle.plan_actual?.replace(/_/g, ' ')}</span></span>
+                    <span className="text-xs text-gray-500">Frecuencia: <span className="font-medium text-gray-700 capitalize">{(cuentaDetalle.frecuencia_pago || 'semanal').replace(/_/g, ' ')}</span></span>
+                    {badgeCumplimiento(cuentaDetalle)}
+                  </div>
+                </div>
+
+                {/* Artículos */}
+                {cuentaDetalle.venta?.detalles?.length > 0 && (
+                  <div className="p-4 md:p-6 border-b">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Productos</p>
+                    <div className="space-y-2">
+                      {cuentaDetalle.venta.detalles.map(d => (
+                        <div key={d.id_detalle_venta} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
+                          <p className="text-sm font-medium text-gray-800">{d.producto}</p>
+                          <div className="text-right">
+                            <p className="text-xs text-gray-400">Cant. {d.cantidad}</p>
+                            {d.precio_unitario && <p className="text-xs text-gray-500">{fmt(d.precio_unitario)} c/u</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Historial de pagos */}
+                {historialPagosDetalle.length > 0 && (
+                  <div className="p-4 md:p-6 border-b">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                      Historial de pagos ({historialPagosDetalle.length})
+                    </p>
+                    <div className="space-y-2">
+                      {historialPagosDetalle.map(p => {
+                        const esFusion = p.observaciones?.startsWith('Fusión:')
+                        return (
+                          <div key={p.id_pago} className={`flex items-center justify-between rounded-lg px-4 py-2 text-sm ${esFusion ? 'bg-purple-50 border border-purple-200' : 'bg-gray-50'}`}>
+                            <div>
+                              <span className={`font-medium ${esFusion ? 'text-purple-800' : 'text-gray-800'}`}>{fmt(p.monto_pago)}</span>
+                              <span className="text-gray-400 ml-2 text-xs">{p.tipo_pago?.replace(/_/g, ' ')}</span>
+                              {p.observaciones && !esFusion && <p className="text-gray-400 text-xs mt-0.5">{p.observaciones}</p>}
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX')}</p>
+                              <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Historial de visitas */}
+                {historialVisitasDetalle.length > 0 && (
+                  <div className="p-4 md:p-6 border-b">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                      Observaciones / Visitas ({historialVisitasDetalle.length})
+                    </p>
+                    <div className="space-y-2">
+                      {historialVisitasDetalle.map(v => (
+                        <div key={v.id_seguimiento} className="flex items-start justify-between bg-gray-50 rounded-lg px-4 py-2 text-sm">
+                          <div className="flex items-start gap-2 flex-1">
+                            <span className={`mt-0.5 shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${visitaColor[v.tipo_seguimiento]}`}>
+                              {visitaLabel[v.tipo_seguimiento]}
+                            </span>
+                            {v.comentario && <span className="text-gray-600 text-xs">{v.comentario}</span>}
+                          </div>
+                          <div className="text-right shrink-0 ml-3">
+                            <p className="text-gray-500 text-xs">{new Date(v.fecha_registro).toLocaleDateString('es-MX')}</p>
+                            {v.fecha_programada && <p className="text-blue-500 text-xs">Cita: {new Date(v.fecha_programada).toLocaleDateString('es-MX')}</p>}
+                            <p className="text-gray-400 text-xs">{v.usuario?.nombre}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Botón ir a registrar pago */}
+                <div className="p-4 md:p-6 flex gap-3">
+                  <button type="button" onClick={cerrarDetalle}
+                    className="flex-1 border border-gray-300 text-gray-700 py-3 rounded-xl text-sm hover:bg-gray-50 transition">
+                    Cerrar
+                  </button>
+                  <button type="button"
+                    onClick={() => { cerrarDetalle(); abrirModal(cuentaDetalle) }}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition">
+                    Registrar pago
+                  </button>
+                </div>
+              </>
+            ) : null}
+
           </div>
         </div>
       )}
