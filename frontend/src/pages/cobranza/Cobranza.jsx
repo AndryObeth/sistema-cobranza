@@ -4,6 +4,7 @@ import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
 import { encolarPago, getQueue } from '../../utils/offlineQueue.js'
+import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
 
 const visitaColor = {
   promesa_pago:        'bg-green-100 text-green-700',
@@ -96,6 +97,14 @@ export default function Cobranza() {
   const [guardandoFusion, setGuardandoFusion]       = useState(false)
   const [errorFusion, setErrorFusion]               = useState('')
 
+  // Corrección de ubicación desde campo
+  const [panelUbicacion, setPanelUbicacion]   = useState(false)
+  const [modoUbicacion, setModoUbicacion]     = useState(null) // 'opciones' | 'manual' | 'confirmar'
+  const [ubicPendiente, setUbicPendiente]     = useState(null)
+  const [ubicInput, setUbicInput]             = useState('')
+  const [buscandoGPS, setBuscandoGPS]         = useState(false)
+  const [guardandoUbic, setGuardandoUbic]     = useState(false)
+
   useEffect(() => {
     cargarCuentas()
     // Detectar filtro de vencidas desde el dashboard
@@ -157,6 +166,67 @@ export default function Cobranza() {
     setHistorialVisitas([])
     setPagoHistorico(false)
     setFechaPagoHistorico('')
+    setPanelUbicacion(false)
+    setModoUbicacion(null)
+    setUbicPendiente(null)
+    setUbicInput('')
+  }
+
+  const abrirCorreccionUbicacion = () => {
+    setPanelUbicacion(true)
+    setModoUbicacion('opciones')
+    setUbicPendiente(null)
+    setUbicInput('')
+  }
+
+  const cerrarCorreccionUbicacion = () => {
+    setPanelUbicacion(false)
+    setModoUbicacion(null)
+    setUbicPendiente(null)
+    setUbicInput('')
+  }
+
+  const usarGPSUbicacion = () => {
+    if (!navigator.geolocation) { alert('Tu dispositivo no soporta GPS'); return }
+    setBuscandoGPS(true)
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const pc = encodePlusCode(coords.latitude, coords.longitude)
+        setUbicPendiente({ lat: coords.latitude, lng: coords.longitude, plus_code: pc })
+        setModoUbicacion('confirmar')
+        setBuscandoGPS(false)
+      },
+      () => { alert('No se pudo obtener la ubicación GPS'); setBuscandoGPS(false) },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
+  const usarPlusCodeManualUbicacion = () => {
+    const code = ubicInput.trim().toUpperCase()
+    if (!isValidPlusCode(code)) { alert('Plus Code no válido. Ej: 76C97H6P+QF'); return }
+    const { lat, lng } = decodePlusCode(code)
+    setUbicPendiente({ lat, lng, plus_code: code })
+    setModoUbicacion('confirmar')
+  }
+
+  const guardarUbicacionCliente = async () => {
+    if (!ubicPendiente) return
+    setGuardandoUbic(true)
+    try {
+      const idCliente = cuentaSeleccionada.cliente?.id_cliente
+      await api.put(`/clientes/${idCliente}/coordenadas`, {
+        latitud:   ubicPendiente.lat,
+        longitud:  ubicPendiente.lng,
+        plus_code: ubicPendiente.plus_code,
+      })
+      cerrarCorreccionUbicacion()
+      setExito('Ubicación actualizada ✅')
+      setTimeout(() => setExito(''), 4000)
+    } catch {
+      alert('Error al guardar la ubicación')
+    } finally {
+      setGuardandoUbic(false)
+    }
   }
 
   const cambiarFlujo = (sinPago) => {
@@ -782,8 +852,122 @@ export default function Cobranza() {
                   }
                 </p>
               </div>
-              <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              <div className="flex items-center gap-2">
+                {['cobrador','jefe_camioneta','administrador'].includes(usuario?.rol) && (
+                  <button
+                    type="button"
+                    onClick={panelUbicacion ? cerrarCorreccionUbicacion : abrirCorreccionUbicacion}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-medium transition min-h-[36px] ${
+                      panelUbicacion
+                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    📍 {panelUbicacion ? 'Cancelar' : 'Corregir ubicación'}
+                  </button>
+                )}
+                <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              </div>
             </div>
+
+            {/* Panel corrección de ubicación */}
+            {panelUbicacion && (
+              <div className="px-4 md:px-6 py-4 border-b bg-blue-50">
+                {modoUbicacion === 'opciones' && (
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800 mb-3">¿Cómo quieres corregir la ubicación?</p>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={usarGPSUbicacion}
+                        disabled={buscandoGPS}
+                        className="flex items-center gap-3 bg-white border border-blue-200 rounded-xl px-4 py-3 text-left hover:bg-blue-50 transition disabled:opacity-50"
+                      >
+                        <span className="text-2xl">🎯</span>
+                        <div>
+                          <p className="font-semibold text-gray-800 text-sm">
+                            {buscandoGPS ? 'Obteniendo GPS…' : 'Usar mi ubicación actual'}
+                          </p>
+                          <p className="text-xs text-gray-500">Captura las coordenadas GPS de tu celular</p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModoUbicacion('manual')}
+                        className="flex items-center gap-3 bg-white border border-blue-200 rounded-xl px-4 py-3 text-left hover:bg-blue-50 transition"
+                      >
+                        <span className="text-2xl">⌨️</span>
+                        <div>
+                          <p className="font-semibold text-gray-800 text-sm">Ingresar Plus Code</p>
+                          <p className="text-xs text-gray-500">Escribe manualmente el código de ubicación</p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {modoUbicacion === 'manual' && (
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800 mb-2">Ingresa el Plus Code</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={ubicInput}
+                        onChange={e => setUbicInput(e.target.value)}
+                        placeholder="Ej: 76C97H6P+QF"
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={usarPlusCodeManualUbicacion}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                      >
+                        Verificar
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setModoUbicacion('opciones')}
+                      className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      ← Volver
+                    </button>
+                  </div>
+                )}
+
+                {modoUbicacion === 'confirmar' && ubicPendiente && (
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800 mb-3">
+                      ¿Guardar esta ubicación para {cuentaSeleccionada.cliente?.nombre}?
+                    </p>
+                    <div className="bg-white border border-blue-200 rounded-xl px-4 py-3 mb-3">
+                      <p className="text-xs text-gray-500 mb-1">Plus Code generado</p>
+                      <p className="font-mono font-bold text-blue-700 text-base">{ubicPendiente.plus_code}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {ubicPendiente.lat.toFixed(6)}, {ubicPendiente.lng.toFixed(6)}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setModoUbicacion('opciones')}
+                        className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm"
+                      >
+                        Cambiar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={guardarUbicacionCliente}
+                        disabled={guardandoUbic}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50"
+                      >
+                        {guardandoUbic ? 'Guardando…' : 'Guardar ubicación ✅'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Info de la cuenta */}
             <div className="p-4 md:p-6 border-b bg-gray-50">

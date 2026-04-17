@@ -218,18 +218,20 @@ router.get('/sin-coordenadas', auth, async (req, res) => {
   }
 })
 
-// PUT /api/clientes/:id/coordenadas — guardar lat/lng de un cliente
+// PUT /api/clientes/:id/coordenadas — guardar lat/lng (y plus_code opcional) de un cliente
 router.put('/:id/coordenadas', auth, async (req, res) => {
   try {
-    const { latitud, longitud } = req.body
+    const { latitud, longitud, plus_code } = req.body
     if (latitud == null || longitud == null) {
       return res.status(400).json({ error: 'Se requieren latitud y longitud' })
     }
+    const data = { latitud: parseFloat(latitud), longitud: parseFloat(longitud) }
+    if (plus_code) data.plus_code = plus_code
     const cliente = await prisma.cliente.update({
       where: { id_cliente: parseInt(req.params.id) },
-      data: { latitud: parseFloat(latitud), longitud: parseFloat(longitud) }
+      data
     })
-    res.json({ ok: true, latitud: cliente.latitud, longitud: cliente.longitud })
+    res.json({ ok: true, latitud: cliente.latitud, longitud: cliente.longitud, plus_code: cliente.plus_code })
   } catch (error) {
     res.status(500).json({ error: 'Error al guardar coordenadas', detalle: error.message })
   }

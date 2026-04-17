@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
+import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY
 const CENTRO_TUXTEPEC = { lat: 18.0886, lng: -96.1342 }
@@ -13,6 +14,7 @@ const colorPorEstado = {
   activa:  'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
   atraso:  'http://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
   moroso:  'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
+  sin_ubicacion: 'http://maps.google.com/mapfiles/ms/icons/grey-dot.png',
 }
 
 // Distancia en km entre dos puntos (fórmula de Haversine)
@@ -54,6 +56,9 @@ const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFract
 export default function Mapa() {
   const { usuario } = useAuth()
   const navigate = useNavigate()
+  const routerLocation = useLocation()
+
+  const filtroSinUbicacion = new URLSearchParams(routerLocation.search).get('filtro') === 'sin_ubicacion'
 
   const [cuentas, setCuentas] = useState([])
   const [marcadores, setMarcadores] = useState([]) // { cuenta, latitud, longitud }
@@ -70,6 +75,14 @@ export default function Mapa() {
   const [clienteEditandoCoords, setClienteEditandoCoords] = useState(null)
   const [toast, setToast] = useState(null)
 
+  // Modal corrección de ubicación desde mapa
+  const [modalCorreccion, setModalCorreccion] = useState(null) // cuenta object
+  const [modoCorrecMapa, setModoCorrecMapa]   = useState('opciones')
+  const [ubicPendienteMapa, setUbicPendienteMapa] = useState(null)
+  const [ubicInputMapa, setUbicInputMapa]     = useState('')
+  const [buscandoGPSMapa, setBuscandoGPSMapa] = useState(false)
+  const [guardandoUbicMapa, setGuardandoUbicMapa] = useState(false)
+
   const mostrarToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
 
   const iniciarEdicionUbicacion = (marcador) => {
@@ -79,6 +92,69 @@ export default function Mapa() {
   }
 
   const cancelarEdicion = () => { setModoEdicion(false); setClienteEditandoCoords(null) }
+
+  const abrirModalCorreccion = (cuenta) => {
+    setSeleccionado(null)
+    setModalCorreccion(cuenta)
+    setModoCorrecMapa('opciones')
+    setUbicPendienteMapa(null)
+    setUbicInputMapa('')
+  }
+
+  const cerrarModalCorreccion = () => {
+    setModalCorreccion(null)
+    setModoCorrecMapa('opciones')
+    setUbicPendienteMapa(null)
+    setUbicInputMapa('')
+  }
+
+  const usarGPSMapa = () => {
+    if (!navigator.geolocation) { mostrarToast('Sin soporte GPS'); return }
+    setBuscandoGPSMapa(true)
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const pc = encodePlusCode(coords.latitude, coords.longitude)
+        setUbicPendienteMapa({ lat: coords.latitude, lng: coords.longitude, plus_code: pc })
+        setModoCorrecMapa('confirmar')
+        setBuscandoGPSMapa(false)
+      },
+      () => { mostrarToast('No se pudo obtener GPS'); setBuscandoGPSMapa(false) },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
+  const usarPlusCodeMapa = () => {
+    const code = ubicInputMapa.trim().toUpperCase()
+    if (!isValidPlusCode(code)) { mostrarToast('Plus Code no válido'); return }
+    const { lat, lng } = decodePlusCode(code)
+    setUbicPendienteMapa({ lat, lng, plus_code: code })
+    setModoCorrecMapa('confirmar')
+  }
+
+  const guardarUbicacionMapa = async () => {
+    if (!ubicPendienteMapa || !modalCorreccion) return
+    setGuardandoUbicMapa(true)
+    try {
+      const idCliente = modalCorreccion.cliente?.id_cliente
+      await api.put(`/clientes/${idCliente}/coordenadas`, {
+        latitud:   ubicPendienteMapa.lat,
+        longitud:  ubicPendienteMapa.lng,
+        plus_code: ubicPendienteMapa.plus_code,
+      })
+      setMarcadores(prev => prev.map(m =>
+        m.cuenta.cliente?.id_cliente === idCliente
+          ? { ...m, latitud: ubicPendienteMapa.lat, longitud: ubicPendienteMapa.lng,
+              cuenta: { ...m.cuenta, cliente: { ...m.cuenta.cliente, plus_code: ubicPendienteMapa.plus_code } } }
+          : m
+      ))
+      cerrarModalCorreccion()
+      mostrarToast('Ubicación actualizada ✅')
+    } catch {
+      mostrarToast('Error al guardar la ubicación')
+    } finally {
+      setGuardandoUbicMapa(false)
+    }
+  }
 
   const handleMapClick = async (e) => {
     if (!modoEdicion || !clienteEditandoCoords) return
@@ -145,6 +221,7 @@ export default function Mapa() {
       cuenta: c,
       latitud: parseFloat(c.cliente.latitud),
       longitud: parseFloat(c.cliente.longitud),
+      sinPlusCode: !c.cliente?.plus_code,
     })))
   }
 
@@ -278,10 +355,14 @@ export default function Mapa() {
       </div>
 
       {/* Leyenda */}
-      <div className="flex gap-4 mb-3 text-xs text-gray-600">
+      <div className="flex gap-4 mb-3 text-xs text-gray-600 flex-wrap">
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500 inline-block" />Al corriente</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-400 inline-block" />En atraso</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" />Moroso</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-gray-400 inline-block" />Sin ubicación precisa</span>
+        {filtroSinUbicacion && (
+          <button onClick={() => navigate('/mapa')} className="ml-2 text-blue-600 underline">Ver todos</button>
+        )}
       </div>
 
       {/* Mapa */}
@@ -319,19 +400,23 @@ export default function Mapa() {
               draggableCursor: modoEdicion ? 'crosshair' : undefined,
             }}
           >
-            {marcadores.map((m, idx) => {
-              const estado = m.cuenta.estado_cuenta
-              const icon = colorPorEstado[estado] || colorPorEstado.activa
-              return (
-                <Marker
-                  key={m.cuenta.id_cuenta}
-                  position={{ lat: m.latitud, lng: m.longitud }}
-                  icon={icon}
-                  label={rutaOrdenada ? { text: String(idx + 1), color: 'white', fontSize: '11px', fontWeight: 'bold' } : undefined}
-                  onClick={() => setSeleccionado(m)}
-                />
-              )
-            })}
+            {marcadores
+              .filter(m => !filtroSinUbicacion || m.sinPlusCode)
+              .map((m, idx) => {
+                const icon = m.sinPlusCode
+                  ? colorPorEstado.sin_ubicacion
+                  : (colorPorEstado[m.cuenta.estado_cuenta] || colorPorEstado.activa)
+                return (
+                  <Marker
+                    key={m.cuenta.id_cuenta}
+                    position={{ lat: m.latitud, lng: m.longitud }}
+                    icon={icon}
+                    title={m.sinPlusCode ? 'Sin ubicación precisa — toca para corregir' : undefined}
+                    label={rutaOrdenada && !m.sinPlusCode ? { text: String(idx + 1), color: 'white', fontSize: '11px', fontWeight: 'bold' } : undefined}
+                    onClick={() => m.sinPlusCode ? abrirModalCorreccion(m.cuenta) : setSeleccionado(m)}
+                  />
+                )
+              })}
 
             {miUbicacion && (
               <Marker
@@ -455,6 +540,78 @@ export default function Mapa() {
           </GoogleMap>
         )}
       </div>
+
+      {/* Modal corrección de ubicación */}
+      {modalCorreccion && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-end sm:items-center justify-center z-[60] sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-md p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-bold text-gray-800">{modalCorreccion.cliente?.nombre}</h3>
+                <p className="text-xs text-gray-500">Corregir ubicación en mapa</p>
+              </div>
+              <button onClick={cerrarModalCorreccion} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+
+            {modoCorrecMapa === 'opciones' && (
+              <div className="flex flex-col gap-2">
+                <button type="button" onClick={usarGPSMapa} disabled={buscandoGPSMapa}
+                  className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-left hover:bg-blue-100 transition disabled:opacity-50">
+                  <span className="text-2xl">🎯</span>
+                  <div>
+                    <p className="font-semibold text-gray-800 text-sm">{buscandoGPSMapa ? 'Obteniendo GPS…' : 'Usar mi ubicación actual'}</p>
+                    <p className="text-xs text-gray-500">Captura coordenadas GPS de tu celular</p>
+                  </div>
+                </button>
+                <button type="button" onClick={() => setModoCorrecMapa('manual')}
+                  className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-left hover:bg-gray-100 transition">
+                  <span className="text-2xl">⌨️</span>
+                  <div>
+                    <p className="font-semibold text-gray-800 text-sm">Ingresar Plus Code</p>
+                    <p className="text-xs text-gray-500">Escribe manualmente el código de ubicación</p>
+                  </div>
+                </button>
+              </div>
+            )}
+
+            {modoCorrecMapa === 'manual' && (
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Ingresa el Plus Code</p>
+                <div className="flex gap-2">
+                  <input type="text" value={ubicInputMapa} onChange={e => setUbicInputMapa(e.target.value)}
+                    placeholder="Ej: 76C97H6P+QF"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <button type="button" onClick={usarPlusCodeMapa}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Verificar</button>
+                </div>
+                <button type="button" onClick={() => setModoCorrecMapa('opciones')}
+                  className="mt-2 text-xs text-gray-500 hover:text-gray-700">← Volver</button>
+              </div>
+            )}
+
+            {modoCorrecMapa === 'confirmar' && ubicPendienteMapa && (
+              <div>
+                <p className="text-sm font-semibold text-gray-800 mb-3">
+                  ¿Guardar esta ubicación para {modalCorreccion.cliente?.nombre}?
+                </p>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-3">
+                  <p className="text-xs text-gray-500 mb-1">Plus Code</p>
+                  <p className="font-mono font-bold text-blue-700 text-base">{ubicPendienteMapa.plus_code}</p>
+                  <p className="text-xs text-gray-400 mt-1">{ubicPendienteMapa.lat.toFixed(6)}, {ubicPendienteMapa.lng.toFixed(6)}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setModoCorrecMapa('opciones')}
+                    className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm">Cambiar</button>
+                  <button type="button" onClick={guardarUbicacionMapa} disabled={guardandoUbicMapa}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50">
+                    {guardandoUbicMapa ? 'Guardando…' : 'Guardar ✅'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Lista de ruta optimizada */}
       {rutaOrdenada && marcadores.length > 0 && (

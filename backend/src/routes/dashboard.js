@@ -19,7 +19,8 @@ router.get('/resumen', auth, async (req, res) => {
       clientes_morosos,
       cuentas_activas,
       cuentas_en_atraso,
-      planes_vencidos
+      planes_vencidos,
+      clientes_sin_ubicacion
     ] = await Promise.all([
       prisma.cliente.count({ where: { activo: true } }),
 
@@ -45,7 +46,9 @@ router.get('/resumen', auth, async (req, res) => {
           plan_actual:   { not: 'largo_plazo' },
           fecha_limite:  { lt: new Date() },
         }
-      })
+      }),
+
+      prisma.cliente.count({ where: { activo: true, latitud: null } })
     ])
 
     const total_ventas_hoy  = ventas_hoy.length
@@ -63,6 +66,7 @@ router.get('/resumen', auth, async (req, res) => {
       cuentas_activas,
       cuentas_en_atraso,
       planes_vencidos,
+      clientes_sin_ubicacion,
     })
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener resumen', detalle: error.message })

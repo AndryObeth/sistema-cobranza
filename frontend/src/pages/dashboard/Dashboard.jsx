@@ -125,23 +125,42 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Tarjeta planes vencidos */}
-      {!cargando && resumen?.planes_vencidos > 0 && (
+      {/* Tarjetas de atención requerida */}
+      {!cargando && (resumen?.planes_vencidos > 0 || resumen?.clientes_sin_ubicacion > 0) && (
         <div className="mt-6">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Atención requerida</p>
-          <button
-            onClick={() => navigate('/cobranza?filtro=vencidas')}
-            className="w-full md:w-auto text-left bg-orange-50 border-2 border-orange-300 rounded-2xl p-6 hover:bg-orange-100 transition group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-orange-400 rounded-xl flex items-center justify-center text-white text-xl">⚠️</div>
-              <div>
-                <p className="text-orange-700 text-sm font-medium">Planes vencidos por incumplimiento</p>
-                <p className="text-3xl font-bold text-orange-600 mt-0.5">{resumen.planes_vencidos}</p>
-                <p className="text-xs text-orange-500 mt-1">Cuentas que superaron su fecha límite — Click para gestionar</p>
-              </div>
-            </div>
-          </button>
+          <div className="flex flex-col md:flex-row gap-3">
+            {resumen?.planes_vencidos > 0 && (
+              <button
+                onClick={() => navigate('/cobranza?filtro=vencidas')}
+                className="flex-1 text-left bg-orange-50 border-2 border-orange-300 rounded-2xl p-6 hover:bg-orange-100 transition"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-orange-400 rounded-xl flex items-center justify-center text-white text-xl">⚠️</div>
+                  <div>
+                    <p className="text-orange-700 text-sm font-medium">Planes vencidos por incumplimiento</p>
+                    <p className="text-3xl font-bold text-orange-600 mt-0.5">{resumen.planes_vencidos}</p>
+                    <p className="text-xs text-orange-500 mt-1">Cuentas que superaron su fecha límite</p>
+                  </div>
+                </div>
+              </button>
+            )}
+            {resumen?.clientes_sin_ubicacion > 0 && (
+              <button
+                onClick={() => navigate('/mapa?filtro=sin_ubicacion')}
+                className="flex-1 text-left bg-gray-50 border-2 border-gray-300 rounded-2xl p-6 hover:bg-gray-100 transition"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-gray-400 rounded-xl flex items-center justify-center text-white text-xl">📍</div>
+                  <div>
+                    <p className="text-gray-700 text-sm font-medium">Clientes sin ubicación</p>
+                    <p className="text-3xl font-bold text-gray-600 mt-0.5">{resumen.clientes_sin_ubicacion}</p>
+                    <p className="text-xs text-gray-500 mt-1">Sin coordenadas GPS — Click para corregir en mapa</p>
+                  </div>
+                </div>
+              </button>
+            )}
+          </div>
         </div>
       )}
     </Layout>
