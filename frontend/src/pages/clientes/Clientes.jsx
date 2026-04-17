@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
+import OpenLocationCode from 'open-location-code'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX') : '—'
@@ -352,19 +353,12 @@ export default function Clientes() {
   const obtenerMiUbicacionPC = useCallback(() => {
     if (!navigator.geolocation) { alert('Tu dispositivo no soporta geolocalización'); return }
     setVerificandoPC(true)
-    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
       try {
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${coords.latitude},${coords.longitude}&key=${GMAPS_KEY}`
-        const res = await fetch(url)
-        const data = await res.json()
-        const pc = data.plus_code?.global_code || null
-        if (pc) {
-          setForm(f => ({ ...f, plus_code: pc }))
-          setPreviewPC({ lat: coords.latitude, lng: coords.longitude })
-        } else {
-          alert('No se pudo obtener el Plus Code de tu ubicación')
-        }
-      } catch { alert('Error al obtener Plus Code') }
+        const pc = OpenLocationCode.encode(coords.latitude, coords.longitude, 10)
+        setForm(f => ({ ...f, plus_code: pc }))
+        setPreviewPC({ lat: coords.latitude, lng: coords.longitude })
+      } catch { alert('Error al generar Plus Code') }
       finally { setVerificandoPC(false) }
     }, () => { alert('No se pudo obtener la ubicación'); setVerificandoPC(false) },
     { enableHighAccuracy: true, timeout: 10000 })
