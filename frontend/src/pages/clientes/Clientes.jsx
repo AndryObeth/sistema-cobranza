@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import OpenLocationCode from 'open-location-code'
+import { OpenLocationCode } from 'open-location-code'
+const olc = new OpenLocationCode()
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX') : '—'
@@ -355,7 +356,7 @@ export default function Clientes() {
     setVerificandoPC(true)
     navigator.geolocation.getCurrentPosition(({ coords }) => {
       try {
-        const pc = OpenLocationCode.encode(coords.latitude, coords.longitude, 10)
+        const pc = olc.encode(coords.latitude, coords.longitude, 10)
         setForm(f => ({ ...f, plus_code: pc }))
         setPreviewPC({ lat: coords.latitude, lng: coords.longitude })
       } catch { alert('Error al generar Plus Code') }
