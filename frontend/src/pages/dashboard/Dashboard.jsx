@@ -12,6 +12,27 @@ export default function Dashboard() {
   const [resumen, setResumen] = useState(null)
   const [cargando, setCargando] = useState(true)
 
+  // Consulta de cobros por fecha
+  const [verConsulta, setVerConsulta]         = useState(false)
+  const [fechaConsulta, setFechaConsulta]     = useState(new Date().toISOString().split('T')[0])
+  const [consultando, setConsultando]         = useState(false)
+  const [resultadoConsulta, setResultadoConsulta] = useState(null)
+  const [verDetallePagos, setVerDetallePagos] = useState(false)
+
+  const consultarPorFecha = async () => {
+    setConsultando(true)
+    setResultadoConsulta(null)
+    setVerDetallePagos(false)
+    try {
+      const res = await api.get(`/pagos/por-fecha?fecha=${fechaConsulta}`)
+      setResultadoConsulta(res.data)
+    } catch {
+      setResultadoConsulta({ error: 'No se pudo obtener la información' })
+    } finally {
+      setConsultando(false)
+    }
+  }
+
   useEffect(() => {
     api.get('/dashboard/resumen')
       .then(res => setResumen(res.data))
@@ -161,6 +182,112 @@ export default function Dashboard() {
               </button>
             )}
           </div>
+        </div>
+      )}
+      {/* Consulta de cobros por fecha */}
+      {['administrador', 'secretaria'].includes(usuario?.rol) && (
+        <div className="mt-6 bg-white rounded-2xl shadow overflow-hidden">
+          <button
+            onClick={() => setVerConsulta(!verConsulta)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition"
+          >
+            <span className="font-semibold text-gray-700 text-sm">Consultar cobros por fecha</span>
+            <span className="text-gray-400 text-xs">{verConsulta ? '▲ ocultar' : '▼ ver'}</span>
+          </button>
+
+          {verConsulta && (
+            <div className="px-5 pb-5 border-t pt-4">
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="date"
+                  value={fechaConsulta}
+                  onChange={e => { setFechaConsulta(e.target.value); setResultadoConsulta(null) }}
+                  max={new Date().toISOString().split('T')[0]}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={consultarPorFecha}
+                  disabled={consultando}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+                >
+                  {consultando ? 'Consultando...' : 'Consultar'}
+                </button>
+              </div>
+
+              {resultadoConsulta?.error && (
+                <p className="text-red-500 text-sm">{resultadoConsulta.error}</p>
+              )}
+
+              {resultadoConsulta && !resultadoConsulta.error && (
+                <div className="space-y-4">
+                  {/* Resumen del día */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 text-center">
+                      <p className="text-xs text-teal-600 mb-1">Total cobrado</p>
+                      <p className="text-2xl font-bold text-teal-700">{fmt(resultadoConsulta.total)}</p>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center">
+                      <p className="text-xs text-blue-600 mb-1">Pagos registrados</p>
+                      <p className="text-2xl font-bold text-blue-700">{resultadoConsulta.cantidad}</p>
+                    </div>
+                  </div>
+
+                  {/* Por cobrador */}
+                  {resultadoConsulta.por_cobrador?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Por cobrador</p>
+                      <div className="space-y-1.5">
+                        {resultadoConsulta.por_cobrador.map(c => (
+                          <div key={c.nombre} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2">
+                            <span className="text-sm text-gray-700 font-medium">{c.nombre}</span>
+                            <div className="text-right">
+                              <span className="text-sm font-bold text-gray-800">{fmt(c.total)}</span>
+                              <span className="text-xs text-gray-400 ml-2">{c.cantidad} pago{c.cantidad !== 1 ? 's' : ''}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Toggle detalle */}
+                  {resultadoConsulta.pagos?.length > 0 && (
+                    <div>
+                      <button
+                        onClick={() => setVerDetallePagos(!verDetallePagos)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        {verDetallePagos ? '▲ Ocultar detalle' : `▼ Ver detalle (${resultadoConsulta.pagos.length} pagos)`}
+                      </button>
+
+                      {verDetallePagos && (
+                        <div className="mt-2 space-y-1 max-h-72 overflow-y-auto">
+                          {resultadoConsulta.pagos.map(p => (
+                            <div key={p.id_pago} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-xs">
+                              <div className="min-w-0">
+                                <p className="font-medium text-gray-800 truncate">{p.cliente_nombre}</p>
+                                <p className="text-gray-400">{p.cobrador_nombre} · {p.tipo_pago?.replace(/_/g, ' ')}</p>
+                              </div>
+                              <div className="text-right shrink-0 ml-3">
+                                <p className="font-bold text-gray-700">{fmt(p.monto_pago)}</p>
+                                <p className="text-gray-400">
+                                  {new Date(p.fecha_pago).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {resultadoConsulta.cantidad === 0 && (
+                    <p className="text-center text-gray-400 text-sm py-2">Sin pagos registrados ese día</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </Layout>

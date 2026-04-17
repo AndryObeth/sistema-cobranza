@@ -67,6 +67,61 @@ router.get('/todas-cuentas', auth, async (req, res) => {
   }
 })
 
+// GET /api/pagos/por-fecha?fecha=YYYY-MM-DD
+router.get('/por-fecha', auth, async (req, res) => {
+  try {
+    const { fecha } = req.query
+    if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      return res.status(400).json({ error: 'Se requiere fecha en formato YYYY-MM-DD' })
+    }
+    const inicio = new Date(fecha + 'T00:00:00.000Z')
+    const fin    = new Date(fecha + 'T23:59:59.999Z')
+
+    const where = { fecha_pago: { gte: inicio, lte: fin } }
+    if (req.usuario.rol === 'cobrador') where.id_cobrador = req.usuario.id
+
+    const pagos = await prisma.pago.findMany({
+      where,
+      include: {
+        cuenta: { include: { cliente: { select: { nombre: true, numero_expediente: true } } } },
+        cobrador: { select: { nombre: true } }
+      },
+      orderBy: { fecha_pago: 'asc' }
+    })
+
+    const total = pagos.reduce((s, p) => s + parseFloat(p.monto_pago), 0)
+
+    const porCobrador = {}
+    pagos.forEach(p => {
+      const nombre = p.cobrador?.nombre || 'Sin cobrador'
+      if (!porCobrador[nombre]) porCobrador[nombre] = { total: 0, cantidad: 0 }
+      porCobrador[nombre].total    += parseFloat(p.monto_pago)
+      porCobrador[nombre].cantidad += 1
+    })
+
+    res.json({
+      fecha,
+      total:    parseFloat(total.toFixed(2)),
+      cantidad: pagos.length,
+      por_cobrador: Object.entries(porCobrador)
+        .map(([nombre, d]) => ({ nombre, total: parseFloat(d.total.toFixed(2)), cantidad: d.cantidad }))
+        .sort((a, b) => b.total - a.total),
+      pagos: pagos.map(p => ({
+        id_pago:           p.id_pago,
+        fecha_pago:        p.fecha_pago,
+        monto_pago:        parseFloat(p.monto_pago),
+        tipo_pago:         p.tipo_pago,
+        origen_pago:       p.origen_pago,
+        cliente_nombre:    p.cuenta?.cliente?.nombre,
+        numero_expediente: p.cuenta?.cliente?.numero_expediente,
+        cobrador_nombre:   p.cobrador?.nombre || '—',
+      }))
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener pagos por fecha', detalle: error.message })
+  }
+})
+
 // PUT /api/pagos/cuenta/:id/frecuencia — actualizar frecuencia y horario
 router.put('/cuenta/:id/frecuencia', auth, async (req, res) => {
   try {
