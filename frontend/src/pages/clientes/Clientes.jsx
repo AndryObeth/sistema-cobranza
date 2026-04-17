@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -102,6 +102,22 @@ function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
                 <p className="text-xs text-gray-400 mb-0.5">Referencias</p>
                 <p className="font-medium text-gray-800">{cliente.referencias || '—'}</p>
               </div>
+              {cliente.plus_code && (
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-400 mb-0.5">Plus Code</p>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-semibold text-gray-800">{cliente.plus_code}</span>
+                    <a
+                      href={`https://maps.google.com/?q=${encodeURIComponent(cliente.plus_code)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline font-medium"
+                    >
+                      📍 Abrir en Maps
+                    </a>
+                  </div>
+                </div>
+              )}
               {cliente.observaciones_generales && (
                 <div className="col-span-2">
                   <p className="text-xs text-gray-400 mb-0.5">Observaciones</p>
@@ -251,10 +267,12 @@ function Campo({ label, children }) {
 
 const INPUT = 'w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm'
 
+const GMAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY
+
 const FORM_VACIO = {
   nombre: '', alias: '', telefono: '',
   municipio: '', colonia: '', direccion: '',
-  referencias: '', ruta: '',
+  referencias: '', ruta: '', plus_code: '',
   estado_cliente: 'activo', nivel_riesgo: '', observaciones_generales: ''
 }
 
@@ -272,6 +290,8 @@ export default function Clientes() {
   const [form, setForm]                     = useState(FORM_VACIO)
   const [guardando, setGuardando]           = useState(false)
   const [error, setError]                   = useState('')
+  const [verificandoPC, setVerificandoPC]   = useState(false)
+  const [previewPC, setPreviewPC]           = useState(null) // { lat, lng }
 
   useEffect(() => { cargarClientes() }, [])
 
@@ -311,10 +331,12 @@ export default function Clientes() {
       direccion:               c.direccion || '',
       referencias:             c.referencias || '',
       ruta:                    c.ruta || '',
+      plus_code:               c.plus_code || '',
       estado_cliente:          c.estado_cliente || 'activo',
       nivel_riesgo:            c.nivel_riesgo || '',
       observaciones_generales: c.observaciones_generales || ''
     })
+    setPreviewPC(null)
     setError('')
     setModalAbierto(true)
   }
@@ -323,8 +345,47 @@ export default function Clientes() {
     setModalAbierto(false)
     setClienteEditando(null)
     setForm(FORM_VACIO)
+    setPreviewPC(null)
     setError('')
   }
+
+  const obtenerMiUbicacionPC = useCallback(() => {
+    if (!navigator.geolocation) { alert('Tu dispositivo no soporta geolocalización'); return }
+    setVerificandoPC(true)
+    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+      try {
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${coords.latitude},${coords.longitude}&key=${GMAPS_KEY}`
+        const res = await fetch(url)
+        const data = await res.json()
+        const pc = data.plus_code?.global_code || null
+        if (pc) {
+          setForm(f => ({ ...f, plus_code: pc }))
+          setPreviewPC({ lat: coords.latitude, lng: coords.longitude })
+        } else {
+          alert('No se pudo obtener el Plus Code de tu ubicación')
+        }
+      } catch { alert('Error al obtener Plus Code') }
+      finally { setVerificandoPC(false) }
+    }, () => { alert('No se pudo obtener la ubicación'); setVerificandoPC(false) },
+    { enableHighAccuracy: true, timeout: 10000 })
+  }, [])
+
+  const verificarPlusCode = useCallback(async () => {
+    if (!form.plus_code?.trim()) return
+    setVerificandoPC(true)
+    try {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(form.plus_code.trim())}&key=${GMAPS_KEY}`
+      const res = await fetch(url)
+      const data = await res.json()
+      if (data.status === 'OK' && data.results?.[0]) {
+        const { lat, lng } = data.results[0].geometry.location
+        setPreviewPC({ lat, lng })
+      } else {
+        alert('Plus Code no reconocido. Verifica que sea correcto.')
+      }
+    } catch { alert('Error al verificar Plus Code') }
+    finally { setVerificandoPC(false) }
+  }, [form.plus_code])
 
   const handleGuardar = async (e) => {
     e.preventDefault()
@@ -497,6 +558,39 @@ export default function Clientes() {
                       onChange={e => setForm({...form, referencias: e.target.value})} className={INPUT} />
                   </Campo>
                 </div>
+
+                {/* Plus Code */}
+                <div className="col-span-2">
+                  <Campo label="Plus Code (ubicación exacta)">
+                    <div className="flex gap-2">
+                      <input type="text" value={form.plus_code}
+                        onChange={e => { setForm({...form, plus_code: e.target.value}); setPreviewPC(null) }}
+                        placeholder="Ej: 7H6P+QF"
+                        className={INPUT} />
+                      <button type="button" onClick={verificarPlusCode} disabled={verificandoPC || !form.plus_code}
+                        className="shrink-0 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-xs font-medium transition disabled:opacity-40">
+                        {verificandoPC ? '...' : 'Verificar'}
+                      </button>
+                    </div>
+                    <button type="button" onClick={obtenerMiUbicacionPC} disabled={verificandoPC}
+                      className="mt-2 flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium disabled:opacity-40">
+                      📍 {verificandoPC ? 'Obteniendo...' : 'Obtener mi ubicación'}
+                    </button>
+                    {previewPC && (
+                      <div className="mt-2 rounded-lg overflow-hidden border border-gray-200">
+                        <img
+                          src={`https://maps.googleapis.com/maps/api/staticmap?center=${previewPC.lat},${previewPC.lng}&zoom=17&size=400x160&markers=color:red%7C${previewPC.lat},${previewPC.lng}&key=${GMAPS_KEY}`}
+                          alt="Vista previa"
+                          className="w-full"
+                        />
+                        <p className="text-xs text-gray-500 px-2 py-1 bg-gray-50">
+                          {previewPC.lat.toFixed(6)}, {previewPC.lng.toFixed(6)}
+                        </p>
+                      </div>
+                    )}
+                  </Campo>
+                </div>
+
                 <Campo label="Ruta *">
                   <input type="text" value={form.ruta} required
                     onChange={e => setForm({...form, ruta: e.target.value})}

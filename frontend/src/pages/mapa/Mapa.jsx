@@ -369,6 +369,52 @@ export default function Mapa() {
                     <p>🔄 Frecuencia: {seleccionado.cuenta.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</p>
                   </div>
 
+                  {/* Plus Code */}
+                  {seleccionado.cuenta.cliente?.plus_code ? (
+                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, padding: '6px 8px', marginBottom: 6 }}>
+                      <p style={{ fontSize: 10, color: '#15803d', margin: '0 0 3px', fontWeight: 600 }}>Plus Code</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#166534' }}>
+                          {seleccionado.cuenta.cliente.plus_code}
+                        </span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(seleccionado.cuenta.cliente.plus_code)
+                            mostrarToast('Plus Code copiado')
+                          }}
+                          style={{ fontSize: 10, background: '#dcfce7', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', color: '#15803d' }}
+                        >
+                          Copiar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    puedeEditar && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await api.put(`/clientes/${seleccionado.cuenta.cliente.id_cliente}/plus-code`, {})
+                            if (res.data.plus_code) {
+                              setSeleccionado(prev => ({
+                                ...prev,
+                                cuenta: {
+                                  ...prev.cuenta,
+                                  cliente: { ...prev.cuenta.cliente, plus_code: res.data.plus_code }
+                                }
+                              }))
+                              mostrarToast('Plus Code generado: ' + res.data.plus_code)
+                            } else {
+                              mostrarToast('No se pudo generar Plus Code (sin coordenadas)')
+                            }
+                          } catch { mostrarToast('Error al generar Plus Code') }
+                        }}
+                        style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', width: '100%', fontSize: 11, marginBottom: 4 }}
+                      >
+                        🌐 Generar Plus Code
+                      </button>
+                    )
+                  )}
+
                   <button
                     onClick={() => navigate('/cobranza')}
                     style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', width: '100%', fontWeight: 600, fontSize: 12, marginBottom: 6 }}

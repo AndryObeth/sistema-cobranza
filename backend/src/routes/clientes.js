@@ -4,6 +4,32 @@ const auth = require('../middlewares/auth')
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
+const GMAPS_KEY = process.env.GOOGLE_MAPS_KEY || 'AIzaSyCyxJz71a1Sxghckwxiq00PKckjbSeK0vg'
+
+async function geocodearPlusCode(plusCode) {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(plusCode)}&key=${GMAPS_KEY}`
+    const resp = await fetch(url)
+    const data = await resp.json()
+    if (data.status === 'OK' && data.results?.[0]) {
+      return data.results[0].geometry.location // { lat, lng }
+    }
+  } catch {}
+  return null
+}
+
+async function plusCodeDesdeCoordenadas(lat, lng) {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GMAPS_KEY}`
+    const resp = await fetch(url)
+    const data = await resp.json()
+    if (data.status === 'OK') {
+      return data.plus_code?.global_code || null
+    }
+  } catch {}
+  return null
+}
+
 // GET /api/clientes — listar todos
 router.get('/', auth, async (req, res) => {
   try {
@@ -100,6 +126,12 @@ router.post('/', auth, async (req, res) => {
 
     // Evitar que campos enum vacíos generen error en Prisma
     if (!resto.nivel_riesgo) resto.nivel_riesgo = null
+
+    // Si viene plus_code pero no lat/lng, geocodear automáticamente
+    if (resto.plus_code && !resto.latitud) {
+      const coords = await geocodearPlusCode(resto.plus_code)
+      if (coords) { resto.latitud = coords.lat; resto.longitud = coords.lng }
+    }
 
     // Auto-generar ID Expediente: total de clientes (incl. inactivos) + 1, con 4 dígitos
     const total = await prisma.cliente.count()
@@ -203,11 +235,45 @@ router.put('/:id/coordenadas', auth, async (req, res) => {
   }
 })
 
+// PUT /api/clientes/:id/plus-code — guardar plus_code y opcionalmente geocodear
+router.put('/:id/plus-code', auth, async (req, res) => {
+  try {
+    const { plus_code } = req.body
+    const data = { plus_code: plus_code || null }
+
+    // Si tiene coordenadas el cliente, generar plus_code desde ellas si no se proveyó
+    if (!plus_code) {
+      const actual = await prisma.cliente.findUnique({
+        where: { id_cliente: parseInt(req.params.id) },
+        select: { latitud: true, longitud: true }
+      })
+      if (actual?.latitud && actual?.longitud) {
+        data.plus_code = await plusCodeDesdeCoordenadas(actual.latitud, actual.longitud)
+      }
+    }
+
+    const cliente = await prisma.cliente.update({
+      where: { id_cliente: parseInt(req.params.id) },
+      data
+    })
+    res.json({ plus_code: cliente.plus_code })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar plus code', detalle: error.message })
+  }
+})
+
 // PUT /api/clientes/:id — actualizar cliente
 router.put('/:id', auth, async (req, res) => {
   try {
     const data = { ...req.body }
     if (!data.nivel_riesgo) data.nivel_riesgo = null
+
+    // Si viene plus_code pero no lat/lng, geocodear automáticamente
+    if (data.plus_code && !data.latitud) {
+      const coords = await geocodearPlusCode(data.plus_code)
+      if (coords) { data.latitud = coords.lat; data.longitud = coords.lng }
+    }
+
     const cliente = await prisma.cliente.update({
       where: { id_cliente: parseInt(req.params.id) },
       data
