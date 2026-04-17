@@ -52,6 +52,10 @@ export default function Cobranza() {
   const [cargando, setCargando] = useState(true)
   const [soloVencidas, setSoloVencidas] = useState(false)
   const [busqueda, setBusqueda] = useState('')
+  const [ordenar, setOrdenar] = useState('cumplimiento')
+  const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroMunicipio, setFiltroMunicipio] = useState('')
+  const [filtroColonia, setFiltroColonia] = useState('')
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null)
   const [modalAbierto, setModalAbierto] = useState(false)
 
@@ -751,17 +755,50 @@ export default function Cobranza() {
     return 1
   }
 
+  const municipiosDisponibles = [...new Set(cuentas.map(c => c.cliente?.municipio).filter(Boolean))].sort()
+  const coloniasDisponibles  = [...new Set(
+    cuentas
+      .filter(c => !filtroMunicipio || c.cliente?.municipio === filtroMunicipio)
+      .map(c => c.cliente?.colonia)
+      .filter(Boolean)
+  )].sort()
+
+  const hayFiltros = filtroEstado || filtroMunicipio || filtroColonia || soloVencidas || ordenar !== 'cumplimiento'
+
   const cuentasFiltradas = cuentas
     .filter(c => {
       if (soloVencidas && !estaVencida(c)) return false
-      return (
-        c.cliente?.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-        c.folio_cuenta.toLowerCase().includes(busqueda.toLowerCase()) ||
-        c.numero_cuenta?.toLowerCase().includes(busqueda.toLowerCase()) ||
-        c.cliente?.numero_expediente?.toLowerCase().includes(busqueda.toLowerCase())
+      if (filtroEstado && c.estado_cuenta !== filtroEstado) return false
+      if (filtroMunicipio && c.cliente?.municipio !== filtroMunicipio) return false
+      if (filtroColonia  && c.cliente?.colonia  !== filtroColonia)  return false
+      const q = busqueda.toLowerCase()
+      if (q) return (
+        c.cliente?.nombre.toLowerCase().includes(q) ||
+        c.folio_cuenta.toLowerCase().includes(q) ||
+        c.numero_cuenta?.toLowerCase().includes(q) ||
+        c.cliente?.numero_expediente?.toLowerCase().includes(q) ||
+        c.cliente?.municipio?.toLowerCase().includes(q) ||
+        c.cliente?.colonia?.toLowerCase().includes(q)
       )
+      return true
     })
-    .sort((a, b) => prioridadCumplimiento(a) - prioridadCumplimiento(b))
+    .sort((a, b) => {
+      switch (ordenar) {
+        case 'nombre_az':   return (a.cliente?.nombre || '').localeCompare(b.cliente?.nombre || '', 'es')
+        case 'nombre_za':   return (b.cliente?.nombre || '').localeCompare(a.cliente?.nombre || '', 'es')
+        case 'cuenta_asc':  return (a.numero_cuenta || a.folio_cuenta || '').localeCompare(b.numero_cuenta || b.folio_cuenta || '', 'es', { numeric: true })
+        case 'cuenta_desc': return (b.numero_cuenta || b.folio_cuenta || '').localeCompare(a.numero_cuenta || a.folio_cuenta || '', 'es', { numeric: true })
+        case 'saldo_asc':   return parseFloat(a.saldo_actual) - parseFloat(b.saldo_actual)
+        case 'saldo_desc':  return parseFloat(b.saldo_actual) - parseFloat(a.saldo_actual)
+        case 'municipio':   return (a.cliente?.municipio || '').localeCompare(b.cliente?.municipio || '', 'es')
+        case 'ultimo_pago': {
+          const fa = a.fecha_ultimo_pago ? new Date(a.fecha_ultimo_pago) : new Date(0)
+          const fb = b.fecha_ultimo_pago ? new Date(b.fecha_ultimo_pago) : new Date(0)
+          return fb - fa
+        }
+        default:            return prioridadCumplimiento(a) - prioridadCumplimiento(b)
+      }
+    })
 
   const totalVencidas = cuentas.filter(estaVencida).length
 
@@ -796,14 +833,81 @@ export default function Cobranza() {
         )}
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 space-y-2">
         <input
           type="text"
-          placeholder="Buscar por cliente, folio o expediente..."
+          placeholder="Buscar por cliente, folio, municipio..."
           value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
           className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+        <div className="flex flex-wrap gap-2 items-center">
+          <select
+            value={ordenar}
+            onChange={e => setOrdenar(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            <option value="cumplimiento">Ordenar: Cumplimiento</option>
+            <option value="nombre_az">Nombre A → Z</option>
+            <option value="nombre_za">Nombre Z → A</option>
+            <option value="cuenta_asc">No. cuenta ↑</option>
+            <option value="cuenta_desc">No. cuenta ↓</option>
+            <option value="saldo_asc">Saldo menor → mayor</option>
+            <option value="saldo_desc">Saldo mayor → menor</option>
+            <option value="municipio">Municipio A → Z</option>
+            <option value="ultimo_pago">Último pago reciente</option>
+          </select>
+
+          <select
+            value={filtroEstado}
+            onChange={e => setFiltroEstado(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            <option value="">Estado: Todos</option>
+            <option value="activa">Activa</option>
+            <option value="atraso">Atraso</option>
+            <option value="moroso">Moroso</option>
+          </select>
+
+          {municipiosDisponibles.length > 0 && (
+            <select
+              value={filtroMunicipio}
+              onChange={e => { setFiltroMunicipio(e.target.value); setFiltroColonia('') }}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">Municipio: Todos</option>
+              {municipiosDisponibles.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          )}
+
+          {coloniasDisponibles.length > 0 && (
+            <select
+              value={filtroColonia}
+              onChange={e => setFiltroColonia(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">Localidad: Todas</option>
+              {coloniasDisponibles.map(col => (
+                <option key={col} value={col}>{col}</option>
+              ))}
+            </select>
+          )}
+
+          {hayFiltros && (
+            <button
+              onClick={() => { setOrdenar('cumplimiento'); setFiltroEstado(''); setFiltroMunicipio(''); setFiltroColonia(''); setSoloVencidas(false) }}
+              className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-100 transition"
+            >
+              ✕ Limpiar filtros
+            </button>
+          )}
+
+          <span className="text-xs text-gray-400 ml-auto">
+            {cuentasFiltradas.length} de {cuentas.length}
+          </span>
+        </div>
       </div>
 
       {/* Cards — móvil */}
