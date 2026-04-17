@@ -705,6 +705,12 @@ export default function Cobranza() {
 
   const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
+  const normalizar = (s) =>
+    (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+
+  const toTitleCase = (s) =>
+    (s || '').toLowerCase().replace(/(?:^|\s)\S/g, c => c.toUpperCase())
+
   const estadoColor = {
     activa:  'bg-green-100 text-green-700',
     atraso:  'bg-yellow-100 text-yellow-700',
@@ -755,13 +761,26 @@ export default function Cobranza() {
     return 1
   }
 
-  const municipiosDisponibles = [...new Set(cuentas.map(c => c.cliente?.municipio).filter(Boolean))].sort()
-  const coloniasDisponibles  = [...new Set(
-    cuentas
-      .filter(c => !filtroMunicipio || c.cliente?.municipio === filtroMunicipio)
-      .map(c => c.cliente?.colonia)
-      .filter(Boolean)
-  )].sort()
+  // Deduplicar municipios normalizando (ignora mayúsculas/minúsculas y acentos)
+  const municipiosMap = new Map()
+  cuentas.forEach(c => {
+    const raw = c.cliente?.municipio
+    if (!raw) return
+    const key = normalizar(raw)
+    if (!municipiosMap.has(key)) municipiosMap.set(key, toTitleCase(raw))
+  })
+  const municipiosDisponibles = [...municipiosMap.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
+
+  const coloniasMap = new Map()
+  cuentas
+    .filter(c => !filtroMunicipio || normalizar(c.cliente?.municipio) === filtroMunicipio)
+    .forEach(c => {
+      const raw = c.cliente?.colonia
+      if (!raw) return
+      const key = normalizar(raw)
+      if (!coloniasMap.has(key)) coloniasMap.set(key, toTitleCase(raw))
+    })
+  const coloniasDisponibles = [...coloniasMap.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
 
   const hayFiltros = filtroEstado || filtroMunicipio || filtroColonia || soloVencidas || ordenar !== 'cumplimiento'
 
@@ -769,8 +788,8 @@ export default function Cobranza() {
     .filter(c => {
       if (soloVencidas && !estaVencida(c)) return false
       if (filtroEstado && c.estado_cuenta !== filtroEstado) return false
-      if (filtroMunicipio && c.cliente?.municipio !== filtroMunicipio) return false
-      if (filtroColonia  && c.cliente?.colonia  !== filtroColonia)  return false
+      if (filtroMunicipio && normalizar(c.cliente?.municipio) !== filtroMunicipio) return false
+      if (filtroColonia  && normalizar(c.cliente?.colonia)  !== filtroColonia)  return false
       const q = busqueda.toLowerCase()
       if (q) return (
         c.cliente?.nombre.toLowerCase().includes(q) ||
@@ -876,8 +895,8 @@ export default function Cobranza() {
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="">Municipio: Todos</option>
-              {municipiosDisponibles.map(m => (
-                <option key={m} value={m}>{m}</option>
+              {municipiosDisponibles.map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
               ))}
             </select>
           )}
@@ -889,8 +908,8 @@ export default function Cobranza() {
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="">Localidad: Todas</option>
-              {coloniasDisponibles.map(col => (
-                <option key={col} value={col}>{col}</option>
+              {coloniasDisponibles.map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
               ))}
             </select>
           )}
