@@ -124,8 +124,9 @@ router.post('/', auth, async (req, res) => {
   try {
     const { numero_expediente: _ignorado, ...resto } = req.body
 
-    // Evitar que campos enum vacíos generen error en Prisma
+    // Evitar que campos vacíos/desconocidos generen error en Prisma
     if (!resto.nivel_riesgo) resto.nivel_riesgo = null
+    if (!resto.plus_code) delete resto.plus_code
 
     // Si viene plus_code pero no lat/lng, geocodear automáticamente
     if (resto.plus_code && !resto.latitud) {
@@ -269,6 +270,7 @@ router.put('/:id', auth, async (req, res) => {
   try {
     const data = { ...req.body }
     if (!data.nivel_riesgo) data.nivel_riesgo = null
+    if (!data.plus_code) delete data.plus_code
 
     // Si viene plus_code pero no lat/lng, geocodear automáticamente
     if (data.plus_code && !data.latitud) {
