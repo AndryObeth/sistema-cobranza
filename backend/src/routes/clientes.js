@@ -122,25 +122,33 @@ router.post('/importar-lote', auth, async (req, res) => {
 // POST /api/clientes — crear cliente
 router.post('/', auth, async (req, res) => {
   try {
-    const { numero_expediente: _ignorado, ...resto } = req.body
+    const b = req.body
 
-    // Evitar que campos vacíos/desconocidos generen error en Prisma
-    if (!resto.nivel_riesgo) resto.nivel_riesgo = null
-    if (!resto.plus_code) delete resto.plus_code
-
-    // Si viene plus_code pero no lat/lng, geocodear automáticamente
-    if (resto.plus_code && !resto.latitud) {
-      const coords = await geocodearPlusCode(resto.plus_code)
-      if (coords) { resto.latitud = coords.lat; resto.longitud = coords.lng }
-    }
-
-    // Auto-generar ID Expediente: total de clientes (incl. inactivos) + 1, con 4 dígitos
     const total = await prisma.cliente.count()
     const numero_expediente = String(total + 1).padStart(4, '0')
 
-    const cliente = await prisma.cliente.create({
-      data: { ...resto, numero_expediente, id_vendedor_alta: req.usuario.id }
-    })
+    const data = {
+      numero_expediente,
+      nombre:                  b.nombre                  || '',
+      alias:                   b.alias                   || null,
+      telefono:                b.telefono                || null,
+      municipio:               b.municipio               || null,
+      colonia:                 b.colonia                 || null,
+      direccion:               b.direccion               || null,
+      referencias:             b.referencias             || null,
+      ruta:                    b.ruta                    || null,
+      estado_cliente:          b.estado_cliente          || 'activo',
+      nivel_riesgo:            b.nivel_riesgo            || null,
+      observaciones_generales: b.observaciones_generales || null,
+      id_vendedor_alta:        req.usuario.id,
+    }
+
+    // Campos agregados en migraciones posteriores — solo incluir si el cliente los conoce
+    if (b.latitud  != null) data.latitud  = parseFloat(b.latitud)
+    if (b.longitud != null) data.longitud = parseFloat(b.longitud)
+    if (b.plus_code)        data.plus_code = b.plus_code
+
+    const cliente = await prisma.cliente.create({ data })
     res.status(201).json(cliente)
   } catch (error) {
     res.status(500).json({ error: 'Error al crear cliente', detalle: error.message })
@@ -268,14 +276,30 @@ router.put('/:id/plus-code', auth, async (req, res) => {
 // PUT /api/clientes/:id — actualizar cliente
 router.put('/:id', auth, async (req, res) => {
   try {
-    const data = { ...req.body }
-    if (!data.nivel_riesgo) data.nivel_riesgo = null
-    if (!data.plus_code) delete data.plus_code
+    const b = req.body
 
-    // Si viene plus_code pero no lat/lng, geocodear automáticamente
-    if (data.plus_code && !data.latitud) {
-      const coords = await geocodearPlusCode(data.plus_code)
-      if (coords) { data.latitud = coords.lat; data.longitud = coords.lng }
+    const data = {
+      nombre:                  b.nombre                  || '',
+      alias:                   b.alias                   || null,
+      telefono:                b.telefono                || null,
+      municipio:               b.municipio               || null,
+      colonia:                 b.colonia                 || null,
+      direccion:               b.direccion               || null,
+      referencias:             b.referencias             || null,
+      ruta:                    b.ruta                    || null,
+      estado_cliente:          b.estado_cliente          || 'activo',
+      nivel_riesgo:            b.nivel_riesgo            || null,
+      observaciones_generales: b.observaciones_generales || null,
+    }
+
+    if (b.latitud  != null) data.latitud  = parseFloat(b.latitud)
+    if (b.longitud != null) data.longitud = parseFloat(b.longitud)
+    if (b.plus_code) {
+      data.plus_code = b.plus_code
+      if (!b.latitud) {
+        const coords = await geocodearPlusCode(b.plus_code)
+        if (coords) { data.latitud = coords.lat; data.longitud = coords.lng }
+      }
     }
 
     const cliente = await prisma.cliente.update({
@@ -283,8 +307,8 @@ router.put('/:id', auth, async (req, res) => {
       data
     })
     res.json(cliente)
-  } catch {
-    res.status(500).json({ error: 'Error al actualizar cliente' })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar cliente', detalle: error.message })
   }
 })
 
