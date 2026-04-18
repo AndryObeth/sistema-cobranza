@@ -20,7 +20,7 @@ app.use('/api/cuentas',  require('./routes/cuentas'))
 app.use('/api/uploads', require('./routes/uploads'))
 
 app.get('/', (req, res) => {
-  res.json({ mensaje: 'Sistema cobranza activo ✅' })
+  res.json({ mensaje: 'Sistema cobranza activo ✅', version: 'b9f7555' })
 })
 
 const PORT = process.env.PORT || 3000
