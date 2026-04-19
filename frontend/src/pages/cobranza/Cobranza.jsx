@@ -56,6 +56,31 @@ export default function Cobranza() {
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroMunicipio, setFiltroMunicipio] = useState('')
   const [filtroColonia, setFiltroColonia] = useState('')
+  // Modo cobranza — checklist
+  const [modoCobranza, setModoCobranza]       = useState(false)
+  const [visitados, setVisitados]             = useState(new Set())
+  const [soloPendientes, setSoloPendientes]   = useState(false)
+
+  const toggleVisitado = (id) => {
+    setVisitados(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const activarModoCobranza = () => {
+    setModoCobranza(true)
+    setVisitados(new Set())
+    setSoloPendientes(false)
+  }
+
+  const salirModoCobranza = () => {
+    setModoCobranza(false)
+    setVisitados(new Set())
+    setSoloPendientes(false)
+  }
+
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null)
   const [modalAbierto, setModalAbierto] = useState(false)
 
@@ -818,8 +843,11 @@ export default function Cobranza() {
         default:            return prioridadCumplimiento(a) - prioridadCumplimiento(b)
       }
     })
+    .filter(c => !modoCobranza || !soloPendientes || !visitados.has(c.id_cuenta))
 
-  const totalVencidas = cuentas.filter(estaVencida).length
+  const totalVencidas    = cuentas.filter(estaVencida).length
+  const totalVisitados   = modoCobranza ? [...visitados].filter(id => cuentasFiltradas.find(c => c.id_cuenta === id) || visitados.has(id)).length : 0
+  const pendientesModo   = modoCobranza ? cuentasFiltradas.filter(c => !visitados.has(c.id_cuenta)).length : 0
 
   const saldo          = parseFloat(cuentaSeleccionada?.saldo_actual || 0)
   const montoIngresado = parseFloat(formPago.monto_pago || 0)
@@ -827,7 +855,7 @@ export default function Cobranza() {
 
   return (
     <Layout>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Cobranza</h2>
           <p className="text-gray-500 text-sm mt-1">{cuentas.length} cuentas activas
@@ -838,19 +866,77 @@ export default function Cobranza() {
             )}
           </p>
         </div>
-        {totalVencidas > 0 && (
+        <div className="flex items-center gap-2">
+          {totalVencidas > 0 && !modoCobranza && (
+            <button
+              onClick={() => setSoloVencidas(!soloVencidas)}
+              className={`text-sm px-3 py-1.5 rounded-lg font-medium transition border ${
+                soloVencidas
+                  ? 'bg-orange-500 text-white border-orange-500'
+                  : 'bg-orange-50 text-orange-700 border-orange-300 hover:bg-orange-100'
+              }`}
+            >
+              {soloVencidas ? '⚠️ Mostrando vencidas' : '⚠️ Ver vencidas'}
+            </button>
+          )}
           <button
-            onClick={() => setSoloVencidas(!soloVencidas)}
+            onClick={modoCobranza ? salirModoCobranza : activarModoCobranza}
             className={`text-sm px-3 py-1.5 rounded-lg font-medium transition border ${
-              soloVencidas
-                ? 'bg-orange-500 text-white border-orange-500'
-                : 'bg-orange-50 text-orange-700 border-orange-300 hover:bg-orange-100'
+              modoCobranza
+                ? 'bg-green-500 text-white border-green-500'
+                : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
             }`}
           >
-            {soloVencidas ? '⚠️ Mostrando vencidas' : '⚠️ Ver solo vencidas'}
+            {modoCobranza ? '✓ Salir modo cobranza' : '☑ Modo cobranza'}
           </button>
-        )}
+        </div>
       </div>
+
+      {/* Barra de progreso — modo cobranza */}
+      {modoCobranza && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-2xl px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <span className="text-sm font-semibold text-green-800">
+                {visitados.size} visitado{visitados.size !== 1 ? 's' : ''}
+              </span>
+              <span className="text-sm text-green-600 ml-1">
+                de {cuentasFiltradas.length + (soloPendientes ? visitados.size : 0)} en lista
+              </span>
+            </div>
+            <button
+              onClick={() => setSoloPendientes(!soloPendientes)}
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition border ${
+                soloPendientes
+                  ? 'bg-green-600 text-white border-green-600'
+                  : 'bg-white text-green-700 border-green-300 hover:bg-green-100'
+              }`}
+            >
+              {soloPendientes ? 'Mostrando pendientes' : 'Solo pendientes'}
+            </button>
+          </div>
+          <div className="w-full bg-green-100 rounded-full h-2">
+            <div
+              className="bg-green-500 h-2 rounded-full transition-all duration-300"
+              style={{
+                width: `${
+                  (cuentasFiltradas.length + (soloPendientes ? visitados.size : 0)) > 0
+                    ? (visitados.size / (cuentasFiltradas.length + (soloPendientes ? visitados.size : 0))) * 100
+                    : 0
+                }%`
+              }}
+            />
+          </div>
+          {visitados.size > 0 && (
+            <button
+              onClick={() => setVisitados(new Set())}
+              className="mt-2 text-xs text-green-600 hover:text-green-800"
+            >
+              Reiniciar checklist
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="mb-4 space-y-2">
         <input
@@ -935,53 +1021,98 @@ export default function Cobranza() {
           <p className="text-center text-gray-500 py-12">Cargando...</p>
         ) : cuentasFiltradas.length === 0 ? (
           <p className="text-center text-gray-400 py-12">No hay cuentas activas</p>
-        ) : cuentasFiltradas.map(c => (
-          <div key={c.id_cuenta} className="bg-white rounded-2xl shadow p-4">
-            <div className="flex items-start justify-between gap-2 mb-3">
-              <div className="min-w-0">
-                <p className="font-semibold text-gray-800 truncate">{c.cliente?.nombre}</p>
-                {c.numero_cuenta
-                  ? <p className="text-blue-600 text-xs font-mono font-semibold">Cta. {c.numero_cuenta}</p>
-                  : <p className="text-gray-400 text-xs font-mono">{c.folio_cuenta}</p>
-                }
-                {estadoSemanas(c.semanas_atraso)}
+        ) : cuentasFiltradas.map(c => {
+          const esVisitado = visitados.has(c.id_cuenta)
+          return (
+            <div
+              key={c.id_cuenta}
+              className={`rounded-2xl shadow p-4 transition-all ${
+                esVisitado ? 'bg-green-50 border border-green-200' : 'bg-white'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    {modoCobranza && (
+                      <button
+                        onClick={() => toggleVisitado(c.id_cuenta)}
+                        className={`shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition ${
+                          esVisitado
+                            ? 'bg-green-500 border-green-500 text-white'
+                            : 'border-gray-300 hover:border-green-400'
+                        }`}
+                      >
+                        {esVisitado && <span className="text-xs font-bold">✓</span>}
+                      </button>
+                    )}
+                    <div className="min-w-0">
+                      <p className={`font-semibold truncate ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>
+                        {c.cliente?.nombre}
+                      </p>
+                      {c.numero_cuenta
+                        ? <p className="text-blue-600 text-xs font-mono font-semibold">Cta. {c.numero_cuenta}</p>
+                        : <p className="text-gray-400 text-xs font-mono">{c.folio_cuenta}</p>
+                      }
+                      {estadoSemanas(c.semanas_atraso)}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  {esVisitado && (
+                    <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">Visitado</span>
+                  )}
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cuenta]}`}>
+                    {c.estado_cuenta}
+                  </span>
+                </div>
               </div>
-              <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cuenta]}`}>
-                {c.estado_cuenta}
-              </span>
-            </div>
 
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <p className="text-xs text-gray-400">Saldo</p>
-                <p className="text-xl font-bold text-gray-800">{fmt(c.saldo_actual)}</p>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-xs text-gray-400">Saldo</p>
+                  <p className={`text-xl font-bold ${esVisitado ? 'text-green-700' : 'text-gray-800'}`}>{fmt(c.saldo_actual)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-gray-400">Plan</p>
+                  <p className="text-sm text-gray-600">{c.plan_actual?.replace(/_/g, ' ')}</p>
+                  {estaVencida(c) && (
+                    <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Plan vencido</span>
+                  )}
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-400">Plan</p>
-                <p className="text-sm text-gray-600">{c.plan_actual?.replace(/_/g, ' ')}</p>
-                {estaVencida(c) && (
-                  <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Plan vencido</span>
+              <div className="mb-3">{badgeCumplimiento(c)}</div>
+
+              <div className="flex gap-2">
+                {modoCobranza && (
+                  <button
+                    onClick={() => toggleVisitado(c.id_cuenta)}
+                    className={`flex-1 py-3 rounded-xl text-sm font-semibold transition border-2 ${
+                      esVisitado
+                        ? 'bg-green-100 border-green-400 text-green-700 hover:bg-green-200'
+                        : 'bg-white border-gray-300 text-gray-600 hover:border-green-400 hover:text-green-600'
+                    }`}
+                  >
+                    {esVisitado ? '✓ Visitado' : 'Marcar visitado'}
+                  </button>
+                )}
+                <button
+                  onClick={() => abrirDetalle(c)}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-sm font-semibold transition"
+                >
+                  Ver detalle
+                </button>
+                {!modoCobranza && (
+                  <button
+                    onClick={() => abrirModal(c)}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition"
+                  >
+                    Registrar pago
+                  </button>
                 )}
               </div>
             </div>
-            <div className="mb-3">{badgeCumplimiento(c)}</div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => abrirDetalle(c)}
-                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-sm font-semibold transition"
-              >
-                Ver detalle
-              </button>
-              <button
-                onClick={() => abrirModal(c)}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition"
-              >
-                Registrar pago
-              </button>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Tabla — desktop */}
@@ -995,6 +1126,7 @@ export default function Cobranza() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  {modoCobranza && <th className="px-4 py-3 w-10"></th>}
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Cliente</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Cuenta</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
@@ -1007,11 +1139,26 @@ export default function Cobranza() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {cuentasFiltradas.map(c => (
-                  <tr key={c.id_cuenta} className="hover:bg-gray-50 transition">
+                {cuentasFiltradas.map(c => {
+                  const esVisitado = visitados.has(c.id_cuenta)
+                  return (
+                  <tr key={c.id_cuenta} className={`transition ${esVisitado ? 'bg-green-50' : 'hover:bg-gray-50'}`}>
+                    {modoCobranza && (
+                      <td className="px-4 py-4">
+                        <button
+                          onClick={() => toggleVisitado(c.id_cuenta)}
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition ${
+                            esVisitado ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-400'
+                          }`}
+                        >
+                          {esVisitado && <span className="text-xs font-bold">✓</span>}
+                        </button>
+                      </td>
+                    )}
                     <td className="px-6 py-4">
-                      <p className="font-medium text-gray-800">{c.cliente?.nombre}</p>
+                      <p className={`font-medium ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>{c.cliente?.nombre}</p>
                       {estadoSemanas(c.semanas_atraso)}
+                      {esVisitado && <span className="text-xs text-green-600 font-medium">✓ Visitado</span>}
                     </td>
                     <td className="px-6 py-4 font-mono text-xs">
                       {c.numero_cuenta
@@ -1029,7 +1176,7 @@ export default function Cobranza() {
                       <span className="capitalize">{c.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</span>
                       {c.horario_preferido && <p className="text-gray-400">{c.horario_preferido}</p>}
                     </td>
-                    <td className="px-6 py-4 font-bold text-gray-800">{fmt(c.saldo_actual)}</td>
+                    <td className={`px-6 py-4 font-bold ${esVisitado ? 'text-green-700' : 'text-gray-800'}`}>{fmt(c.saldo_actual)}</td>
                     <td className="px-6 py-4 text-gray-500 text-xs">
                       {c.fecha_ultimo_pago
                         ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX')
@@ -1043,22 +1190,37 @@ export default function Cobranza() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
+                        {modoCobranza && (
+                          <button
+                            onClick={() => toggleVisitado(c.id_cuenta)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition border ${
+                              esVisitado
+                                ? 'bg-green-100 border-green-300 text-green-700 hover:bg-green-200'
+                                : 'bg-white border-gray-300 text-gray-600 hover:border-green-400'
+                            }`}
+                          >
+                            {esVisitado ? '✓ Visitado' : 'Marcar'}
+                          </button>
+                        )}
                         <button
                           onClick={() => abrirDetalle(c)}
                           className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition"
                         >
                           Ver detalle
                         </button>
-                        <button
-                          onClick={() => abrirModal(c)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition"
-                        >
-                          Registrar pago
-                        </button>
+                        {!modoCobranza && (
+                          <button
+                            onClick={() => abrirModal(c)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                          >
+                            Registrar pago
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
