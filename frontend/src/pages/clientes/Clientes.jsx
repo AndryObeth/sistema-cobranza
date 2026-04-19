@@ -392,7 +392,9 @@ export default function Clientes() {
       cerrarModal()
       cargarClientes()
     } catch (err) {
-      setError(err.response?.data?.error || (clienteEditando ? 'Error al actualizar cliente' : 'Error al guardar cliente'))
+      const msg  = err.response?.data?.error   || (clienteEditando ? 'Error al actualizar cliente' : 'Error al guardar cliente')
+      const det  = err.response?.data?.detalle || ''
+      setError(det ? `${msg}: ${det}` : msg)
     } finally {
       setGuardando(false)
     }
