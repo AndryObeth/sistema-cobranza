@@ -151,7 +151,12 @@ router.post('/', auth, async (req, res) => {
     const cliente = await prisma.cliente.create({ data })
     res.status(201).json(cliente)
   } catch (error) {
-    res.status(500).json({ error: 'Error al crear cliente', detalle: error.message })
+    res.status(500).json({
+      error:   'Error al crear cliente',
+      detalle: error?.message || String(error) || 'sin detalle',
+      tipo:    error?.constructor?.name || 'desconocido',
+      codigo:  error?.code || null,
+    })
   }
 })
 
