@@ -209,7 +209,7 @@ router.get('/verificar-vencimientos', auth, async (req, res) => {
 
 router.post('/:id/cambiar-plan', auth, async (req, res) => {
   try {
-    if (req.usuario.rol !== 'administrador') {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
       return res.status(403).json({ error: 'Solo el administrador puede cambiar el plan' })
     }
 
@@ -290,7 +290,7 @@ router.post('/:id/cambiar-plan', auth, async (req, res) => {
 
 router.post('/procesar-vencimientos', auth, async (req, res) => {
   try {
-    if (req.usuario.rol !== 'administrador') {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
       return res.status(403).json({ error: 'Solo el administrador puede procesar vencimientos' })
     }
 
@@ -403,7 +403,7 @@ router.get('/cliente/:id_cliente', auth, async (req, res) => {
 
 router.post('/fusionar', auth, async (req, res) => {
   try {
-    if (req.usuario.rol !== 'administrador') {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
       return res.status(403).json({ error: 'Solo el administrador puede fusionar cuentas' })
     }
 

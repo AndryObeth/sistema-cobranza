@@ -81,7 +81,7 @@ router.get('/:id', auth, async (req, res) => {
 
 // POST /api/clientes/importar-lote — inserción masiva (debe ir antes de /:id)
 router.post('/importar-lote', auth, async (req, res) => {
-  if (req.usuario.rol !== 'administrador') {
+  if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
     return res.status(403).json({ error: 'Solo el administrador puede importar clientes' })
   }
   const clientes = req.body // array de clientes

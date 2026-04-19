@@ -148,7 +148,7 @@ router.put('/cuenta/:id/frecuencia', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const { id_cuenta, monto_pago, tipo_pago, origen_pago, observaciones, fecha_pago } = req.body
-    const esAdmin = req.usuario.rol === 'administrador'
+    const esAdmin = ['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)
     const fechaPago = esAdmin && fecha_pago ? new Date(fecha_pago + 'T12:00:00') : new Date()
 
     const monto = parseFloat(monto_pago)

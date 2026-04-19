@@ -59,7 +59,7 @@ router.post('/', auth, async (req, res) => {
       id_vendedor: id_vendedor_body
     } = req.body
 
-    const esAdmin = req.usuario.rol === 'administrador'
+    const esAdmin = ['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)
     const esSecretaria = req.usuario.rol === 'secretaria'
     // Admin/secretaria pueden asignar otro vendedor; el resto usa su propio id
     const id_vendedor_final = (esAdmin || esSecretaria) && id_vendedor_body
@@ -154,7 +154,7 @@ router.post('/', auth, async (req, res) => {
 // PUT /api/ventas/:id — editar venta (solo administrador)
 router.put('/:id', auth, async (req, res) => {
   try {
-    if (req.usuario.rol !== 'administrador') {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
       return res.status(403).json({ error: 'Solo el administrador puede editar ventas' })
     }
 

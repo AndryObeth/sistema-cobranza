@@ -43,6 +43,7 @@ enum RolUsuario {
   vendedor
   cobrador
   jefe_camioneta
+  supervisor_cobranza
 }
 
 // ─────────────────────────────────────────

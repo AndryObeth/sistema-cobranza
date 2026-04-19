@@ -4,16 +4,16 @@ import { useAuth } from '../context/AuthContext'
 import { queueCount, sincronizarCola } from '../utils/offlineQueue'
 
 const menu = [
-  { path: '/',          label: 'Dashboard',  icono: '📊', roles: ['administrador'] },
-  { path: '/clientes',  label: 'Clientes',   icono: '👥', roles: ['administrador', 'secretaria', 'vendedor', 'jefe_camioneta'] },
-  { path: '/productos', label: 'Productos',  icono: '📦', roles: ['administrador', 'secretaria', 'vendedor', 'jefe_camioneta'] },
-  { path: '/ventas',    label: 'Ventas',     icono: '🧾', roles: ['administrador', 'secretaria', 'vendedor', 'jefe_camioneta'] },
-  { path: '/cobranza',  label: 'Cobranza',   icono: '💰', roles: ['cobrador', 'administrador'] },
-  { path: '/visitas',   label: 'Agenda',     icono: '📅', roles: ['cobrador', 'administrador'] },
-  { path: '/mapa',      label: 'Mapa',       icono: '🗺️',  roles: ['cobrador', 'jefe_camioneta', 'administrador'] },
-  { path: '/listado',   label: 'Listado',    icono: '📋', roles: ['administrador'] },
-  { path: '/cortes',    label: 'Cortes',     icono: '✂️',  roles: ['administrador'] },
-  { path: '/usuarios',  label: 'Usuarios',   icono: '👤', roles: ['administrador'] },
+  { path: '/',          label: 'Dashboard',  icono: '📊', roles: ['administrador', 'supervisor_cobranza'] },
+  { path: '/clientes',  label: 'Clientes',   icono: '👥', roles: ['administrador', 'supervisor_cobranza', 'secretaria', 'vendedor', 'jefe_camioneta'] },
+  { path: '/productos', label: 'Productos',  icono: '📦', roles: ['administrador', 'supervisor_cobranza', 'secretaria', 'vendedor', 'jefe_camioneta'] },
+  { path: '/ventas',    label: 'Ventas',     icono: '🧾', roles: ['administrador', 'supervisor_cobranza', 'secretaria', 'vendedor', 'jefe_camioneta'] },
+  { path: '/cobranza',  label: 'Cobranza',   icono: '💰', roles: ['cobrador', 'administrador', 'supervisor_cobranza'] },
+  { path: '/visitas',   label: 'Agenda',     icono: '📅', roles: ['cobrador', 'administrador', 'supervisor_cobranza'] },
+  { path: '/mapa',      label: 'Mapa',       icono: '🗺️',  roles: ['cobrador', 'jefe_camioneta', 'administrador', 'supervisor_cobranza'] },
+  { path: '/listado',   label: 'Listado',    icono: '📋', roles: ['administrador', 'supervisor_cobranza'] },
+  { path: '/cortes',    label: 'Cortes',     icono: '✂️',  roles: ['administrador', 'supervisor_cobranza'] },
+  { path: '/usuarios',  label: 'Usuarios',   icono: '👤', roles: ['administrador', 'supervisor_cobranza'] },
 ]
 
 export default function Layout({ children }) {

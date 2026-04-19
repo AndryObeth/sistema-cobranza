@@ -117,14 +117,14 @@ function TabCobrador({ usuario }) {
   const [cargando, setCargando] = useState(false)
   const [modalAbierto, setModalAbierto] = useState(false)
 
-  const esCobrador = usuario?.rol === 'cobrador'
+  const esCobrador = ['cobrador', 'supervisor_cobranza'].includes(usuario?.rol)
 
   useEffect(() => {
     if (esCobrador) {
       setIdCobrador(usuario.id)
     } else {
       api.get('/usuarios').then(r => {
-        const cobs = r.data.filter(u => u.rol === 'cobrador' && u.activo)
+        const cobs = r.data.filter(u => ['cobrador', 'supervisor_cobranza'].includes(u.rol) && u.activo)
         setCobradores(cobs)
         if (cobs.length > 0) setIdCobrador(cobs[0].id_usuario)
       }).catch(() => {})
@@ -200,7 +200,7 @@ function TabCobrador({ usuario }) {
           <div className="bg-white rounded-xl shadow-sm border">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="font-semibold text-gray-800">Pagos de la semana</h3>
-              {usuario?.rol === 'administrador' && resumen.cantidad_pagos > 0 && (
+              {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && resumen.cantidad_pagos > 0 && (
                 <button
                   onClick={() => setModalAbierto(true)}
                   className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"

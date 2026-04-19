@@ -185,7 +185,7 @@ export default function Dashboard() {
         </div>
       )}
       {/* Consulta de cobros por fecha */}
-      {['administrador', 'secretaria'].includes(usuario?.rol) && (
+      {['administrador', 'supervisor_cobranza', 'secretaria'].includes(usuario?.rol) && (
         <div className="mt-6 bg-white rounded-2xl shadow overflow-hidden">
           <button
             onClick={() => setVerConsulta(!verConsulta)}
