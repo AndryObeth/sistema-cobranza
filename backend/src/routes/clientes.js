@@ -124,8 +124,12 @@ router.post('/', auth, async (req, res) => {
   try {
     const b = req.body
 
-    const total = await prisma.cliente.count()
-    const numero_expediente = String(total + 1).padStart(4, '0')
+    const ultimo = await prisma.cliente.findFirst({
+      orderBy: { numero_expediente: 'desc' },
+      select:  { numero_expediente: true }
+    })
+    const siguiente = ultimo ? parseInt(ultimo.numero_expediente, 10) + 1 : 1
+    const numero_expediente = String(siguiente).padStart(4, '0')
 
     const data = {
       numero_expediente,
@@ -151,12 +155,7 @@ router.post('/', auth, async (req, res) => {
     const cliente = await prisma.cliente.create({ data })
     res.status(201).json(cliente)
   } catch (error) {
-    res.status(500).json({
-      error:   'Error al crear cliente',
-      detalle: error?.message || String(error) || 'sin detalle',
-      tipo:    error?.constructor?.name || 'desconocido',
-      codigo:  error?.code || null,
-    })
+    res.status(500).json({ error: 'Error al crear cliente', detalle: error.message })
   }
 })
 
