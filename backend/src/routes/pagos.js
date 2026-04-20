@@ -74,8 +74,9 @@ router.get('/por-fecha', auth, async (req, res) => {
     if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
       return res.status(400).json({ error: 'Se requiere fecha en formato YYYY-MM-DD' })
     }
-    const inicio = new Date(fecha + 'T00:00:00.000Z')
-    const fin    = new Date(fecha + 'T23:59:59.999Z')
+    // México City es UTC-6 permanente desde nov 2022 (eliminó horario de verano)
+    const inicio = new Date(fecha + 'T00:00:00.000-06:00')
+    const fin    = new Date(fecha + 'T23:59:59.999-06:00')
 
     const where = { fecha_pago: { gte: inicio, lte: fin } }
     if (req.usuario.rol === 'cobrador') where.id_cobrador = req.usuario.id

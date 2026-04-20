@@ -109,7 +109,7 @@ export default function Dashboard() {
           Bienvenido, {usuario?.nombre} 👋
         </h2>
         <p className="text-gray-500 mt-1 text-sm">
-          {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Mexico_City' })}
         </p>
       </div>
 

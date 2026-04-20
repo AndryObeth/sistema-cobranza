@@ -373,8 +373,8 @@ export default function Cobranza() {
 
     const fmtMXN = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
     const fecha  = new Date(fecha_pago)
-    const fechaStr = fecha.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    const horaStr  = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    const fechaStr = fecha.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Mexico_City' })
+    const horaStr  = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })
     const folioPago = `TICKET-${String(id_pago).padStart(6, '0')}`
     const origenStr = { domicilio: 'Domicilio', calle: 'Calle', oficina: 'Oficina' }[origen_pago] || origen_pago
     const tipoStr   = { abono: 'Abono', liquidacion: 'Liquidación', pago_extra: 'Pago extra', recuperacion_enganche: 'Rec. enganche' }[tipo_pago] || tipo_pago
@@ -1179,7 +1179,7 @@ export default function Cobranza() {
                     <td className={`px-6 py-4 font-bold ${esVisitado ? 'text-green-700' : 'text-gray-800'}`}>{fmt(c.saldo_actual)}</td>
                     <td className="px-6 py-4 text-gray-500 text-xs">
                       {c.fecha_ultimo_pago
-                        ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX')
+                        ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })
                         : 'Sin pagos'}
                     </td>
                     <td className="px-6 py-4">{badgeCumplimiento(c)}</td>
@@ -1368,7 +1368,7 @@ export default function Cobranza() {
                   <div>
                     <p className="text-orange-800 text-sm font-semibold">⚠️ Plan vencido por incumplimiento</p>
                     <p className="text-orange-600 text-xs mt-0.5">
-                      Venció el {new Date(cuentaSeleccionada.fecha_limite).toLocaleDateString('es-MX')} —
+                      Venció el {new Date(cuentaSeleccionada.fecha_limite).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })} —
                       Plan actual: {LABEL_PLAN[cuentaSeleccionada.plan_actual]}
                     </p>
                   </div>
@@ -1486,7 +1486,7 @@ export default function Cobranza() {
                     <p className="text-xs text-gray-400 mb-0.5">Primer cobro</p>
                     <p className="font-medium text-gray-700">
                       {cuentaSeleccionada.fecha_primer_cobro
-                        ? new Date(cuentaSeleccionada.fecha_primer_cobro).toLocaleDateString('es-MX')
+                        ? new Date(cuentaSeleccionada.fecha_primer_cobro).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })
                         : '—'}
                     </p>
                   </div>
@@ -1826,7 +1826,7 @@ export default function Cobranza() {
                           <span className="text-yellow-600 ml-2 text-xs">{op.datos.tipo_pago}</span>
                           <span className="ml-2 px-1.5 py-0.5 bg-yellow-200 text-yellow-800 text-xs rounded-full font-medium">Pendiente de sincronizar</span>
                         </div>
-                        <p className="text-yellow-600 text-xs">{new Date(op.timestamp).toLocaleDateString('es-MX')}</p>
+                        <p className="text-yellow-600 text-xs">{new Date(op.timestamp).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
                       </div>
                     ))}
                     {/* Pagos sincronizados */}
@@ -1841,7 +1841,7 @@ export default function Cobranza() {
                               <p className="text-purple-500 text-xs mt-0.5">{p.observaciones.replace('Fusión: cuentas anexadas ', '')}</p>
                             </div>
                             <div className="text-right">
-                              <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX')}</p>
+                              <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
                               <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
                             </div>
                           </div>
@@ -1854,7 +1854,7 @@ export default function Cobranza() {
                             <span className="text-gray-400 ml-2 text-xs">{p.tipo_pago}</span>
                           </div>
                           <div className="text-right">
-                            <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX')}</p>
+                            <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
                             <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
                           </div>
                         </div>
@@ -1879,9 +1879,9 @@ export default function Cobranza() {
                         {v.comentario && <span className="text-gray-600 text-xs">{v.comentario}</span>}
                       </div>
                       <div className="text-right shrink-0 ml-3">
-                        <p className="text-gray-500 text-xs">{new Date(v.fecha_registro).toLocaleDateString('es-MX')}</p>
+                        <p className="text-gray-500 text-xs">{new Date(v.fecha_registro).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
                         {v.fecha_programada && (
-                          <p className="text-blue-500 text-xs">Cita: {new Date(v.fecha_programada).toLocaleDateString('es-MX')}</p>
+                          <p className="text-blue-500 text-xs">Cita: {new Date(v.fecha_programada).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
                         )}
                         <p className="text-gray-400 text-xs">{v.usuario?.nombre}</p>
                       </div>
@@ -2246,7 +2246,7 @@ export default function Cobranza() {
                               {p.observaciones && !esFusion && <p className="text-gray-400 text-xs mt-0.5">{p.observaciones}</p>}
                             </div>
                             <div className="text-right">
-                              <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX')}</p>
+                              <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
                               <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
                             </div>
                           </div>
@@ -2272,8 +2272,8 @@ export default function Cobranza() {
                             {v.comentario && <span className="text-gray-600 text-xs">{v.comentario}</span>}
                           </div>
                           <div className="text-right shrink-0 ml-3">
-                            <p className="text-gray-500 text-xs">{new Date(v.fecha_registro).toLocaleDateString('es-MX')}</p>
-                            {v.fecha_programada && <p className="text-blue-500 text-xs">Cita: {new Date(v.fecha_programada).toLocaleDateString('es-MX')}</p>}
+                            <p className="text-gray-500 text-xs">{new Date(v.fecha_registro).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
+                            {v.fecha_programada && <p className="text-blue-500 text-xs">Cita: {new Date(v.fecha_programada).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>}
                             <p className="text-gray-400 text-xs">{v.usuario?.nombre}</p>
                           </div>
                         </div>

@@ -194,7 +194,7 @@ export default function Usuarios() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-gray-500">
-                    {new Date(u.fecha_creacion).toLocaleDateString('es-MX')}
+                    {new Date(u.fecha_creacion).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}
                   </td>
                   <td className="px-6 py-4">
                     <button

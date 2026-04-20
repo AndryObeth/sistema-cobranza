@@ -4,7 +4,7 @@ import api from '../../api'
 import Layout from '../../components/Layout'
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0)
-const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX') : '—'
+const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
 
 // ─── badge estado ────────────────────────────────
 function BadgeEstado({ estado }) {

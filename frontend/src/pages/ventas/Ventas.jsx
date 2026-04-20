@@ -397,7 +397,7 @@ export default function Ventas() {
                       )}
                       <p className={`font-medium whitespace-nowrap ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{fmt(v.precio_final_total)}</p>
                     </td>
-                    <td className={`hidden md:table-cell px-6 py-4 ${liquidada ? 'text-gray-400' : 'text-gray-500'}`}>{new Date(v.fecha_venta).toLocaleDateString('es-MX')}</td>
+                    <td className={`hidden md:table-cell px-6 py-4 ${liquidada ? 'text-gray-400' : 'text-gray-500'}`}>{new Date(v.fecha_venta).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</td>
                     <td className="px-4 md:px-6 py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         v.estatus_venta === 'activa'    ? 'bg-green-100 text-green-700' :

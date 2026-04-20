@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
-const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX') : '—'
+const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
 
 const estadoCuentaColor = {
   activa:    'bg-green-100 text-green-700',

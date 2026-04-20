@@ -59,7 +59,7 @@ export default function Listado() {
       parseFloat(c.saldo_actual).toFixed(2),
       PLAN_LABEL[c.plan_actual] || c.plan_actual,
       c.estado_cuenta,
-      c.fecha_ultimo_pago ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX') : '',
+      c.fecha_ultimo_pago ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '',
     ])
     const csv = [encabezado, ...filas]
       .map(fila => fila.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
@@ -161,7 +161,7 @@ export default function Listado() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">
-                        {c.fecha_ultimo_pago ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX') : '—'}
+                        {c.fecha_ultimo_pago ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-800">{fmt(c.saldo_actual)}</td>
                     </tr>
