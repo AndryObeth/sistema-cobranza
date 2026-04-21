@@ -2099,35 +2099,36 @@ export default function Cobranza() {
           <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl h-[95vh] sm:h-auto sm:max-h-[95vh] overflow-y-auto">
 
             {/* Header */}
-            <div className="flex items-center justify-between p-4 md:p-6 border-b sticky top-0 bg-white z-10">
-              <div>
+            <div className="flex items-center justify-between gap-2 p-4 md:p-6 border-b sticky top-0 bg-white z-10">
+              <div className="min-w-0 flex-1">
                 {cargandoDetalle
                   ? <p className="text-gray-400 text-sm animate-pulse">Cargando...</p>
                   : <>
-                      <h3 className="text-lg font-bold text-gray-800">{cuentaDetalle?.cliente?.nombre}</h3>
-                      <p className="text-gray-500 text-sm">
+                      <h3 className="text-base font-bold text-gray-800 truncate">{cuentaDetalle?.cliente?.nombre}</h3>
+                      <p className="text-gray-500 text-xs mt-0.5 truncate">
                         {cuentaDetalle?.numero_cuenta
                           ? <span className="text-blue-600 font-semibold">No. cuenta: {cuentaDetalle.numero_cuenta}</span>
                           : cuentaDetalle?.folio_cuenta}
                         {cuentaDetalle?.cliente?.numero_expediente &&
-                          <span className="ml-2 text-gray-400 text-xs">Exp. {cuentaDetalle.cliente.numero_expediente}</span>}
+                          <span className="ml-2 text-gray-400">Exp. {cuentaDetalle.cliente.numero_expediente}</span>}
                       </p>
                     </>
                 }
               </div>
-              <div className="flex items-center gap-2">
-                {!cargandoDetalle && cuentaDetalle && ['cobrador','jefe_camioneta','administrador'].includes(usuario?.rol) && (
+              <div className="flex items-center gap-2 shrink-0">
+                {!cargandoDetalle && cuentaDetalle && ['cobrador','jefe_camioneta','administrador','supervisor_cobranza'].includes(usuario?.rol) && (
                   <button
                     type="button"
                     onClick={() => { setPanelUbicDet(!panelUbicDet); setModoUbicDet('opciones'); setUbicPendDet(null); setUbicInputDet('') }}
-                    className={`text-xs px-3 py-1.5 rounded-lg font-medium transition min-h-[36px] ${
+                    className={`text-xs px-2 sm:px-3 py-1.5 rounded-lg font-medium transition min-h-[36px] ${
                       panelUbicDet ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
-                    📍 {panelUbicDet ? 'Cancelar' : 'Corregir ubicación'}
+                    <span className="sm:hidden">📍</span>
+                    <span className="hidden sm:inline">📍 {panelUbicDet ? 'Cancelar' : 'Corregir ubicación'}</span>
                   </button>
                 )}
-                <button onClick={cerrarDetalle} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+                <button onClick={cerrarDetalle} className="text-gray-400 hover:text-gray-600 text-xl shrink-0">✕</button>
               </div>
             </div>
 
