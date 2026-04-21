@@ -289,7 +289,9 @@ export default function Clientes() {
   const esAdmin = usuario?.rol === 'administrador'
 
   const [clientes, setClientes]             = useState([])
-  const [busqueda, setBusqueda]             = useState('')
+  const [filtroExp, setFiltroExp]           = useState('')
+  const [filtroNombre, setFiltroNombre]     = useState('')
+  const [filtroRuta, setFiltroRuta]         = useState('')
   const [cargando, setCargando]             = useState(true)
   const [modalAbierto, setModalAbierto]     = useState(false)
   const [clienteEditando, setClienteEditando] = useState(null) // id o null
@@ -313,11 +315,14 @@ export default function Clientes() {
     }
   }
 
-  const clientesFiltrados = clientes.filter(c =>
-    c.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-    c.numero_expediente.toLowerCase().includes(busqueda.toLowerCase()) ||
-    (c.telefono && c.telefono.includes(busqueda))
-  )
+  const rutasDisponibles = [...new Set(clientes.map(c => c.ruta).filter(Boolean))].sort()
+
+  const clientesFiltrados = clientes.filter(c => {
+    if (filtroExp    && !c.numero_expediente.toLowerCase().includes(filtroExp.toLowerCase())) return false
+    if (filtroNombre && !c.nombre.toLowerCase().includes(filtroNombre.toLowerCase())) return false
+    if (filtroRuta   && c.ruta !== filtroRuta) return false
+    return true
+  })
 
   const abrirNuevo = () => {
     setClienteEditando(null)
@@ -425,7 +430,11 @@ export default function Clientes() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Clientes</h2>
-          <p className="text-gray-500 text-sm mt-1">{clientes.length} clientes registrados</p>
+          <p className="text-gray-500 text-sm mt-1">
+            {clientesFiltrados.length !== clientes.length
+              ? `${clientesFiltrados.length} de ${clientes.length} clientes`
+              : `${clientes.length} clientes registrados`}
+          </p>
         </div>
         <button onClick={abrirNuevo}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
@@ -433,11 +442,37 @@ export default function Clientes() {
         </button>
       </div>
 
-      <div className="mb-4">
-        <input type="text" placeholder="Buscar por nombre, número de expediente o teléfono..."
-          value={busqueda} onChange={e => setBusqueda(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      <div className="mb-4 flex flex-col sm:flex-row gap-2">
+        <input
+          type="text"
+          placeholder="No. expediente…"
+          value={filtroExp}
+          onChange={e => setFiltroExp(e.target.value)}
+          className="w-full sm:w-36 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+        <input
+          type="text"
+          placeholder="Buscar por nombre…"
+          value={filtroNombre}
+          onChange={e => setFiltroNombre(e.target.value)}
+          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <select
+          value={filtroRuta}
+          onChange={e => setFiltroRuta(e.target.value)}
+          className="w-full sm:w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">Todas las rutas</option>
+          {rutasDisponibles.map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+        {(filtroExp || filtroNombre || filtroRuta) && (
+          <button
+            onClick={() => { setFiltroExp(''); setFiltroNombre(''); setFiltroRuta('') }}
+            className="text-xs text-gray-500 hover:text-gray-700 px-3 py-2 border border-gray-200 rounded-lg whitespace-nowrap"
+          >
+            Limpiar
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl shadow overflow-hidden">
