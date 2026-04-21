@@ -284,6 +284,86 @@ router.put('/:id/plus-code', auth, async (req, res) => {
   }
 })
 
+// ── Ubicaciones ──────────────────────────────────────────────────────────────
+
+// GET /api/clientes/:id/ubicaciones
+router.get('/:id/ubicaciones', auth, async (req, res) => {
+  try {
+    const ubicaciones = await prisma.ubicacionCliente.findMany({
+      where: { id_cliente: parseInt(req.params.id), activo: true },
+      orderBy: [{ es_principal: 'desc' }, { id_ubicacion: 'asc' }]
+    })
+    res.json(ubicaciones)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener ubicaciones', detalle: error.message })
+  }
+})
+
+// POST /api/clientes/:id/ubicaciones
+router.post('/:id/ubicaciones', auth, async (req, res) => {
+  try {
+    const { etiqueta, nombre_contacto, descripcion, latitud, longitud, plus_code, es_principal } = req.body
+    if (!etiqueta?.trim()) return res.status(400).json({ error: 'La etiqueta es requerida' })
+    const idCliente = parseInt(req.params.id)
+    if (es_principal) {
+      await prisma.ubicacionCliente.updateMany({
+        where: { id_cliente: idCliente, es_principal: true },
+        data:  { es_principal: false }
+      })
+    }
+    const data = { id_cliente: idCliente, etiqueta: etiqueta.trim(),
+      nombre_contacto: nombre_contacto || null, descripcion: descripcion || null,
+      es_principal: !!es_principal }
+    if (latitud  != null) data.latitud   = parseFloat(latitud)
+    if (longitud != null) data.longitud  = parseFloat(longitud)
+    if (plus_code)        data.plus_code = plus_code
+    const ubicacion = await prisma.ubicacionCliente.create({ data })
+    res.status(201).json(ubicacion)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al crear ubicación', detalle: error.message })
+  }
+})
+
+// PUT /api/clientes/:id/ubicaciones/:uid
+router.put('/:id/ubicaciones/:uid', auth, async (req, res) => {
+  try {
+    const { etiqueta, nombre_contacto, descripcion, latitud, longitud, plus_code, es_principal } = req.body
+    const idCliente = parseInt(req.params.id)
+    const idUbic    = parseInt(req.params.uid)
+    if (es_principal) {
+      await prisma.ubicacionCliente.updateMany({
+        where: { id_cliente: idCliente, es_principal: true, id_ubicacion: { not: idUbic } },
+        data:  { es_principal: false }
+      })
+    }
+    const data = {}
+    if (etiqueta)                    data.etiqueta        = etiqueta.trim()
+    if (nombre_contacto !== undefined) data.nombre_contacto = nombre_contacto || null
+    if (descripcion     !== undefined) data.descripcion     = descripcion     || null
+    if (latitud  != null) data.latitud   = parseFloat(latitud)
+    if (longitud != null) data.longitud  = parseFloat(longitud)
+    if (plus_code !== undefined) data.plus_code = plus_code || null
+    if (es_principal !== undefined)  data.es_principal    = !!es_principal
+    const ubicacion = await prisma.ubicacionCliente.update({ where: { id_ubicacion: idUbic }, data })
+    res.json(ubicacion)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar ubicación', detalle: error.message })
+  }
+})
+
+// DELETE /api/clientes/:id/ubicaciones/:uid
+router.delete('/:id/ubicaciones/:uid', auth, async (req, res) => {
+  try {
+    await prisma.ubicacionCliente.update({
+      where: { id_ubicacion: parseInt(req.params.uid) },
+      data:  { activo: false }
+    })
+    res.json({ ok: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar ubicación', detalle: error.message })
+  }
+})
+
 // PUT /api/clientes/:id — actualizar cliente
 router.put('/:id', auth, async (req, res) => {
   try {

@@ -78,8 +78,26 @@ model Cliente {
   cuentas        Cuenta[]
   pagos          Pago[]
   seguimientos   SeguimientoCliente[]
+  ubicaciones    UbicacionCliente[]
 
   @@map("clientes")
+}
+
+model UbicacionCliente {
+  id_ubicacion    Int      @id @default(autoincrement())
+  id_cliente      Int
+  etiqueta        String
+  nombre_contacto String?
+  descripcion     String?
+  latitud         Float?
+  longitud        Float?
+  plus_code       String?
+  es_principal    Boolean  @default(false)
+  activo          Boolean  @default(true)
+
+  cliente         Cliente  @relation(fields: [id_cliente], references: [id_cliente])
+
+  @@map("ubicaciones_cliente")
 }
 
 enum EstadoCliente {

@@ -3,6 +3,7 @@ import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
+import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
@@ -67,6 +68,7 @@ function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
         <div className="flex gap-1 px-6 pt-4 border-b">
           {[
             { id: 'datos',        label: 'Datos' },
+            { id: 'ubicaciones',  label: 'Ubicaciones' },
             { id: 'compras',      label: `Compras (${cliente.ventas?.length || 0})` },
             { id: 'cuentas',      label: `Cuentas (${cliente.cuentas?.length || 0})` },
             { id: 'seguimientos', label: `Seguimientos (${cliente.seguimientos?.length || 0})` },
@@ -249,6 +251,10 @@ function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
                 ))}
               </div>
             )
+          )}
+
+          {tab === 'ubicaciones' && (
+            <UbicacionesPanel idCliente={cliente.id_cliente} puedeEditar={puedeEditar} />
           )}
         </div>
       </div>

@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
 import { encolarPago, encolarVisita, getQueue } from '../../utils/offlineQueue.js'
 import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
+import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 
 const visitaColor = {
   promesa_pago:        'bg-green-100 text-green-700',
@@ -2293,6 +2294,15 @@ export default function Cobranza() {
                     </div>
                   </div>
                 )}
+
+                {/* Ubicaciones */}
+                <div className="p-4 md:p-6 border-b">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Ubicaciones</p>
+                  <UbicacionesPanel
+                    idCliente={cuentaDetalle.cliente?.id_cliente}
+                    puedeEditar={['cobrador','administrador','supervisor_cobranza','jefe_camioneta'].includes(usuario?.rol)}
+                  />
+                </div>
 
                 {/* Historial de pagos */}
                 {historialPagosDetalle.length > 0 && (
