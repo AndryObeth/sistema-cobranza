@@ -61,6 +61,17 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          {
+            // GET /api/ventas — listado de ventas
+            urlPattern: ({ url }) => url.pathname.includes('/api/ventas'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-ventas',
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
       },
     }),

@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
-import { encolarPago, getQueue } from '../../utils/offlineQueue.js'
+import { encolarPago, encolarVisita, getQueue } from '../../utils/offlineQueue.js'
 import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
 
 const visitaColor = {
@@ -535,8 +535,17 @@ export default function Cobranza() {
               folio_cuenta:   cuentaSeleccionada.folio_cuenta,
             }
           })
+          if (registrarVisitaTambien && formVisita.comentario.trim()) {
+            encolarVisita({
+              id_cliente:       cuentaSeleccionada.id_cliente,
+              id_cuenta:        cuentaSeleccionada.id_cuenta,
+              tipo_seguimiento: 'visita',
+              comentario:       formVisita.comentario.trim(),
+            })
+          }
           setExito('__offline__')
           setFormPago(FORM_PAGO_VACIO)
+          setFormVisita(FORM_VISITA_VACIO)
           setRegistrarVisitaTambien(false)
           return
         }
@@ -609,6 +618,19 @@ export default function Cobranza() {
         // ── FLUJO 2: Solo registrar visita ──
         if (formVisita.tipo_seguimiento === 'promesa_pago' && !formVisita.fecha_programada) {
           setError('Indica la fecha de la promesa de pago')
+          return
+        }
+
+        if (!navigator.onLine) {
+          encolarVisita({
+            id_cliente:       cuentaSeleccionada.id_cliente,
+            id_cuenta:        cuentaSeleccionada.id_cuenta,
+            tipo_seguimiento: formVisita.tipo_seguimiento,
+            comentario:       formVisita.comentario || null,
+            fecha_programada: formVisita.fecha_programada || null,
+          })
+          setExito('__offline__')
+          setFormVisita({ ...FORM_VISITA_VACIO, tipo_seguimiento: 'no_localizado' })
           return
         }
 

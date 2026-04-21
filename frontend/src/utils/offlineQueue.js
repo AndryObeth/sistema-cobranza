@@ -38,6 +38,21 @@ export function encolarPago(datos) {
   return operacion
 }
 
+export function encolarVisita(datos) {
+  const queue = getQueue()
+  const operacion = {
+    id:           crypto.randomUUID(),
+    tipo:         'POST_VISITA',
+    datos,
+    timestamp:    Date.now(),
+    sincronizado: false,
+    error:        null,
+  }
+  queue.push(operacion)
+  saveQueue(queue)
+  return operacion
+}
+
 // ── Sincronizar la cola completa ──────────────────────────────────────────────
 
 export async function sincronizarCola() {
@@ -52,6 +67,8 @@ export async function sincronizarCola() {
     try {
       if (op.tipo === 'POST_PAGO') {
         await api.post('/pagos', op.datos)
+      } else if (op.tipo === 'POST_VISITA') {
+        await api.post('/visitas', op.datos)
       }
       // Marcar como sincronizado
       const idx = queue.findIndex(q => q.id === op.id)
