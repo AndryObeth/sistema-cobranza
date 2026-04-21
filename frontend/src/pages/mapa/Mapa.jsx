@@ -216,13 +216,17 @@ export default function Mapa() {
   }
 
   const procesarMarcadores = (data) => {
-    const conCoords = data.filter(c => c.cliente?.latitud && c.cliente?.longitud)
-    setMarcadores(conCoords.map(c => ({
-      cuenta: c,
-      latitud: parseFloat(c.cliente.latitud),
-      longitud: parseFloat(c.cliente.longitud),
-      sinPlusCode: !c.cliente?.plus_code,
-    })))
+    const conCoords = data.filter(c => {
+      const ubic = c.cliente?.ubicaciones?.[0]
+      return (ubic?.latitud && ubic?.longitud) || (c.cliente?.latitud && c.cliente?.longitud)
+    })
+    setMarcadores(conCoords.map(c => {
+      const ubic = c.cliente?.ubicaciones?.[0]
+      const lat = ubic?.latitud ? parseFloat(ubic.latitud) : parseFloat(c.cliente.latitud)
+      const lng = ubic?.longitud ? parseFloat(ubic.longitud) : parseFloat(c.cliente.longitud)
+      const plusCode = ubic?.plus_code || c.cliente?.plus_code
+      return { cuenta: c, latitud: lat, longitud: lng, sinPlusCode: !plusCode }
+    }))
   }
 
   // Geocodificar desde el backend (evita restricciones de dominio en la API key)
