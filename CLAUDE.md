@@ -11,7 +11,7 @@ Sistema ERP de gestión de crédito y cobranza para **Novedades Cancún** (Tuxte
 | Servicio | Plataforma | URL / ID |
 |---|---|---|
 | Frontend | Vercel | https://sistema-cobranza-hazel.vercel.app |
-| Backend | Render | `srv-d7alvsedqaus73bmc650` → `https://srv-d7alvsedqaus73bmc650.onrender.com` |
+| Backend | Render | `cobranza-backend-p8gs` → `https://cobranza-backend-p8gs.onrender.com` |
 | Base de datos | Supabase (PostgreSQL) | AWS Sa-East-1 |
 
 ### Variables de entorno
@@ -107,6 +107,7 @@ El middleware `auth.js` inyecta `req.usuario` con `{ id_usuario, rol, ruta_asign
 | GET | `/api/pagos/cartera/:id_cobrador` | Cuentas activas/atraso/moroso del cobrador |
 | GET | `/api/pagos/cuenta/:id` | Detalle con últimos 10 pagos |
 | GET | `/api/pagos/todas-cuentas` | Filtrado por ruta si es cobrador |
+| GET | `/api/pagos/por-fecha?fecha=YYYY-MM-DD` | Cobros del día agrupados por cobrador (admin/supervisor/secretaria) |
 | POST | `/api/pagos` | Registrar pago, actualiza saldo y comisiones |
 | PUT | `/api/pagos/cuenta/:id/frecuencia` | Frecuencia + horario preferido |
 | GET/POST/PUT | `/api/cuentas` | Cambio de plan, reestructuras |
@@ -122,6 +123,7 @@ El middleware `auth.js` inyecta `req.usuario` con `{ id_usuario, rol, ruta_asign
 | Rol | Acceso |
 |---|---|
 | `administrador` | Todo |
+| `supervisor_cobranza` | Igual que administrador, pero redirige a `/cobranza` al login y aparece en cortes como cobrador |
 | `secretaria` | Clientes, Productos, Ventas |
 | `vendedor` | Clientes, Productos, Ventas |
 | `cobrador` | Cobranza, Visitas, Mapa (filtrado por `ruta_asignada`) |
@@ -137,6 +139,12 @@ Cobradores y jefe_camioneta reciben datos filtrados por `ruta_asignada` en clien
 - **Sobreenganche** = `enganche_recibido - enganche_objetivo` (si pagó de más)
 - `monto_reportado_negocio` = `precio_final_total - enganche_para_vendedor`
 - Planes: `contado_directo`, `un_mes`, `dos_meses`, `tres_meses`, `largo_plazo`
+
+### Descuentos por Plan
+- **Plan 1 mes (`un_mes`):** 30% de descuento sobre `precio_original_total`
+- `precio_final_total` = `precio_original_total × 0.70`
+- `saldo_inicial` = `precio_final_total - abono_inicial`
+- `saldo_actual` = `precio_final_total - total_abonado` (enganche + pagos registrados)
 
 ### Comisiones
 - **Cobrador:** 12% de cada pago registrado (por defecto)
@@ -166,8 +174,13 @@ Cobradores y jefe_camioneta reciben datos filtrados por `ruta_asignada` en clien
 - Frontend: ESModules, componentes funcionales con hooks, Tailwind para estilos
 - IDs en BD: prefijo descriptivo (`id_cliente`, `id_venta`, `id_cobrador`, etc.)
 - Todos los montos monetarios: `Decimal @db.Decimal(10,2)` en Prisma
-- Fechas: siempre guardadas en UTC, mostradas en `es-MX`
+- Fechas: siempre guardadas en UTC, mostradas en `es-MX` con `timeZone: 'America/Mexico_City'` explícito
+- México City es UTC-6 permanente (eliminó horario de verano en nov 2022); los filtros de fecha usan offset `-06:00`
 - El frontend usa `api.js` (Axios) para todas las llamadas — nunca `fetch` directamente excepto Google Maps API
+
+## Scripts de corrección de datos
+
+Scripts `.cjs` en `backend/` para correcciones puntuales de BD. Se ejecutan con `node <script>.cjs` desde la carpeta `backend/`. Requieren `.env` con `DATABASE_URL`. Convención: mostrar estado actual y cálculo antes de aplicar; abortar si hay condición inesperada.
 
 ## Estado Actual
 
@@ -177,3 +190,9 @@ Cobradores y jefe_camioneta reciben datos filtrados por `ruta_asignada` en clien
 - Foto de fachada de clientes (base64 en BD)
 - Listado de cuentas con exportación CSV
 - Ordenamiento en listado de cuentas
+- Rol `supervisor_cobranza` implementado (migración aplicada en BD)
+- Filtros y ordenamiento en Cobranza (municipio, colonia, nombre, saldo, estado)
+- Modo cobranza con checklist de clientes visitados (in-memory, sin persistencia)
+- Consulta de cobros por fecha en Dashboard (admin/supervisor/secretaria)
+- Ticket de comprobante al registrar pago (popup HTML imprimible); popup bloqueado no causa error falso
+- Zona horaria: todos los `toLocaleDateString` usan `timeZone:'America/Mexico_City'`; `GET /pagos/por-fecha` filtra con offset `-06:00`
