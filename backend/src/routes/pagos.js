@@ -37,7 +37,7 @@ router.get('/cuenta/:id_cuenta', auth, async (req, res) => {
       where: { id_cuenta: parseInt(req.params.id_cuenta) },
       include: {
         cliente: true,
-        venta: { include: { detalles: true } },
+        venta: { include: { detalles: true, vendedor: { select: { nombre: true } }, jefe_camioneta: { select: { nombre: true } } } },
         pagos: {
           orderBy: { fecha_pago: 'desc' },
           take: 10,

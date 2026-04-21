@@ -784,6 +784,18 @@ export default function Cobranza() {
     return <span className="text-red-600 text-xs font-medium">{semanas} semanas de atraso</span>
   }
 
+  const formatearAtraso = (semanas) => {
+    if (!semanas || semanas <= 0) return null
+    const meses   = Math.floor(semanas / 4)
+    const semsRest = semanas % 4
+    const partes = []
+    if (meses === 1)   partes.push('1 mes')
+    else if (meses > 1) partes.push(`${meses} meses`)
+    if (semsRest === 1)    partes.push('1 semana')
+    else if (semsRest > 1) partes.push(`${semsRest} semanas`)
+    return partes.join(' y ') + ' de atraso'
+  }
+
   // ── Cálculo de cumplimiento (client-side) ─────────────────────────────────
   const DIAS_FRECUENCIA = { semanal: 7, quincenal: 15, mensual: 30, dos_meses: 60 }
 
@@ -2245,6 +2257,22 @@ export default function Cobranza() {
                     <span className="text-xs text-gray-500">Plan: <span className="font-medium text-gray-700">{cuentaDetalle.plan_actual?.replace(/_/g, ' ')}</span></span>
                     <span className="text-xs text-gray-500">Frecuencia: <span className="font-medium text-gray-700 capitalize">{(cuentaDetalle.frecuencia_pago || 'semanal').replace(/_/g, ' ')}</span></span>
                     {badgeCumplimiento(cuentaDetalle)}
+                  </div>
+
+                  {/* Vendedor, jefe de grupo y atraso */}
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+                    {cuentaDetalle.venta?.vendedor?.nombre && (
+                      <p className="text-xs text-gray-500">Vendedor: <span className="font-medium text-gray-700">{cuentaDetalle.venta.vendedor.nombre}</span></p>
+                    )}
+                    {cuentaDetalle.venta?.jefe_camioneta?.nombre && (
+                      <p className="text-xs text-gray-500">Jefe de grupo: <span className="font-medium text-gray-700">{cuentaDetalle.venta.jefe_camioneta.nombre}</span></p>
+                    )}
+                    {cuentaDetalle.semanas_atraso > 0 && (
+                      <p className="text-xs font-semibold text-red-600">
+                        ⚠️ {formatearAtraso(cuentaDetalle.semanas_atraso)}
+                        <span className="text-red-400 font-normal ml-1">({cuentaDetalle.semanas_atraso} sem.)</span>
+                      </p>
+                    )}
                   </div>
                 </div>
 
