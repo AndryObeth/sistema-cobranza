@@ -56,10 +56,20 @@ export default function Cobranza() {
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroMunicipio, setFiltroMunicipio] = useState('')
   const [filtroColonia, setFiltroColonia] = useState('')
-  // Modo cobranza — checklist
-  const [modoCobranza, setModoCobranza]       = useState(false)
-  const [visitados, setVisitados]             = useState(new Set())
-  const [soloPendientes, setSoloPendientes]   = useState(false)
+  // Modo cobranza — checklist (persistido en localStorage)
+  const [modoCobranza, setModoCobranza] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cobranza_modo')) ?? false } catch { return false }
+  })
+  const [visitados, setVisitados] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('cobranza_visitados')) ?? []) } catch { return new Set() }
+  })
+  const [soloPendientes, setSoloPendientes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cobranza_solo_pendientes')) ?? false } catch { return false }
+  })
+
+  useEffect(() => { localStorage.setItem('cobranza_modo', JSON.stringify(modoCobranza)) }, [modoCobranza])
+  useEffect(() => { localStorage.setItem('cobranza_visitados', JSON.stringify([...visitados])) }, [visitados])
+  useEffect(() => { localStorage.setItem('cobranza_solo_pendientes', JSON.stringify(soloPendientes)) }, [soloPendientes])
 
   const toggleVisitado = (id) => {
     setVisitados(prev => {
