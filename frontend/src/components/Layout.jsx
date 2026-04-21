@@ -45,11 +45,10 @@ export default function Layout({ children }) {
   useEffect(() => {
     const actualizarConteo = () => setPendientes(queueCount())
 
-    const handleOnline = async () => {
-      setEnLinea(true)
+    const sincronizarSiHayPendientes = async () => {
       const pendientesActuales = queueCount()
       if (pendientesActuales > 0) {
-        mostrarToast(`Conexión restaurada — sincronizando ${pendientesActuales} pago(s)...`, 'info')
+        mostrarToast(`Sincronizando ${pendientesActuales} pago(s) pendiente(s)...`, 'info')
         const resultado = await sincronizarCola()
         setPendientes(queueCount())
         if (resultado.sincronizados > 0) {
@@ -61,11 +60,19 @@ export default function Layout({ children }) {
       }
     }
 
+    const handleOnline = async () => {
+      setEnLinea(true)
+      await sincronizarSiHayPendientes()
+    }
+
     const handleOffline = () => setEnLinea(false)
 
     window.addEventListener('online',  handleOnline)
     window.addEventListener('offline', handleOffline)
     window.addEventListener('offline-queue-changed', actualizarConteo)
+
+    // Sincronizar al montar si ya hay conexión y hay pendientes
+    if (navigator.onLine) sincronizarSiHayPendientes()
 
     return () => {
       window.removeEventListener('online',  handleOnline)
