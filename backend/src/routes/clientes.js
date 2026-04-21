@@ -39,7 +39,14 @@ router.get('/', auth, async (req, res) => {
     }
     const clientes = await prisma.cliente.findMany({
       where,
-      orderBy: { nombre: 'asc' }
+      orderBy: { nombre: 'asc' },
+      select: {
+        id_cliente: true, numero_expediente: true, nombre: true, alias: true,
+        telefono: true, municipio: true, colonia: true, direccion: true,
+        referencias: true, ruta: true, estado_cliente: true, nivel_riesgo: true,
+        observaciones_generales: true, latitud: true, longitud: true,
+        plus_code: true, activo: true
+      }
     })
     res.json(clientes)
   } catch {

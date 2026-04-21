@@ -13,7 +13,13 @@ router.get('/cartera/:id_cobrador', auth, async (req, res) => {
         venta: { id_cobrador: parseInt(req.params.id_cobrador) }
       },
       include: {
-        cliente: true,
+        cliente: { select: {
+          id_cliente: true, numero_expediente: true, nombre: true, alias: true,
+          telefono: true, municipio: true, colonia: true, direccion: true,
+          referencias: true, ruta: true, estado_cliente: true, nivel_riesgo: true,
+          observaciones_generales: true, latitud: true, longitud: true,
+          plus_code: true, activo: true
+        }},
         venta: { include: { detalles: true } }
       },
       orderBy: { semanas_atraso: 'desc' }
@@ -56,7 +62,13 @@ router.get('/todas-cuentas', auth, async (req, res) => {
     const cuentas = await prisma.cuenta.findMany({
       where,
       include: {
-        cliente: true,
+        cliente: { select: {
+          id_cliente: true, numero_expediente: true, nombre: true, alias: true,
+          telefono: true, municipio: true, colonia: true, direccion: true,
+          referencias: true, ruta: true, estado_cliente: true, nivel_riesgo: true,
+          observaciones_generales: true, latitud: true, longitud: true,
+          plus_code: true, activo: true
+        }},
         venta: { include: { vendedor: true, cobrador: true } }
       },
       orderBy: { semanas_atraso: 'desc' }
