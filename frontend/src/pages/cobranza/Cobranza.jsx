@@ -494,6 +494,7 @@ export default function Cobranza() {
 </html>`
 
     const ventana = window.open('', '_blank', 'width=350,height=650')
+    if (!ventana) throw new Error('Popup bloqueado')
     ventana.document.write(html)
     ventana.document.close()
   }
@@ -580,9 +581,12 @@ export default function Cobranza() {
 
         if (liquidada) {
           setCuentas(prev => prev.filter(c => c.id_cuenta !== cuentaSeleccionada.id_cuenta))
-          // Abrir ticket y cerrar modal
-          generarTicket(ticket)
           cerrarModal()
+          try {
+            generarTicket(ticket)
+          } catch {
+            setExito('¡Cuenta liquidada! El ticket no pudo abrirse (verifica que el navegador permita ventanas emergentes).')
+          }
         } else {
           setDatosPago(ticket)
           setExito(
