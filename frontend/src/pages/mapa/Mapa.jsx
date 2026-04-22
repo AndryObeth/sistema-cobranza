@@ -218,24 +218,28 @@ export default function Mapa() {
   const procesarMarcadores = (data) => {
     const resultado = []
     for (const c of data) {
-      // Prioridad 1: ubicación principal con coordenadas
-      const ubic = c.cliente?.ubicaciones?.[0]
-      if (ubic?.latitud && ubic?.longitud) {
-        resultado.push({ cuenta: c, latitud: parseFloat(ubic.latitud), longitud: parseFloat(ubic.longitud), sinPlusCode: false })
+      // Prioridad 1: coordenadas directas lat/lng de la BD (siempre usar estas)
+      if (c.cliente?.latitud && c.cliente?.longitud) {
+        resultado.push({
+          cuenta: c,
+          latitud: parseFloat(c.cliente.latitud),
+          longitud: parseFloat(c.cliente.longitud),
+          sinPlusCode: !c.cliente?.plus_code
+        })
         continue
       }
-      // Prioridad 2: decodificar plus_code del cliente (más preciso que geocodificación)
+      // Prioridad 2: Plus Code solo si no hay coordenadas directas
       const pc = c.cliente?.plus_code
       if (pc && isValidPlusCode(pc)) {
         const coords = decodePlusCode(pc)
         if (coords) {
-          resultado.push({ cuenta: c, latitud: coords.lat, longitud: coords.lng, sinPlusCode: false })
-          continue
+          resultado.push({
+            cuenta: c,
+            latitud: coords.lat,
+            longitud: coords.lng,
+            sinPlusCode: false
+          })
         }
-      }
-      // Prioridad 3: coordenadas geocodificadas desde dirección
-      if (c.cliente?.latitud && c.cliente?.longitud) {
-        resultado.push({ cuenta: c, latitud: parseFloat(c.cliente.latitud), longitud: parseFloat(c.cliente.longitud), sinPlusCode: true })
       }
     }
     setMarcadores(resultado)
