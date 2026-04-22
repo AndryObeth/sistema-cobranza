@@ -216,17 +216,29 @@ export default function Mapa() {
   }
 
   const procesarMarcadores = (data) => {
-    const conCoords = data.filter(c => {
+    const resultado = []
+    for (const c of data) {
+      // Prioridad 1: ubicación principal con coordenadas
       const ubic = c.cliente?.ubicaciones?.[0]
-      return (ubic?.latitud && ubic?.longitud) || (c.cliente?.latitud && c.cliente?.longitud)
-    })
-    setMarcadores(conCoords.map(c => {
-      const ubic = c.cliente?.ubicaciones?.[0]
-      const lat = ubic?.latitud ? parseFloat(ubic.latitud) : parseFloat(c.cliente.latitud)
-      const lng = ubic?.longitud ? parseFloat(ubic.longitud) : parseFloat(c.cliente.longitud)
-      const plusCode = ubic?.plus_code || c.cliente?.plus_code
-      return { cuenta: c, latitud: lat, longitud: lng, sinPlusCode: !plusCode }
-    }))
+      if (ubic?.latitud && ubic?.longitud) {
+        resultado.push({ cuenta: c, latitud: parseFloat(ubic.latitud), longitud: parseFloat(ubic.longitud), sinPlusCode: false })
+        continue
+      }
+      // Prioridad 2: decodificar plus_code del cliente (más preciso que geocodificación)
+      const pc = c.cliente?.plus_code
+      if (pc && isValidPlusCode(pc)) {
+        const coords = decodePlusCode(pc)
+        if (coords) {
+          resultado.push({ cuenta: c, latitud: coords.lat, longitud: coords.lng, sinPlusCode: false })
+          continue
+        }
+      }
+      // Prioridad 3: coordenadas geocodificadas desde dirección
+      if (c.cliente?.latitud && c.cliente?.longitud) {
+        resultado.push({ cuenta: c, latitud: parseFloat(c.cliente.latitud), longitud: parseFloat(c.cliente.longitud), sinPlusCode: true })
+      }
+    }
+    setMarcadores(resultado)
   }
 
   // Geocodificar desde el backend (evita restricciones de dominio en la API key)

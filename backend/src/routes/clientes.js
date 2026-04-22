@@ -318,6 +318,14 @@ router.post('/:id/ubicaciones', auth, async (req, res) => {
     if (longitud != null) data.longitud  = parseFloat(longitud)
     if (plus_code)        data.plus_code = plus_code
     const ubicacion = await prisma.ubicacionCliente.create({ data })
+    // Sincronizar coordenadas al cliente cuando es ubicación principal
+    if (es_principal && (latitud != null || plus_code)) {
+      const clienteData = {}
+      if (latitud  != null) clienteData.latitud  = parseFloat(latitud)
+      if (longitud != null) clienteData.longitud = parseFloat(longitud)
+      if (plus_code)        clienteData.plus_code = plus_code
+      await prisma.cliente.update({ where: { id_cliente: idCliente }, data: clienteData })
+    }
     res.status(201).json(ubicacion)
   } catch (error) {
     res.status(500).json({ error: 'Error al crear ubicación', detalle: error.message })
@@ -345,6 +353,16 @@ router.put('/:id/ubicaciones/:uid', auth, async (req, res) => {
     if (plus_code !== undefined) data.plus_code = plus_code || null
     if (es_principal !== undefined)  data.es_principal    = !!es_principal
     const ubicacion = await prisma.ubicacionCliente.update({ where: { id_ubicacion: idUbic }, data })
+    // Sincronizar coordenadas al cliente cuando es ubicación principal
+    if (es_principal && (latitud != null || plus_code)) {
+      const clienteData = {}
+      if (data.latitud  != null) clienteData.latitud  = data.latitud
+      if (data.longitud != null) clienteData.longitud = data.longitud
+      if (data.plus_code)        clienteData.plus_code = data.plus_code
+      if (Object.keys(clienteData).length > 0) {
+        await prisma.cliente.update({ where: { id_cliente: idCliente }, data: clienteData })
+      }
+    }
     res.json(ubicacion)
   } catch (error) {
     res.status(500).json({ error: 'Error al actualizar ubicación', detalle: error.message })
