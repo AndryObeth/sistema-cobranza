@@ -62,6 +62,7 @@ export default function Mapa() {
 
   const [cuentas, setCuentas] = useState([])
   const [marcadores, setMarcadores] = useState([]) // { cuenta, latitud, longitud }
+  const [rutaOptimizada, setRutaOptimizada] = useState([]) // solo paradas con ubicación precisa
   const [seleccionado, setSeleccionado] = useState(null)
   const [rutaOrdenada, setRutaOrdenada] = useState(false)
   const [geocodificando, setGeocodificando] = useState(false)
@@ -302,12 +303,13 @@ export default function Mapa() {
   }
 
   const handleOptimizar = () => {
-    const conCoords = marcadores.filter(m => m.latitud && m.longitud)
-    if (conCoords.length === 0) { alert('No hay clientes con coordenadas para optimizar.'); return }
-    const ordenados = optimizarRuta(conCoords, CENTRO_TUXTEPEC)
-    setMarcadores(ordenados)
+    // Solo incluir marcadores con ubicación precisa (con plus_code); los grises tienen coords aproximadas
+    const conUbicacion = marcadores.filter(m => !m.sinPlusCode && m.latitud && m.longitud)
+    if (conUbicacion.length === 0) { alert('No hay clientes con ubicación precisa para optimizar. Agrega Plus Codes primero.'); return }
+    const origen = miUbicacion || CENTRO_TUXTEPEC
+    const ordenados = optimizarRuta(conUbicacion, origen)
+    setRutaOptimizada(ordenados)   // no toca marcadores — todos siguen visibles en el mapa
     setRutaOrdenada(true)
-    // Ajustar mapa para mostrar todos los puntos
     if (mapRef.current && window.google) {
       const bounds = new window.google.maps.LatLngBounds()
       ordenados.forEach(m => bounds.extend({ lat: m.latitud, lng: m.longitud }))
@@ -365,7 +367,7 @@ export default function Mapa() {
           </button>
           {rutaOrdenada && (
             <button
-              onClick={() => { setRutaOrdenada(false); procesarMarcadores(cuentas) }}
+              onClick={() => { setRutaOrdenada(false); setRutaOptimizada([]) }}
               className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 transition"
             >
               Restablecer
@@ -422,7 +424,8 @@ export default function Mapa() {
           >
             {marcadores
               .filter(m => !filtroSinUbicacion || m.sinPlusCode)
-              .map((m, idx) => {
+              .map((m) => {
+                const idxRuta = rutaOrdenada ? rutaOptimizada.findIndex(r => r.cuenta.id_cuenta === m.cuenta.id_cuenta) : -1
                 const icon = m.sinPlusCode
                   ? colorPorEstado.sin_ubicacion
                   : (colorPorEstado[m.cuenta.estado_cuenta] || colorPorEstado.activa)
@@ -432,7 +435,7 @@ export default function Mapa() {
                     position={{ lat: m.latitud, lng: m.longitud }}
                     icon={icon}
                     title={m.sinPlusCode ? 'Sin ubicación precisa — toca para corregir' : undefined}
-                    label={rutaOrdenada && !m.sinPlusCode ? { text: String(idx + 1), color: 'white', fontSize: '11px', fontWeight: 'bold' } : undefined}
+                    label={idxRuta >= 0 ? { text: String(idxRuta + 1), color: 'white', fontSize: '11px', fontWeight: 'bold' } : undefined}
                     onClick={() => m.sinPlusCode ? abrirModalCorreccion(m.cuenta) : setSeleccionado(m)}
                   />
                 )
@@ -634,13 +637,13 @@ export default function Mapa() {
       )}
 
       {/* Lista de ruta optimizada */}
-      {rutaOrdenada && marcadores.length > 0 && (
+      {rutaOrdenada && rutaOptimizada.length > 0 && (
         <div className="mt-4 bg-white rounded-2xl shadow overflow-hidden">
           <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
-            <p className="text-sm font-semibold text-blue-800">Orden de visitas optimizado ({marcadores.length} paradas)</p>
+            <p className="text-sm font-semibold text-blue-800">Orden de visitas optimizado ({rutaOptimizada.length} paradas)</p>
           </div>
           <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
-            {marcadores.map((m, idx) => (
+            {rutaOptimizada.map((m, idx) => (
               <div key={m.cuenta.id_cuenta} className="flex items-center gap-3 px-4 py-3">
                 <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold shrink-0">
                   {idx + 1}
