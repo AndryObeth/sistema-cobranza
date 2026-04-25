@@ -105,8 +105,9 @@ export default function Cobranza() {
     })
   }
 
-  const calcularRutaCobranza = (origen) => {
-    const puntos = cuentas
+  const calcularRutaCobranza = (origen, cuentasData) => {
+    const datos = cuentasData ?? cuentas
+    const puntos = datos
       .map(c => {
         const u = c.cliente?.ubicaciones?.[0]
         const lat = u?.latitud ? parseFloat(u.latitud) : (c.cliente?.latitud ? parseFloat(c.cliente.latitud) : null)
@@ -123,19 +124,30 @@ export default function Cobranza() {
     setOrdenar('ruta')
   }
 
+  const pedirGPSYCalcular = (cuentasData) => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => calcularRutaCobranza({ lat: coords.latitude, lng: coords.longitude }, cuentasData),
+        () => calcularRutaCobranza(CENTRO_TUXTEPEC, cuentasData),
+        { enableHighAccuracy: true, timeout: 5000 }
+      )
+    } else {
+      calcularRutaCobranza(CENTRO_TUXTEPEC, cuentasData)
+    }
+  }
+
+  // Recalcular ruta cuando cargan las cuentas si modo cobranza ya estaba activo (restaurado de localStorage)
+  useEffect(() => {
+    if (modoCobranza && cuentas.length > 0 && Object.keys(ordenRuta).length === 0) {
+      pedirGPSYCalcular(cuentas)
+    }
+  }, [cuentas.length, modoCobranza]) // eslint-disable-line
+
   const activarModoCobranza = () => {
     setModoCobranza(true)
     setVisitados(new Set())
     setSoloPendientes(false)
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        ({ coords }) => calcularRutaCobranza({ lat: coords.latitude, lng: coords.longitude }),
-        () => calcularRutaCobranza(CENTRO_TUXTEPEC),
-        { enableHighAccuracy: true, timeout: 5000 }
-      )
-    } else {
-      calcularRutaCobranza(CENTRO_TUXTEPEC)
-    }
+    pedirGPSYCalcular(cuentas)
   }
 
   const salirModoCobranza = () => {
@@ -912,6 +924,12 @@ export default function Cobranza() {
 
   const hayFiltros = filtroEstado || filtroMunicipio || filtroColonia || soloVencidas || ordenar !== 'cumplimiento'
 
+  const tieneUbicacion = (c) => {
+    const u = c.cliente?.ubicaciones?.[0]
+    return !!(u?.latitud || c.cliente?.latitud)
+  }
+  const sinUbicacionCount = modoCobranza ? cuentas.filter(c => !tieneUbicacion(c)).length : 0
+
   const cuentasFiltradas = cuentas
     .filter(c => {
       if (soloVencidas && !estaVencida(c)) return false
@@ -1035,14 +1053,29 @@ export default function Cobranza() {
               }}
             />
           </div>
-          {visitados.size > 0 && (
-            <button
-              onClick={() => setVisitados(new Set())}
-              className="mt-2 text-xs text-green-600 hover:text-green-800"
-            >
-              Reiniciar checklist
-            </button>
-          )}
+          <div className="flex items-center justify-between mt-2">
+            {visitados.size > 0 && (
+              <button
+                onClick={() => setVisitados(new Set())}
+                className="text-xs text-green-600 hover:text-green-800"
+              >
+                Reiniciar checklist
+              </button>
+            )}
+            <div className="flex items-center gap-3 ml-auto">
+              {sinUbicacionCount > 0 && (
+                <span className="text-xs text-amber-600 font-medium">
+                  ⚠️ {sinUbicacionCount} sin ubicación (van al final)
+                </span>
+              )}
+              <button
+                onClick={() => pedirGPSYCalcular(cuentas)}
+                className="text-xs text-green-700 hover:text-green-900 font-medium underline"
+              >
+                Recalcular ruta
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1157,6 +1190,7 @@ export default function Cobranza() {
                     <div className="min-w-0">
                       <p className={`font-semibold truncate ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>
                         {c.cliente?.nombre}
+                        {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500 ml-1 font-normal">⚠️</span>}
                       </p>
                       {c.numero_cuenta
                         ? <p className="text-blue-600 text-xs font-mono font-semibold">Cta. {c.numero_cuenta}</p>
@@ -1266,6 +1300,7 @@ export default function Cobranza() {
                     )}
                     <td className="px-6 py-4">
                       <p className={`font-medium ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>{c.cliente?.nombre}</p>
+                      {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500">⚠️ Sin ubicación</span>}
                       {estadoSemanas(c.semanas_atraso)}
                       {esVisitado && <span className="text-xs text-green-600 font-medium">✓ Visitado</span>}
                     </td>
