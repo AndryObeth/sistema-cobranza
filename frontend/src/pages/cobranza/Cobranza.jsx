@@ -7,6 +7,30 @@ import { encolarPago, encolarVisita, getQueue } from '../../utils/offlineQueue.j
 import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
 import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 
+const CENTRO_TUXTEPEC = { lat: 18.0886, lng: -96.1342 }
+
+function distanciaKm(a, b) {
+  const R = 6371
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
+}
+
+function rutaPorCercania(puntos, origen) {
+  const restantes = [...puntos]
+  const ruta = []
+  let actual = origen
+  while (restantes.length > 0) {
+    let minDist = Infinity, idx = 0
+    restantes.forEach((p, i) => { const d = distanciaKm(actual, p); if (d < minDist) { minDist = d; idx = i } })
+    const sig = restantes.splice(idx, 1)[0]
+    ruta.push(sig)
+    actual = sig
+  }
+  return ruta
+}
+
 const visitaColor = {
   promesa_pago:        'bg-green-100 text-green-700',
   no_localizado:       'bg-yellow-100 text-yellow-700',
@@ -54,6 +78,7 @@ export default function Cobranza() {
   const [soloVencidas, setSoloVencidas] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [ordenar, setOrdenar] = useState('cumplimiento')
+  const [ordenRuta, setOrdenRuta] = useState({}) // { id_cuenta: posicion } calculado al entrar modo cobranza
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroMunicipio, setFiltroMunicipio] = useState('')
   const [filtroColonia, setFiltroColonia] = useState('')
@@ -80,16 +105,45 @@ export default function Cobranza() {
     })
   }
 
+  const calcularRutaCobranza = (origen) => {
+    const puntos = cuentas
+      .map(c => {
+        const u = c.cliente?.ubicaciones?.[0]
+        const lat = u?.latitud ? parseFloat(u.latitud) : (c.cliente?.latitud ? parseFloat(c.cliente.latitud) : null)
+        const lng = u?.longitud ? parseFloat(u.longitud) : (c.cliente?.longitud ? parseFloat(c.cliente.longitud) : null)
+        if (!lat || !lng) return null
+        return { id_cuenta: c.id_cuenta, lat, lng }
+      })
+      .filter(Boolean)
+    if (puntos.length === 0) return
+    const ordenados = rutaPorCercania(puntos, origen)
+    const mapa = {}
+    ordenados.forEach((p, i) => { mapa[p.id_cuenta] = i })
+    setOrdenRuta(mapa)
+    setOrdenar('ruta')
+  }
+
   const activarModoCobranza = () => {
     setModoCobranza(true)
     setVisitados(new Set())
     setSoloPendientes(false)
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => calcularRutaCobranza({ lat: coords.latitude, lng: coords.longitude }),
+        () => calcularRutaCobranza(CENTRO_TUXTEPEC),
+        { enableHighAccuracy: true, timeout: 5000 }
+      )
+    } else {
+      calcularRutaCobranza(CENTRO_TUXTEPEC)
+    }
   }
 
   const salirModoCobranza = () => {
     setModoCobranza(false)
     setVisitados(new Set())
     setSoloPendientes(false)
+    setOrdenRuta({})
+    setOrdenar('cumplimiento')
   }
 
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null)
@@ -889,6 +943,11 @@ export default function Cobranza() {
           const fb = b.fecha_ultimo_pago ? new Date(b.fecha_ultimo_pago) : new Date(0)
           return fb - fa
         }
+        case 'ruta': {
+          const pa = ordenRuta[a.id_cuenta] ?? 9999
+          const pb = ordenRuta[b.id_cuenta] ?? 9999
+          return pa - pb
+        }
         default:            return prioridadCumplimiento(a) - prioridadCumplimiento(b)
       }
     })
@@ -1001,6 +1060,7 @@ export default function Cobranza() {
             onChange={e => setOrdenar(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >
+            {modoCobranza && <option value="ruta">📍 Por ruta de cobranza</option>}
             <option value="cumplimiento">Ordenar: Cumplimiento</option>
             <option value="nombre_az">Nombre A → Z</option>
             <option value="nombre_za">Nombre Z → A</option>
@@ -1051,7 +1111,7 @@ export default function Cobranza() {
 
           {hayFiltros && (
             <button
-              onClick={() => { setOrdenar('cumplimiento'); setFiltroEstado(''); setFiltroMunicipio(''); setFiltroColonia(''); setSoloVencidas(false) }}
+              onClick={() => { setOrdenar(modoCobranza ? 'ruta' : 'cumplimiento'); setFiltroEstado(''); setFiltroMunicipio(''); setFiltroColonia(''); setSoloVencidas(false) }}
               className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-100 transition"
             >
               ✕ Limpiar filtros
