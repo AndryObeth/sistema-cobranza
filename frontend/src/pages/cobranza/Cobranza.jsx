@@ -6,6 +6,9 @@ import api from '../../api.js'
 import { encolarPago, encolarVisita, getQueue } from '../../utils/offlineQueue.js'
 import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
 import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 const CENTRO_TUXTEPEC = { lat: 18.0886, lng: -96.1342 }
 
@@ -29,6 +32,17 @@ function rutaPorCercania(puntos, origen) {
     actual = sig
   }
   return ruta
+}
+
+function SortableCardWrapper({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  }
+  return <div ref={setNodeRef} style={style} {...attributes}>{children(listeners)}</div>
 }
 
 const visitaColor = {
@@ -78,7 +92,9 @@ export default function Cobranza() {
   const [soloVencidas, setSoloVencidas] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [ordenar, setOrdenar] = useState('cumplimiento')
-  const [ordenRuta, setOrdenRuta] = useState({}) // { id_cuenta: posicion } calculado al entrar modo cobranza
+  const [ordenManual, setOrdenManual] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cobranza_orden_manual')) ?? [] } catch { return [] }
+  })
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroMunicipio, setFiltroMunicipio] = useState('')
   const [filtroColonia, setFiltroColonia] = useState('')
@@ -96,6 +112,7 @@ export default function Cobranza() {
   useEffect(() => { localStorage.setItem('cobranza_modo', JSON.stringify(modoCobranza)) }, [modoCobranza])
   useEffect(() => { localStorage.setItem('cobranza_visitados', JSON.stringify([...visitados])) }, [visitados])
   useEffect(() => { localStorage.setItem('cobranza_solo_pendientes', JSON.stringify(soloPendientes)) }, [soloPendientes])
+  useEffect(() => { localStorage.setItem('cobranza_orden_manual', JSON.stringify(ordenManual)) }, [ordenManual])
 
   const toggleVisitado = (id) => {
     setVisitados(prev => {
@@ -118,9 +135,11 @@ export default function Cobranza() {
       .filter(Boolean)
     if (puntos.length === 0) return
     const ordenados = rutaPorCercania(puntos, origen)
-    const mapa = {}
-    ordenados.forEach((p, i) => { mapa[p.id_cuenta] = i })
-    setOrdenRuta(mapa)
+    const ordenadosIds = ordenados.map(p => p.id_cuenta)
+    const sinUbicacion = datos
+      .filter(c => !puntos.find(p => p.id_cuenta === c.id_cuenta))
+      .map(c => c.id_cuenta)
+    setOrdenManual([...ordenadosIds, ...sinUbicacion])
     setOrdenar('ruta')
   }
 
@@ -138,7 +157,7 @@ export default function Cobranza() {
 
   // Recalcular ruta cuando cargan las cuentas si modo cobranza ya estaba activo (restaurado de localStorage)
   useEffect(() => {
-    if (modoCobranza && cuentas.length > 0 && Object.keys(ordenRuta).length === 0) {
+    if (modoCobranza && cuentas.length > 0 && ordenManual.length === 0) {
       pedirGPSYCalcular(cuentas)
     }
   }, [cuentas.length, modoCobranza]) // eslint-disable-line
@@ -154,8 +173,33 @@ export default function Cobranza() {
     setModoCobranza(false)
     setVisitados(new Set())
     setSoloPendientes(false)
-    setOrdenRuta({})
+    setOrdenManual([])
     setOrdenar('cumplimiento')
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
+  )
+
+  const handleDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return
+    setOrdenManual(prev => {
+      const oldIdx = prev.indexOf(active.id)
+      const newIdx = prev.indexOf(over.id)
+      if (oldIdx === -1 || newIdx === -1) return prev
+      return arrayMove(prev, oldIdx, newIdx)
+    })
+  }
+
+  const moverEnOrden = (id_cuenta, dir) => {
+    setOrdenManual(prev => {
+      const idx = prev.indexOf(id_cuenta)
+      if (idx === -1) return prev
+      const newIdx = idx + dir
+      if (newIdx < 0 || newIdx >= prev.length) return prev
+      return arrayMove(prev, idx, newIdx)
+    })
   }
 
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null)
@@ -962,9 +1006,8 @@ export default function Cobranza() {
           return fb - fa
         }
         case 'ruta': {
-          const pa = ordenRuta[a.id_cuenta] ?? 9999
-          const pb = ordenRuta[b.id_cuenta] ?? 9999
-          return pa - pb
+          const pa = ordenManual.indexOf(a.id_cuenta); const pb = ordenManual.indexOf(b.id_cuenta)
+          return (pa === -1 ? 9999 : pa) - (pb === -1 ? 9999 : pb)
         }
         default:            return prioridadCumplimiento(a) - prioridadCumplimiento(b)
       }
@@ -1163,99 +1206,120 @@ export default function Cobranza() {
           <p className="text-center text-gray-500 py-12">Cargando...</p>
         ) : cuentasFiltradas.length === 0 ? (
           <p className="text-center text-gray-400 py-12">No hay cuentas activas</p>
-        ) : cuentasFiltradas.map(c => {
-          const esVisitado = visitados.has(c.id_cuenta)
-          return (
-            <div
-              key={c.id_cuenta}
-              className={`rounded-2xl shadow p-4 transition-all ${
-                esVisitado ? 'bg-green-50 border border-green-200' : 'bg-white'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    {modoCobranza && (
-                      <button
-                        onClick={() => toggleVisitado(c.id_cuenta)}
-                        className={`shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition ${
-                          esVisitado
-                            ? 'bg-green-500 border-green-500 text-white'
-                            : 'border-gray-300 hover:border-green-400'
-                        }`}
-                      >
-                        {esVisitado && <span className="text-xs font-bold">✓</span>}
-                      </button>
-                    )}
-                    <div className="min-w-0">
-                      <p className={`font-semibold truncate ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>
-                        {c.cliente?.nombre}
-                        {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500 ml-1 font-normal">⚠️</span>}
-                      </p>
-                      {c.numero_cuenta
-                        ? <p className="text-blue-600 text-xs font-mono font-semibold">Cta. {c.numero_cuenta}</p>
-                        : <p className="text-gray-400 text-xs font-mono">{c.folio_cuenta}</p>
-                      }
-                      {estadoSemanas(c.semanas_atraso)}
+        ) : (() => {
+          const renderCard = (c, dragListeners) => {
+            const esVisitado = visitados.has(c.id_cuenta)
+            const pos = modoCobranza && ordenar === 'ruta' ? ordenManual.indexOf(c.id_cuenta) : -1
+            return (
+              <div className={`rounded-2xl shadow p-4 transition-all ${esVisitado ? 'bg-green-50 border border-green-200' : 'bg-white'}`}>
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      {dragListeners && (
+                        <button
+                          {...dragListeners}
+                          className="shrink-0 w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600 touch-none cursor-grab active:cursor-grabbing"
+                          aria-label="Arrastrar para reordenar"
+                        >
+                          <span className="text-base leading-none">☰</span>
+                        </button>
+                      )}
+                      {modoCobranza && (
+                        <button
+                          onClick={() => toggleVisitado(c.id_cuenta)}
+                          className={`shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition ${
+                            esVisitado ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-400'
+                          }`}
+                        >
+                          {esVisitado && <span className="text-xs font-bold">✓</span>}
+                        </button>
+                      )}
+                      <div className="min-w-0">
+                        <p className={`font-semibold truncate ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>
+                          {pos >= 0 && <span className="text-xs font-bold text-blue-500 mr-1">#{pos + 1}</span>}
+                          {c.cliente?.nombre}
+                          {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500 ml-1 font-normal">⚠️</span>}
+                        </p>
+                        {c.numero_cuenta
+                          ? <p className="text-blue-600 text-xs font-mono font-semibold">Cta. {c.numero_cuenta}</p>
+                          : <p className="text-gray-400 text-xs font-mono">{c.folio_cuenta}</p>
+                        }
+                        {estadoSemanas(c.semanas_atraso)}
+                      </div>
                     </div>
                   </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    {esVisitado && (
+                      <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">Visitado</span>
+                    )}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cuenta]}`}>
+                      {c.estado_cuenta}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  {esVisitado && (
-                    <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">Visitado</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="text-xs text-gray-400">Saldo</p>
+                    <p className={`text-xl font-bold ${esVisitado ? 'text-green-700' : 'text-gray-800'}`}>{fmt(c.saldo_actual)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-400">Plan</p>
+                    <p className="text-sm text-gray-600">{c.plan_actual?.replace(/_/g, ' ')}</p>
+                    {estaVencida(c) && (
+                      <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Plan vencido</span>
+                    )}
+                  </div>
+                </div>
+                <div className="mb-3">{badgeCumplimiento(c)}</div>
+                <div className="flex gap-2">
+                  {modoCobranza && (
+                    <button
+                      onClick={() => toggleVisitado(c.id_cuenta)}
+                      className={`flex-1 py-3 rounded-xl text-sm font-semibold transition border-2 ${
+                        esVisitado
+                          ? 'bg-green-100 border-green-400 text-green-700 hover:bg-green-200'
+                          : 'bg-white border-gray-300 text-gray-600 hover:border-green-400 hover:text-green-600'
+                      }`}
+                    >
+                      {esVisitado ? '✓ Visitado' : 'Marcar visitado'}
+                    </button>
                   )}
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cuenta]}`}>
-                    {c.estado_cuenta}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="text-xs text-gray-400">Saldo</p>
-                  <p className={`text-xl font-bold ${esVisitado ? 'text-green-700' : 'text-gray-800'}`}>{fmt(c.saldo_actual)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-400">Plan</p>
-                  <p className="text-sm text-gray-600">{c.plan_actual?.replace(/_/g, ' ')}</p>
-                  {estaVencida(c) && (
-                    <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Plan vencido</span>
+                  <button
+                    onClick={() => abrirDetalle(c)}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-sm font-semibold transition"
+                  >
+                    Ver detalle
+                  </button>
+                  {!modoCobranza && (
+                    <button
+                      onClick={() => abrirModal(c)}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition"
+                    >
+                      Registrar pago
+                    </button>
                   )}
                 </div>
               </div>
-              <div className="mb-3">{badgeCumplimiento(c)}</div>
+            )
+          }
 
-              <div className="flex gap-2">
-                {modoCobranza && (
-                  <button
-                    onClick={() => toggleVisitado(c.id_cuenta)}
-                    className={`flex-1 py-3 rounded-xl text-sm font-semibold transition border-2 ${
-                      esVisitado
-                        ? 'bg-green-100 border-green-400 text-green-700 hover:bg-green-200'
-                        : 'bg-white border-gray-300 text-gray-600 hover:border-green-400 hover:text-green-600'
-                    }`}
-                  >
-                    {esVisitado ? '✓ Visitado' : 'Marcar visitado'}
-                  </button>
-                )}
-                <button
-                  onClick={() => abrirDetalle(c)}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-sm font-semibold transition"
-                >
-                  Ver detalle
-                </button>
-                {!modoCobranza && (
-                  <button
-                    onClick={() => abrirModal(c)}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition"
-                  >
-                    Registrar pago
-                  </button>
-                )}
-              </div>
-            </div>
-          )
-        })}
+          if (modoCobranza && ordenar === 'ruta') {
+            return (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={cuentasFiltradas.map(c => c.id_cuenta)} strategy={verticalListSortingStrategy}>
+                  {cuentasFiltradas.map(c => (
+                    <SortableCardWrapper key={c.id_cuenta} id={c.id_cuenta}>
+                      {(listeners) => renderCard(c, listeners)}
+                    </SortableCardWrapper>
+                  ))}
+                </SortableContext>
+              </DndContext>
+            )
+          }
+          return cuentasFiltradas.map(c => (
+            <div key={c.id_cuenta}>{renderCard(c, null)}</div>
+          ))
+        })()}
       </div>
 
       {/* Tabla — desktop */}
@@ -1270,6 +1334,7 @@ export default function Cobranza() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   {modoCobranza && <th className="px-4 py-3 w-10"></th>}
+                  {modoCobranza && ordenar === 'ruta' && <th className="px-2 py-3 w-16 text-gray-400 font-medium text-xs text-center">Orden</th>}
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Cliente</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Cuenta</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
@@ -1296,6 +1361,17 @@ export default function Cobranza() {
                         >
                           {esVisitado && <span className="text-xs font-bold">✓</span>}
                         </button>
+                      </td>
+                    )}
+                    {modoCobranza && ordenar === 'ruta' && (
+                      <td className="px-2 py-4">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="text-xs text-blue-500 font-bold">
+                            #{(ordenManual.indexOf(c.id_cuenta) + 1) || '—'}
+                          </span>
+                          <button onClick={() => moverEnOrden(c.id_cuenta, -1)} className="text-gray-400 hover:text-gray-700 text-sm leading-none">↑</button>
+                          <button onClick={() => moverEnOrden(c.id_cuenta, 1)} className="text-gray-400 hover:text-gray-700 text-sm leading-none">↓</button>
+                        </div>
                       </td>
                     )}
                     <td className="px-6 py-4">
