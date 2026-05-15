@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
+import UpdatePrompt from './components/UpdatePrompt'
 import Login from './pages/auth/Login.jsx'
 import Dashboard from './pages/dashboard/Dashboard.jsx'
 import Clientes from './pages/clientes/Clientes.jsx'
@@ -47,6 +48,7 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <AppRoutes />
+        <UpdatePrompt />
       </BrowserRouter>
     </AuthProvider>
   )
