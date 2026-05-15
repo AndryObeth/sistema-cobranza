@@ -38,7 +38,13 @@ router.get('/cuenta/:id_cuenta', auth, async (req, res) => {
     const cuenta = await prisma.cuenta.findUnique({
       where: { id_cuenta: parseInt(req.params.id_cuenta) },
       include: {
-        cliente: true,
+        cliente: { select: {
+          id_cliente: true, numero_expediente: true, nombre: true, alias: true,
+          telefono: true, municipio: true, colonia: true, direccion: true,
+          referencias: true, ruta: true, estado_cliente: true, nivel_riesgo: true,
+          observaciones_generales: true, latitud: true, longitud: true,
+          plus_code: true, activo: true,
+        }},
         venta: { include: { detalles: true, vendedor: { select: { nombre: true } }, jefe_camioneta: { select: { nombre: true } } } },
         pagos: {
           orderBy: { fecha_pago: 'desc' },
