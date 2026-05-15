@@ -12,6 +12,7 @@ import Visitas from './pages/visitas/Visitas.jsx'
 import Cortes from './pages/cortes/Cortes.jsx'
 import Mapa from './pages/mapa/Mapa.jsx'
 import Listado from './pages/listado/Listado.jsx'
+import ListaNegra from './pages/listaNegra/ListaNegra.jsx'
 
 function paginaInicio(rol) {
   if (rol === 'cobrador' || rol === 'supervisor_cobranza') return '/cobranza'
@@ -38,7 +39,8 @@ function AppRoutes() {
       <Route path="/visitas"  element={<RutaProtegida roles={['cobrador', 'administrador', 'supervisor_cobranza']}><Visitas /></RutaProtegida>} />
       <Route path="/cortes"   element={<RutaProtegida roles={['administrador', 'supervisor_cobranza']}><Cortes /></RutaProtegida>} />
       <Route path="/mapa"     element={<RutaProtegida roles={['cobrador', 'jefe_camioneta', 'administrador', 'supervisor_cobranza']}><Mapa /></RutaProtegida>} />
-      <Route path="/listado"  element={<RutaProtegida roles={['administrador', 'supervisor_cobranza']}><Listado /></RutaProtegida>} />
+      <Route path="/listado"     element={<RutaProtegida roles={['administrador', 'supervisor_cobranza']}><Listado /></RutaProtegida>} />
+      <Route path="/lista-negra" element={<RutaProtegida><ListaNegra /></RutaProtegida>} />
     </Routes>
   )
 }

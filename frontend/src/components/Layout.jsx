@@ -12,8 +12,9 @@ const menu = [
   { path: '/visitas',   label: 'Agenda',     icono: '📅', roles: ['cobrador', 'administrador', 'supervisor_cobranza'] },
   { path: '/mapa',      label: 'Mapa',       icono: '🗺️',  roles: ['cobrador', 'jefe_camioneta', 'administrador', 'supervisor_cobranza'] },
   { path: '/listado',   label: 'Listado',    icono: '📋', roles: ['administrador', 'supervisor_cobranza'] },
-  { path: '/cortes',    label: 'Cortes',     icono: '✂️',  roles: ['administrador', 'supervisor_cobranza'] },
-  { path: '/usuarios',  label: 'Usuarios',   icono: '👤', roles: ['administrador', 'supervisor_cobranza'] },
+  { path: '/lista-negra', label: 'Lista Negra', icono: '⛔', roles: null },
+  { path: '/cortes',      label: 'Cortes',      icono: '✂️',  roles: ['administrador', 'supervisor_cobranza'] },
+  { path: '/usuarios',    label: 'Usuarios',    icono: '👤', roles: ['administrador', 'supervisor_cobranza'] },
 ]
 
 export default function Layout({ children }) {

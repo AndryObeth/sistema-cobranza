@@ -17,10 +17,12 @@ model Usuario {
   usuario        String   @unique
   contrasena     String
   rol            RolUsuario
-  ruta_asignada  String?
-  orden_ruta     Json?
-  activo         Boolean  @default(true)
-  fecha_creacion DateTime @default(now())
+  ruta_asignada    String?
+  orden_ruta       Json?
+  activo           Boolean  @default(true)
+  fecha_creacion   DateTime @default(now())
+
+  lista_negra_registros ListaNegra[]
 
   // Relaciones
   ventas_como_vendedor       Venta[]              @relation("VendedorVenta")
@@ -557,4 +559,25 @@ model ConfiguracionNegocio {
   activo           Boolean @default(true)
 
   @@map("configuracion_negocio")
+}
+
+// ─────────────────────────────────────────
+// 18. LISTA NEGRA
+// ─────────────────────────────────────────
+model ListaNegra {
+  id_lista_negra   Int      @id @default(autoincrement())
+  nombre           String
+  alias            String?
+  telefono         String?
+  municipio        String?
+  colonia          String?
+  motivo           String
+  observaciones    String?
+  activo           Boolean  @default(true)
+  fecha_registro   DateTime @default(now())
+
+  id_usuario_registro Int
+  registrado_por      Usuario @relation(fields: [id_usuario_registro], references: [id_usuario])
+
+  @@map("lista_negra")
 }
