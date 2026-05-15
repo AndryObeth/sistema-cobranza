@@ -86,6 +86,34 @@ router.put('/:id', auth, async (req, res) => {
   }
 })
 
+// GET /api/usuarios/mi-orden — orden de ruta guardado del cobrador autenticado
+router.get('/mi-orden', auth, async (req, res) => {
+  try {
+    const u = await prisma.usuario.findUnique({
+      where: { id_usuario: req.usuario.id },
+      select: { orden_ruta: true }
+    })
+    res.json({ orden: u?.orden_ruta ?? [] })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener orden de ruta', detalle: error.message })
+  }
+})
+
+// PUT /api/usuarios/mi-orden — guardar orden de ruta del cobrador autenticado
+router.put('/mi-orden', auth, async (req, res) => {
+  try {
+    const { orden } = req.body
+    if (!Array.isArray(orden)) return res.status(400).json({ error: 'orden debe ser un array' })
+    await prisma.usuario.update({
+      where: { id_usuario: req.usuario.id },
+      data: { orden_ruta: orden }
+    })
+    res.json({ ok: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar orden de ruta', detalle: error.message })
+  }
+})
+
 // PUT /api/usuarios/:id/password — cambiar contraseña
 router.put('/:id/password', auth, async (req, res) => {
   try {

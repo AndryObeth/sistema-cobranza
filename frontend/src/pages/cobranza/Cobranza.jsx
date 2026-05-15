@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -95,6 +95,7 @@ export default function Cobranza() {
   const [ordenManual, setOrdenManual] = useState(() => {
     try { return JSON.parse(localStorage.getItem('cobranza_orden_manual')) ?? [] } catch { return [] }
   })
+  const [editandoPosicion, setEditandoPosicion] = useState(null) // id_cuenta en edición
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroMunicipio, setFiltroMunicipio] = useState('')
   const [filtroColonia, setFiltroColonia] = useState('')
@@ -139,8 +140,10 @@ export default function Cobranza() {
     const sinUbicacion = datos
       .filter(c => !puntos.find(p => p.id_cuenta === c.id_cuenta))
       .map(c => c.id_cuenta)
-    setOrdenManual([...ordenadosIds, ...sinUbicacion])
+    const nuevoOrden = [...ordenadosIds, ...sinUbicacion]
+    setOrdenManual(nuevoOrden)
     setOrdenar('ruta')
+    guardarOrdenRuta(nuevoOrden)
   }
 
   const pedirGPSYCalcular = (cuentasData) => {
@@ -155,26 +158,30 @@ export default function Cobranza() {
     }
   }
 
-  // Recalcular ruta cuando cargan las cuentas si modo cobranza ya estaba activo (restaurado de localStorage)
+  // Cuando cargan las cuentas con modoCobranza activo (restaurado de localStorage):
+  // intentar cargar orden guardado en BD; si no hay, calcular por GPS
   useEffect(() => {
     if (modoCobranza && cuentas.length > 0 && ordenManual.length === 0) {
-      pedirGPSYCalcular(cuentas)
+      cargarOrdenRuta().then(tieneOrden => {
+        if (!tieneOrden) pedirGPSYCalcular(cuentas)
+      })
     }
   }, [cuentas.length, modoCobranza]) // eslint-disable-line
 
-  const activarModoCobranza = () => {
+  const activarModoCobranza = async () => {
     setModoCobranza(true)
     setVisitados(new Set())
     setSoloPendientes(false)
-    pedirGPSYCalcular(cuentas)
+    const tieneOrdenGuardado = await cargarOrdenRuta()
+    if (!tieneOrdenGuardado) pedirGPSYCalcular(cuentas)
   }
 
   const salirModoCobranza = () => {
     setModoCobranza(false)
     setVisitados(new Set())
     setSoloPendientes(false)
-    setOrdenManual([])
     setOrdenar('cumplimiento')
+    // No borramos ordenManual para conservar la ruta guardada
   }
 
   const sensors = useSensors(
@@ -188,7 +195,9 @@ export default function Cobranza() {
       const oldIdx = prev.indexOf(active.id)
       const newIdx = prev.indexOf(over.id)
       if (oldIdx === -1 || newIdx === -1) return prev
-      return arrayMove(prev, oldIdx, newIdx)
+      const next = arrayMove(prev, oldIdx, newIdx)
+      guardarOrdenRuta(next)
+      return next
     })
   }
 
@@ -198,8 +207,24 @@ export default function Cobranza() {
       if (idx === -1) return prev
       const newIdx = idx + dir
       if (newIdx < 0 || newIdx >= prev.length) return prev
-      return arrayMove(prev, idx, newIdx)
+      const next = arrayMove(prev, idx, newIdx)
+      guardarOrdenRuta(next)
+      return next
     })
+  }
+
+  const moverAPosicion = (id_cuenta, nuevaPos) => {
+    const pos = parseInt(nuevaPos)
+    if (isNaN(pos) || pos < 1) return
+    setOrdenManual(prev => {
+      const idx = prev.indexOf(id_cuenta)
+      if (idx === -1) return prev
+      const destino = Math.min(pos - 1, prev.length - 1)
+      const next = arrayMove(prev, idx, destino)
+      guardarOrdenRuta(next)
+      return next
+    })
+    setEditandoPosicion(null)
   }
 
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null)
@@ -269,9 +294,30 @@ export default function Cobranza() {
   const [guardandoUbicDet, setGuardandoUbicDet]       = useState(false)
   const [exitoUbicDet, setExitoUbicDet]               = useState('')
 
+  const saveTimerRef = useRef(null)
+
+  const guardarOrdenRuta = useCallback((orden) => {
+    clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      api.put('/usuarios/mi-orden', { orden }).catch(() => {})
+    }, 1200)
+  }, [])
+
+  const cargarOrdenRuta = async () => {
+    try {
+      const res = await api.get('/usuarios/mi-orden')
+      const orden = res.data.orden
+      if (Array.isArray(orden) && orden.length > 0) {
+        setOrdenManual(orden)
+        setOrdenar('ruta')
+        return true
+      }
+    } catch {}
+    return false
+  }
+
   useEffect(() => {
     cargarCuentas()
-    // Detectar filtro de vencidas desde el dashboard
     if (new URLSearchParams(location.search).get('filtro') === 'vencidas') {
       setSoloVencidas(true)
     }
@@ -1236,7 +1282,26 @@ export default function Cobranza() {
                       )}
                       <div className="min-w-0">
                         <p className={`font-semibold truncate ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>
-                          {pos >= 0 && <span className="text-xs font-bold text-blue-500 mr-1">#{pos + 1}</span>}
+                          {pos >= 0 && (
+                            editandoPosicion === c.id_cuenta ? (
+                              <input
+                                autoFocus
+                                type="number"
+                                min={1}
+                                max={ordenManual.length}
+                                defaultValue={pos + 1}
+                                className="w-12 text-xs font-bold text-blue-600 border border-blue-400 rounded px-1 mr-1 inline-block"
+                                onKeyDown={e => { if (e.key === 'Enter') moverAPosicion(c.id_cuenta, e.target.value) }}
+                                onBlur={e => moverAPosicion(c.id_cuenta, e.target.value)}
+                              />
+                            ) : (
+                              <button
+                                onClick={() => setEditandoPosicion(c.id_cuenta)}
+                                className="text-xs font-bold text-blue-500 mr-1 hover:text-blue-700 hover:underline"
+                                title="Toca para cambiar posición"
+                              >#{pos + 1}</button>
+                            )
+                          )}
                           {c.cliente?.nombre}
                           {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500 ml-1 font-normal">⚠️</span>}
                         </p>
@@ -1363,17 +1428,37 @@ export default function Cobranza() {
                         </button>
                       </td>
                     )}
-                    {modoCobranza && ordenar === 'ruta' && (
-                      <td className="px-2 py-4">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span className="text-xs text-blue-500 font-bold">
-                            #{(ordenManual.indexOf(c.id_cuenta) + 1) || '—'}
-                          </span>
-                          <button onClick={() => moverEnOrden(c.id_cuenta, -1)} className="text-gray-400 hover:text-gray-700 text-sm leading-none">↑</button>
-                          <button onClick={() => moverEnOrden(c.id_cuenta, 1)} className="text-gray-400 hover:text-gray-700 text-sm leading-none">↓</button>
-                        </div>
-                      </td>
-                    )}
+                    {modoCobranza && ordenar === 'ruta' && (() => {
+                      const posIdx = ordenManual.indexOf(c.id_cuenta)
+                      return (
+                        <td className="px-2 py-4">
+                          <div className="flex flex-col items-center gap-0.5">
+                            {editandoPosicion === c.id_cuenta ? (
+                              <input
+                                autoFocus
+                                type="number"
+                                min={1}
+                                max={ordenManual.length}
+                                defaultValue={posIdx + 1}
+                                className="w-12 text-xs font-bold text-blue-600 border border-blue-400 rounded px-1 text-center"
+                                onKeyDown={e => { if (e.key === 'Enter') moverAPosicion(c.id_cuenta, e.target.value) }}
+                                onBlur={e => moverAPosicion(c.id_cuenta, e.target.value)}
+                              />
+                            ) : (
+                              <button
+                                onClick={() => setEditandoPosicion(c.id_cuenta)}
+                                className="text-xs text-blue-500 font-bold hover:underline"
+                                title="Clic para cambiar posición"
+                              >
+                                #{posIdx >= 0 ? posIdx + 1 : '—'}
+                              </button>
+                            )}
+                            <button onClick={() => moverEnOrden(c.id_cuenta, -1)} className="text-gray-400 hover:text-gray-700 text-sm leading-none">↑</button>
+                            <button onClick={() => moverEnOrden(c.id_cuenta, 1)} className="text-gray-400 hover:text-gray-700 text-sm leading-none">↓</button>
+                          </div>
+                        </td>
+                      )
+                    })()}
                     <td className="px-6 py-4">
                       <p className={`font-medium ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>{c.cliente?.nombre}</p>
                       {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500">⚠️ Sin ubicación</span>}
