@@ -4,6 +4,10 @@ export default function UpdatePrompt() {
   const [updateFn, setUpdateFn] = useState(null)
 
   useEffect(() => {
+    // Si el evento disparó antes de que montáramos, lo capturamos aquí
+    if (window.__pwaUpdateFn) {
+      setUpdateFn(() => window.__pwaUpdateFn)
+    }
     const handler = (e) => setUpdateFn(() => e.detail.updateSW)
     window.addEventListener('pwa-update-available', handler)
     return () => window.removeEventListener('pwa-update-available', handler)

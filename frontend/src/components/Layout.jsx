@@ -86,6 +86,21 @@ export default function Layout({ children }) {
     navigate('/login')
   }
 
+  const handleForzarActualizacion = async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(registrations.map(r => r.unregister()))
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys()
+        await Promise.all(keys.map(k => caches.delete(k)))
+      }
+    } finally {
+      window.location.reload(true)
+    }
+  }
+
   const itemsMenu = menu.filter(item => !item.roles || item.roles.includes(usuario?.rol))
 
   return (
@@ -202,6 +217,13 @@ export default function Layout({ children }) {
           ) : (
             <>
               <p className="text-gray-400 text-xs mb-2 truncate">{usuario?.nombre}</p>
+              <button
+                onClick={handleForzarActualizacion}
+                className="text-left text-xs text-gray-500 hover:text-gray-300 transition mb-2 flex items-center gap-1"
+                title="Limpiar caché y recargar la app"
+              >
+                🔄 Actualizar app
+              </button>
               <button
                 onClick={handleLogout}
                 className="text-left text-sm text-red-400 hover:text-red-300 transition min-h-[44px] flex items-center"
