@@ -525,6 +525,58 @@ export default function Cobranza() {
     setDatosPago(null)
   }
 
+  const formatearTextoTicket = (datos) => {
+    const W = 32
+    const sep = '================================'
+    const das = '--------------------------------'
+    const fmt = (n) => `$${parseFloat(n || 0).toFixed(2)}`
+    const fecha = new Date(datos.fecha_pago)
+    const fechaStr = fecha.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Mexico_City' })
+    const horaStr  = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })
+    const folio    = `TICKET-${String(datos.id_pago).padStart(6, '0')}`
+    const center   = (s) => { const p = Math.max(0, Math.floor((W - s.length) / 2)); return ' '.repeat(p) + s }
+    const row      = (l, r) => { const sp = Math.max(1, W - l.length - r.length); return l + ' '.repeat(sp) + r }
+    const nombre   = (datos.cliente_nombre || '').substring(0, 20)
+    const tipoStr  = { abono: 'Abono', liquidacion: 'Liquidacion', pago_extra: 'Pago extra', recuperacion_enganche: 'Rec. enganche' }[datos.tipo_pago] || datos.tipo_pago || ''
+
+    return [
+      sep,
+      center('NOVEDADES CANCUN'),
+      center('Comprobante de Pago'),
+      center(folio),
+      center(`${fechaStr}  ${horaStr}`),
+      sep,
+      row('Cliente:', nombre),
+      row('Expediente:', datos.numero_expediente || ''),
+      ...(datos.numero_cuenta ? [row('No. cuenta:', datos.numero_cuenta)] : []),
+      row('Plan:', (datos.plan_actual || '').replace(/_/g, ' ')),
+      das,
+      center('MONTO ABONADO'),
+      center(fmt(datos.monto_pago)),
+      row('Tipo:', tipoStr),
+      das,
+      row('Saldo anterior:', fmt(datos.saldo_anterior)),
+      row('Saldo restante:', fmt(datos.saldo_nuevo)),
+      das,
+      center(`Para liquidar: ${fmt(datos.saldo_nuevo)}`),
+      das,
+      row('Cobrador:', datos.cobrador_nombre || ''),
+      sep,
+      center('Conserve este comprobante'),
+      '', '', '',
+    ].join('\n')
+  }
+
+  const compartirTicket = async (datos) => {
+    const texto = formatearTextoTicket(datos)
+    const folio = `TICKET-${String(datos.id_pago).padStart(6, '0')}`
+    try {
+      await navigator.share({ title: folio, text: texto })
+    } catch (e) {
+      if (e.name !== 'AbortError') alert('No se pudo compartir: ' + e.message)
+    }
+  }
+
   const generarTicket = (datos) => {
     const {
       id_pago, fecha_pago, monto_pago, saldo_anterior, saldo_nuevo,
@@ -2075,13 +2127,24 @@ export default function Cobranza() {
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
                   <p className="text-green-700 text-sm font-medium">{exito}</p>
                   {datosPago && (
-                    <button
-                      type="button"
-                      onClick={() => generarTicket(datosPago)}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white py-1.5 rounded-lg text-sm font-medium transition"
-                    >
-                      🖨️ Ver comprobante
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => generarTicket(datosPago)}
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded-lg text-sm font-medium transition"
+                      >
+                        🖨️ Ver comprobante
+                      </button>
+                      {'share' in navigator && (
+                        <button
+                          type="button"
+                          onClick={() => compartirTicket(datosPago)}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded-lg text-sm font-medium transition"
+                        >
+                          📲 Compartir / RawBT
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               ) : null}
