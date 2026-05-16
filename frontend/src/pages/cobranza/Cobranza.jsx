@@ -550,49 +550,54 @@ export default function Cobranza() {
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Comprobante ${folioPago}</title>
   <style>
+    @page {
+      size: 58mm auto;
+      margin: 2mm 0;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 12px;
-      width: 80mm;
-      max-width: 80mm;
+      font-size: 11px;
+      width: 58mm;
+      max-width: 58mm;
       margin: 0 auto;
-      padding: 6mm 4mm;
+      padding: 3mm 3mm;
       background: #fff;
       color: #000;
     }
     .center  { text-align: center; }
     .right   { text-align: right; }
     .bold    { font-weight: bold; }
-    .row     { display: flex; justify-content: space-between; margin: 2px 0; }
-    .sep-sol { border-top: 1px solid #000; margin: 6px 0; }
-    .sep-das { border-top: 1px dashed #666; margin: 6px 0; }
-    .empresa { font-size: 16px; font-weight: bold; letter-spacing: 1px; }
-    .titulo  { font-size: 11px; color: #444; margin-top: 2px; }
-    .folio   { font-size: 10px; color: #555; margin-top: 4px; }
+    .row     { display: flex; justify-content: space-between; margin: 2px 0; font-size: 10px; }
+    .sep-sol { border-top: 1px solid #000; margin: 4px 0; }
+    .sep-das { border-top: 1px dashed #666; margin: 4px 0; }
+    .empresa { font-size: 13px; font-weight: bold; letter-spacing: 1px; }
+    .titulo  { font-size: 10px; color: #444; margin-top: 2px; }
+    .folio   { font-size: 9px; color: #555; margin-top: 3px; }
     .monto-principal {
-      font-size: 28px;
+      font-size: 22px;
       font-weight: bold;
       text-align: center;
       letter-spacing: 1px;
-      margin: 8px 0 4px;
+      margin: 5px 0 3px;
     }
-    .monto-label { font-size: 10px; text-align: center; color: #555; }
+    .monto-label { font-size: 9px; text-align: center; color: #555; }
     .liquidar-box {
       border: 1px dashed #000;
-      padding: 4px 6px;
-      margin: 6px 0;
+      padding: 3px 4px;
+      margin: 4px 0;
       text-align: center;
-      font-size: 11px;
+      font-size: 10px;
     }
-    .pie { font-size: 10px; text-align: center; color: #444; }
+    .pie { font-size: 9px; text-align: center; color: #444; }
     .btn-imprimir {
       display: block;
       width: 100%;
       padding: 8px;
-      margin-top: 14px;
+      margin-top: 12px;
       background: #1d4ed8;
       color: #fff;
       border: none;
@@ -603,6 +608,7 @@ export default function Cobranza() {
     }
     @media print {
       .btn-imprimir { display: none; }
+      body { padding: 0 2mm; }
     }
   </style>
 </head>
