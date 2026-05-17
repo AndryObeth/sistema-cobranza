@@ -199,15 +199,21 @@ export default function Cobranza() {
   )
 
   const handleDragEnd = ({ active, over }) => {
-    if (!over || active.id === over.id) return
-    setOrdenManual(prev => {
-      const oldIdx = prev.indexOf(active.id)
-      const newIdx = prev.indexOf(over.id)
-      if (oldIdx === -1 || newIdx === -1) return prev
-      const next = arrayMove(prev, oldIdx, newIdx)
-      guardarOrdenRuta(next)
-      return next
-    })
+    try {
+      if (!over || active.id === over.id) return
+      const activeId = Number(active.id)
+      const overId   = Number(over.id)
+      setOrdenManual(prev => {
+        const oldIdx = prev.indexOf(activeId)
+        const newIdx = prev.indexOf(overId)
+        if (oldIdx === -1 || newIdx === -1) return prev
+        const next = arrayMove(prev, oldIdx, newIdx)
+        guardarOrdenRuta(next)
+        return next
+      })
+    } catch (e) {
+      console.error('Error en drag end:', e)
+    }
   }
 
   const moverEnOrden = (id_cuenta, dir) => {
@@ -1454,9 +1460,9 @@ export default function Cobranza() {
           if (modoCobranza && ordenar === 'ruta') {
             return (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={cuentasFiltradas.map(c => c.id_cuenta)} strategy={verticalListSortingStrategy}>
+                <SortableContext items={cuentasFiltradas.map(c => String(c.id_cuenta))} strategy={verticalListSortingStrategy}>
                   {cuentasFiltradas.map(c => (
-                    <SortableCardWrapper key={c.id_cuenta} id={c.id_cuenta}>
+                    <SortableCardWrapper key={c.id_cuenta} id={String(c.id_cuenta)}>
                       {(listeners) => renderCard(c, listeners)}
                     </SortableCardWrapper>
                   ))}
