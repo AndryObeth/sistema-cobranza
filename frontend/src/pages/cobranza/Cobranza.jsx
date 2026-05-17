@@ -109,6 +109,7 @@ export default function Cobranza() {
   const [soloPendientes, setSoloPendientes] = useState(() => {
     try { return JSON.parse(localStorage.getItem('cobranza_solo_pendientes')) ?? false } catch { return false }
   })
+  const [ocultosRuta, setOcultosRuta] = useState(new Set())
 
   useEffect(() => { localStorage.setItem('cobranza_modo', JSON.stringify(modoCobranza)) }, [modoCobranza])
   useEffect(() => { localStorage.setItem('cobranza_visitados', JSON.stringify([...visitados])) }, [visitados])
@@ -117,6 +118,14 @@ export default function Cobranza() {
 
   const toggleVisitado = (id) => {
     setVisitados(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleOculto = (id) => {
+    setOcultosRuta(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
       return next
@@ -180,8 +189,8 @@ export default function Cobranza() {
     setModoCobranza(false)
     setVisitados(new Set())
     setSoloPendientes(false)
+    setOcultosRuta(new Set())
     setOrdenar('cumplimiento')
-    // No borramos ordenManual para conservar la ruta guardada
   }
 
   const sensors = useSensors(
@@ -1117,6 +1126,7 @@ export default function Cobranza() {
       }
     })
     .filter(c => !modoCobranza || !soloPendientes || !visitados.has(c.id_cuenta))
+    .filter(c => !modoCobranza || !ocultosRuta.has(c.id_cuenta))
 
   const totalVencidas    = cuentas.filter(estaVencida).length
   const totalVisitados   = modoCobranza ? [...visitados].filter(id => cuentasFiltradas.find(c => c.id_cuenta === id) || visitados.has(id)).length : 0
@@ -1209,7 +1219,15 @@ export default function Cobranza() {
                 Reiniciar checklist
               </button>
             )}
-            <div className="flex items-center gap-3 ml-auto">
+            <div className="flex items-center gap-3 ml-auto flex-wrap justify-end">
+              {ocultosRuta.size > 0 && (
+                <button
+                  onClick={() => setOcultosRuta(new Set())}
+                  className="text-xs text-gray-500 hover:text-gray-700 font-medium border border-gray-300 rounded-lg px-2 py-1"
+                >
+                  👁️ Mostrar {ocultosRuta.size} oculto{ocultosRuta.size !== 1 ? 's' : ''}
+                </button>
+              )}
               {sinUbicacionCount > 0 && (
                 <span className="text-xs text-amber-600 font-medium">
                   ⚠️ {sinUbicacionCount} sin ubicación (van al final)
@@ -1372,6 +1390,13 @@ export default function Cobranza() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
+                    {modoCobranza && (
+                      <button
+                        onClick={() => toggleOculto(c.id_cuenta)}
+                        className="text-gray-300 hover:text-gray-500 text-base leading-none"
+                        title="Ocultar de la ruta de hoy"
+                      >👁️</button>
+                    )}
                     {esVisitado && (
                       <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">Visitado</span>
                     )}
@@ -1554,16 +1579,23 @@ export default function Cobranza() {
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
                         {modoCobranza && (
-                          <button
-                            onClick={() => toggleVisitado(c.id_cuenta)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition border ${
-                              esVisitado
-                                ? 'bg-green-100 border-green-300 text-green-700 hover:bg-green-200'
-                                : 'bg-white border-gray-300 text-gray-600 hover:border-green-400'
-                            }`}
-                          >
-                            {esVisitado ? '✓ Visitado' : 'Marcar'}
-                          </button>
+                          <>
+                            <button
+                              onClick={() => toggleVisitado(c.id_cuenta)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition border ${
+                                esVisitado
+                                  ? 'bg-green-100 border-green-300 text-green-700 hover:bg-green-200'
+                                  : 'bg-white border-gray-300 text-gray-600 hover:border-green-400'
+                              }`}
+                            >
+                              {esVisitado ? '✓ Visitado' : 'Marcar'}
+                            </button>
+                            <button
+                              onClick={() => toggleOculto(c.id_cuenta)}
+                              className="px-2 py-1.5 rounded-lg text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 border border-gray-200 transition"
+                              title="Ocultar de la ruta de hoy"
+                            >👁️</button>
+                          </>
                         )}
                         <button
                           onClick={() => abrirDetalle(c)}
