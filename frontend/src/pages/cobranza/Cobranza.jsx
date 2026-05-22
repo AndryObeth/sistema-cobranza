@@ -582,17 +582,7 @@ export default function Cobranza() {
     ].join('\n')
   }
 
-  const compartirTicket = async (datos) => {
-    const texto = formatearTextoTicket(datos)
-    const folio = `TICKET-${String(datos.id_pago).padStart(6, '0')}`
-    try {
-      await navigator.share({ title: folio, text: texto })
-    } catch (e) {
-      if (e.name !== 'AbortError') alert('No se pudo compartir: ' + e.message)
-    }
-  }
-
-  const generarTicket = (datos) => {
+  const buildTicketHtml = (datos, logoSrc) => {
     const {
       id_pago, fecha_pago, monto_pago, saldo_anterior, saldo_nuevo,
       tipo_pago, origen_pago,
@@ -613,17 +603,14 @@ export default function Cobranza() {
     const origenStr = { domicilio: 'Domicilio', calle: 'Calle', oficina: 'Oficina' }[origen_pago] || origen_pago
     const tipoStr   = { abono: 'Abono', liquidacion: 'Liquidación', pago_extra: 'Pago extra', recuperacion_enganche: 'Rec. enganche' }[tipo_pago] || tipo_pago
 
-    const html = `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Comprobante ${folioPago}</title>
   <style>
-    @page {
-      size: 58mm auto;
-      margin: 2mm 0;
-    }
+    @page { size: 58mm auto; margin: 2mm 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Courier New', Courier, monospace;
@@ -641,49 +628,23 @@ export default function Cobranza() {
     .row     { display: flex; justify-content: space-between; margin: 2px 0; font-size: 10px; }
     .sep-sol { border-top: 1px solid #000; margin: 4px 0; }
     .sep-das { border-top: 1px dashed #666; margin: 4px 0; }
-    .empresa { font-size: 13px; font-weight: bold; letter-spacing: 1px; }
     .titulo  { font-size: 10px; color: #444; margin-top: 2px; }
     .folio   { font-size: 9px; color: #555; margin-top: 3px; }
-    .monto-principal {
-      font-size: 22px;
-      font-weight: bold;
-      text-align: center;
-      letter-spacing: 1px;
-      margin: 5px 0 3px;
-    }
+    .monto-principal { font-size: 22px; font-weight: bold; text-align: center; letter-spacing: 1px; margin: 5px 0 3px; }
     .monto-label { font-size: 9px; text-align: center; color: #555; }
-    .liquidar-box {
-      border: 1px dashed #000;
-      padding: 3px 4px;
-      margin: 4px 0;
-      text-align: center;
-      font-size: 10px;
-    }
+    .liquidar-box { border: 1px dashed #000; padding: 3px 4px; margin: 4px 0; text-align: center; font-size: 10px; }
     .pie { font-size: 9px; text-align: center; color: #444; }
     .btn-imprimir {
-      display: block;
-      width: 100%;
-      padding: 8px;
-      margin-top: 12px;
-      background: #1d4ed8;
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      font-size: 13px;
-      cursor: pointer;
-      font-family: inherit;
+      display: block; width: 100%; padding: 8px; margin-top: 12px;
+      background: #1d4ed8; color: #fff; border: none; border-radius: 4px;
+      font-size: 13px; cursor: pointer; font-family: inherit;
     }
-    @media print {
-      .btn-imprimir { display: none; }
-      body { padding: 0 2mm; }
-    }
+    @media print { .btn-imprimir { display: none; } body { padding: 0 2mm; } }
   </style>
 </head>
 <body>
   <div class="center">
-    <img src="${window.location.origin}/logo.png" alt="Novedades Cancún"
-         style="width:38mm;max-width:38mm;display:block;margin:0 auto 2mm;"
-         onerror="this.style.display='none'">
+    ${logoSrc ? `<img src="${logoSrc}" alt="Novedades Cancún" style="width:38mm;max-width:38mm;display:block;margin:0 auto 2mm;">` : '<div style="font-size:13px;font-weight:bold;letter-spacing:1px;">NOVEDADES CANCUN</div>'}
     <div class="titulo">Comprobante de Pago</div>
     <div class="folio">${folioPago}</div>
     <div class="folio">${fechaStr} &nbsp; ${horaStr}</div>
@@ -705,7 +666,6 @@ export default function Cobranza() {
   ` : ''}
 
   <div class="sep-das"></div>
-
   <div class="monto-label">MONTO ABONADO</div>
   <div class="monto-principal">${fmtMXN(monto_pago)}</div>
   <div class="row"><span>Tipo:</span><span>${tipoStr}</span></div>
@@ -713,27 +673,55 @@ export default function Cobranza() {
   <div class="row"><span>Saldo anterior:</span><span>${fmtMXN(saldo_anterior)}</span></div>
   <div class="row"><span>Saldo restante:</span><span class="bold">${fmtMXN(saldo_nuevo)}</span></div>
 
-  <div class="liquidar-box">
-    Para liquidar hoy: <strong>${fmtMXN(saldo_nuevo)}</strong>
-  </div>
+  <div class="liquidar-box">Para liquidar hoy: <strong>${fmtMXN(saldo_nuevo)}</strong></div>
 
   <div class="sep-das"></div>
-
   <div class="row"><span>Cobrador:</span><span>${cobrador_nombre}</span></div>
   <div class="row"><span>Origen:</span><span>${origenStr}</span></div>
 
   <div class="sep-sol"></div>
-
   <div class="pie">Conserve este comprobante</div>
   <div class="pie" style="margin-top:3px; font-size:9px;">${folioPago}</div>
 
   <button class="btn-imprimir" onclick="window.print()">Imprimir</button>
-
-  <script>
-    window.onload = function() { window.print(); }
-  </script>
+  <script>window.onload = function() { window.print(); }</script>
 </body>
 </html>`
+  }
+
+  const fetchLogoBase64 = async () => {
+    try {
+      const resp = await fetch('/logo.png')
+      const blob = await resp.blob()
+      return await new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.readAsDataURL(blob)
+      })
+    } catch (_) {
+      return null
+    }
+  }
+
+  const compartirTicket = async (datos) => {
+    const folio = `TICKET-${String(datos.id_pago).padStart(6, '0')}`
+    try {
+      const logoBase64 = await fetchLogoBase64()
+      const html = buildTicketHtml(datos, logoBase64)
+      const archivo = new File([html], `${folio}.html`, { type: 'text/html' })
+      if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+        await navigator.share({ title: folio, files: [archivo] })
+        return
+      }
+      // Fallback a texto plano si el dispositivo no admite compartir archivos
+      await navigator.share({ title: folio, text: formatearTextoTicket(datos) })
+    } catch (e) {
+      if (e.name !== 'AbortError') alert('No se pudo compartir: ' + e.message)
+    }
+  }
+
+  const generarTicket = (datos) => {
+    const html = buildTicketHtml(datos, window.location.origin + '/logo.png')
 
     const ventana = window.open('', '_blank', 'width=350,height=650')
     if (!ventana) throw new Error('Popup bloqueado')
