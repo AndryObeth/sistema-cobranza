@@ -689,164 +689,16 @@ export default function Cobranza() {
 </html>`
   }
 
-  const renderTicketCanvas = (datos) => new Promise(async (resolve) => {
-    const {
-      id_pago, fecha_pago, monto_pago, saldo_anterior, saldo_nuevo,
-      tipo_pago, origen_pago, cliente_nombre, numero_expediente,
-      numero_cuenta, folio_cuenta, plan_actual, cobrador_nombre,
-      precio_original_total, precio_final_total
-    } = datos
-
-    const fmt = (n) => `$${parseFloat(n || 0).toFixed(2)}`
-    const fecha = new Date(fecha_pago)
-    const fechaStr = fecha.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Mexico_City' })
-    const horaStr  = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })
-    const folioPago = `TICKET-${String(id_pago).padStart(6, '0')}`
-    const tipoStr  = { abono: 'Abono', liquidacion: 'Liquidacion', pago_extra: 'Pago extra', recuperacion_enganche: 'Rec. enganche' }[tipo_pago] || tipo_pago
-    const origenStr = { domicilio: 'Domicilio', calle: 'Calle', oficina: 'Oficina' }[origen_pago] || origen_pago
-    const precioOrig  = parseFloat(precio_original_total || 0)
-    const precioFinal = parseFloat(precio_final_total || 0)
-    const ahorro = precioOrig > precioFinal ? precioOrig - precioFinal : 0
-
-    // Cargar logo
-    let logoImg = null
-    try {
-      const resp = await fetch('/logo.png')
-      const blob = await resp.blob()
-      const blobUrl = URL.createObjectURL(blob)
-      logoImg = await new Promise((res) => {
-        const img = new Image()
-        img.onload = () => { URL.revokeObjectURL(blobUrl); res(img) }
-        img.onerror = () => { URL.revokeObjectURL(blobUrl); res(null) }
-        img.src = blobUrl
-      })
-    } catch (_) {}
-
-    const W = 384
-    const PAD = 12
-    const CW = W - PAD * 2
-    const LH = 22
-    const FS = 15
-    const LOGO_SIZE = logoImg ? 110 : 0
-
-    // Instrucciones de dibujo
-    const lines = []
-    if (logoImg) lines.push(['logo'])
-    lines.push(['center', 'Comprobante de Pago'])
-    lines.push(['center', folioPago])
-    lines.push(['center', `${fechaStr}  ${horaStr}`])
-    lines.push(['sep'])
-    lines.push(['row', 'Cliente:', cliente_nombre || ''])
-    lines.push(['row', 'Expediente:', numero_expediente || ''])
-    if (numero_cuenta) lines.push(['row', 'No. cuenta:', numero_cuenta])
-    lines.push(['row', 'Folio:', folio_cuenta || ''])
-    lines.push(['row', 'Plan:', (plan_actual || '').replace(/_/g, ' ')])
-    if (precioOrig > 0) {
-      lines.push(['das'])
-      lines.push(['row-strike', 'Precio original:', fmt(precioOrig)])
-      lines.push(['row', 'Precio del plan:', fmt(precioFinal)])
-      if (ahorro > 0) lines.push(['row-green', 'Ahorro:', fmt(ahorro)])
-    }
-    lines.push(['das'])
-    lines.push(['center-small', 'MONTO ABONADO'])
-    lines.push(['center-large', fmt(monto_pago)])
-    lines.push(['row', 'Tipo:', tipoStr])
-    lines.push(['das'])
-    lines.push(['row', 'Saldo anterior:', fmt(saldo_anterior)])
-    lines.push(['row-bold', 'Saldo restante:', fmt(saldo_nuevo)])
-    lines.push(['box', `Para liquidar: ${fmt(saldo_nuevo)}`])
-    lines.push(['das'])
-    lines.push(['row', 'Cobrador:', cobrador_nombre || ''])
-    lines.push(['row', 'Origen:', origenStr])
-    lines.push(['sep'])
-    lines.push(['center', 'Conserve este comprobante'])
-    lines.push(['center-small', folioPago])
-
-    // Calcular altura total
-    let totalH = PAD + (logoImg ? LOGO_SIZE + 8 : 0)
-    for (const [type] of lines) {
-      if (type === 'logo') continue
-      else if (type === 'center-large') totalH += 38
-      else if (type === 'box') totalH += LH + 10
-      else totalH += LH
-    }
-    totalH += PAD * 2
-
-    const canvas = document.createElement('canvas')
-    canvas.width = W
-    canvas.height = totalH
-    const ctx = canvas.getContext('2d')
-    ctx.fillStyle = '#fff'
-    ctx.fillRect(0, 0, W, totalH)
-
-    let y = PAD
-
-    if (logoImg) {
-      ctx.drawImage(logoImg, (W - LOGO_SIZE) / 2, y, LOGO_SIZE, LOGO_SIZE)
-      y += LOGO_SIZE + 8
-    }
-
-    for (const [type, a, b] of lines) {
-      if (type === 'logo') continue
-
-      ctx.setLineDash([])
-      ctx.lineWidth = 1
-
-      if (type === 'sep') {
-        ctx.fillStyle = '#000'
-        ctx.fillRect(PAD, y + LH / 2, CW, 1)
-        y += LH
-      } else if (type === 'das') {
-        ctx.setLineDash([4, 4])
-        ctx.strokeStyle = '#999'
-        ctx.beginPath(); ctx.moveTo(PAD, y + LH / 2); ctx.lineTo(W - PAD, y + LH / 2); ctx.stroke()
-        y += LH
-      } else if (type === 'center') {
-        ctx.font = `${FS}px monospace`; ctx.fillStyle = '#000'; ctx.textAlign = 'center'
-        ctx.fillText(a, W / 2, y + FS); y += LH
-      } else if (type === 'center-small') {
-        ctx.font = `12px monospace`; ctx.fillStyle = '#555'; ctx.textAlign = 'center'
-        ctx.fillText(a, W / 2, y + 12); y += LH
-      } else if (type === 'center-large') {
-        ctx.font = `bold 30px monospace`; ctx.fillStyle = '#000'; ctx.textAlign = 'center'
-        ctx.fillText(a, W / 2, y + 30); y += 38
-      } else if (type === 'row' || type === 'row-bold' || type === 'row-strike' || type === 'row-green') {
-        ctx.font = type === 'row-bold' ? `bold ${FS}px monospace` : `${FS}px monospace`
-        ctx.fillStyle = type === 'row-green' ? '#16a34a' : '#000'
-        ctx.textAlign = 'left'; ctx.fillText(a, PAD, y + FS)
-        ctx.textAlign = 'right'; ctx.fillText(b, W - PAD, y + FS)
-        if (type === 'row-strike') {
-          const tw = ctx.measureText(b).width
-          ctx.strokeStyle = '#999'; ctx.beginPath()
-          ctx.moveTo(W - PAD - tw, y + FS / 2 + 2); ctx.lineTo(W - PAD, y + FS / 2 + 2); ctx.stroke()
-        }
-        y += LH
-      } else if (type === 'box') {
-        ctx.setLineDash([4, 4]); ctx.strokeStyle = '#000'
-        ctx.strokeRect(PAD, y + 2, CW, LH + 6)
-        ctx.setLineDash([])
-        ctx.font = `${FS}px monospace`; ctx.fillStyle = '#000'; ctx.textAlign = 'center'
-        ctx.fillText(a, W / 2, y + FS + 4); y += LH + 10
-      }
-    }
-
-    canvas.toBlob((blob) => resolve(blob), 'image/png')
-  })
-
   const compartirTicket = async (datos) => {
     const folio = `TICKET-${String(datos.id_pago).padStart(6, '0')}`
     try {
-      const blob = await renderTicketCanvas(datos)
-      const archivo = new File([blob], `${folio}.png`, { type: 'image/png' })
-      if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
-        await navigator.share({ title: folio, files: [archivo] })
-        return
-      }
       await navigator.share({ title: folio, text: formatearTextoTicket(datos) })
     } catch (e) {
       if (e.name !== 'AbortError') alert('No se pudo compartir: ' + e.message)
     }
   }
+
+
 
   const generarTicket = (datos) => {
     const html = buildTicketHtml(datos, window.location.origin + '/logo.png')
