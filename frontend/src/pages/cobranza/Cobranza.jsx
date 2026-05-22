@@ -693,10 +693,20 @@ export default function Cobranza() {
     try {
       const resp = await fetch('/logo.png')
       const blob = await resp.blob()
+      const blobUrl = URL.createObjectURL(blob)
       return await new Promise((resolve) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result)
-        reader.readAsDataURL(blob)
+        const img = new Image()
+        img.onload = () => {
+          const SIZE = 150
+          const canvas = document.createElement('canvas')
+          canvas.width = SIZE
+          canvas.height = SIZE
+          canvas.getContext('2d').drawImage(img, 0, 0, SIZE, SIZE)
+          URL.revokeObjectURL(blobUrl)
+          resolve(canvas.toDataURL('image/jpeg', 0.7))
+        }
+        img.onerror = () => { URL.revokeObjectURL(blobUrl); resolve(null) }
+        img.src = blobUrl
       })
     } catch (_) {
       return null
