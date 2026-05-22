@@ -11,6 +11,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const [resumen, setResumen] = useState(null)
   const [cargando, setCargando] = useState(true)
+  const [notifVencimientos, setNotifVencimientos] = useState(null)
 
   // Consulta de cobros por fecha
   const [verConsulta, setVerConsulta]         = useState(false)
@@ -34,11 +35,27 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
+    const esAdmin = ['administrador', 'supervisor_cobranza'].includes(usuario?.rol)
+
     api.get('/dashboard/resumen')
-      .then(res => setResumen(res.data))
+      .then(async (res) => {
+        const data = res.data
+        setResumen(data)
+
+        if (esAdmin && data.planes_vencidos > 0) {
+          try {
+            const r = await api.post('/cuentas/procesar-vencimientos')
+            if (r.data.procesadas > 0) {
+              setNotifVencimientos(r.data)
+              const actualizado = await api.get('/dashboard/resumen')
+              setResumen(actualizado.data)
+            }
+          } catch (_) {}
+        }
+      })
       .catch(() => console.error('Error al cargar resumen'))
       .finally(() => setCargando(false))
-  }, [])
+  }, [usuario?.rol])
 
   const fila1 = [
     {
@@ -112,6 +129,25 @@ export default function Dashboard() {
           {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Mexico_City' })}
         </p>
       </div>
+
+      {/* Notificación: planes auto-actualizados */}
+      {notifVencimientos && (
+        <div className="mb-4 bg-green-50 border border-green-300 rounded-xl px-4 py-3 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-green-800 font-semibold text-sm">
+              {notifVencimientos.procesadas} {notifVencimientos.procesadas === 1 ? 'cuenta actualizada' : 'cuentas actualizadas'} automáticamente
+            </p>
+            <p className="text-green-600 text-xs mt-0.5">
+              {notifVencimientos.procesadas === 1 ? 'Su plan venció' : 'Sus planes vencieron'} y {notifVencimientos.procesadas === 1 ? 'fue movida' : 'fueron movidas'} al siguiente nivel disponible.
+              {notifVencimientos.omitidas > 0 && ` (${notifVencimientos.omitidas} ya estaban en largo plazo)`}
+            </p>
+            {notifVencimientos.errores?.length > 0 && (
+              <p className="text-orange-600 text-xs mt-0.5">{notifVencimientos.errores.length} con error — revisar manualmente.</p>
+            )}
+          </div>
+          <button onClick={() => setNotifVencimientos(null)} className="text-green-400 hover:text-green-600 text-lg leading-none shrink-0">×</button>
+        </div>
+      )}
 
       {/* Fila 1 — métricas principales */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-4 md:mb-6">
