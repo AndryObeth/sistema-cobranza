@@ -681,7 +681,9 @@ export default function Cobranza() {
 </head>
 <body>
   <div class="center">
-    <div class="empresa">NOVEDADES CANCUN</div>
+    <img src="${window.location.origin}/logo.png" alt="Novedades Cancún"
+         style="width:38mm;max-width:38mm;display:block;margin:0 auto 2mm;"
+         onerror="this.style.display='none'">
     <div class="titulo">Comprobante de Pago</div>
     <div class="folio">${folioPago}</div>
     <div class="folio">${fechaStr} &nbsp; ${horaStr}</div>
