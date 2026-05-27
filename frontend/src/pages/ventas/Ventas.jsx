@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -47,7 +47,46 @@ export default function Ventas() {
   const [productoDropdown, setProductoDropdown] = useState(false)
   const [productoCustomNombre, setProductoCustomNombre] = useState('')
   const [productoCustomPrecio, setProductoCustomPrecio] = useState('')
-  const [calculos, setCalculos] = useState(null)
+  const calculos = useMemo(() => {
+    if (productosSeleccionados.length === 0) return null
+
+    const precio_original_total = productosSeleccionados.reduce((s, p) => s + (parseFloat(p.precio_original) * p.cantidad), 0)
+
+    let precio_final_total = 0
+    let descuento = 0
+
+    if (form.tipo_venta === 'contado') {
+      descuento = 0.30
+      precio_final_total = precio_original_total * (1 - descuento)
+    } else {
+      if (form.plan_venta === 'un_mes')      { descuento = 0.30; precio_final_total = precio_original_total * 0.70 }
+      if (form.plan_venta === 'dos_meses')   { precio_final_total = productosSeleccionados.reduce((s, p) => s + (parseFloat(p.precio_2_meses || p.precio_original * 0.80) * p.cantidad), 0) }
+      if (form.plan_venta === 'tres_meses')  { precio_final_total = productosSeleccionados.reduce((s, p) => s + (parseFloat(p.precio_3_meses || p.precio_original * 0.80) * p.cantidad), 0) }
+      if (form.plan_venta === 'largo_plazo') { precio_final_total = precio_original_total }
+    }
+
+    const enganche_recibido      = parseFloat(form.enganche_recibido_total) || 0
+    const enganche_objetivo      = form.tipo_venta === 'plazo' ? precio_final_total * 0.10 : 0
+    const enganche_para_vendedor = Math.min(enganche_recibido, enganche_objetivo)
+    const enganche_regado        = Math.max(0, enganche_objetivo - enganche_recibido)
+    const sobreenganche          = Math.max(0, enganche_recibido - enganche_objetivo)
+    const monto_reportado        = form.tipo_venta === 'contado' ? precio_original_total * 0.50 : sobreenganche
+    const utilidad_vendedor      = form.tipo_venta === 'contado' ? precio_final_total - monto_reportado : 0
+    const saldo_cliente          = form.tipo_venta === 'plazo' ? precio_final_total - enganche_recibido : 0
+
+    return {
+      precio_original_total,
+      precio_final_total,
+      descuento: descuento * 100,
+      enganche_objetivo,
+      enganche_para_vendedor,
+      enganche_regado,
+      sobreenganche,
+      monto_reportado,
+      utilidad_vendedor,
+      saldo_cliente
+    }
+  }, [form, productosSeleccionados])
 
   // Campos exclusivos admin — nueva venta
   const [precioOverride, setPrecioOverride] = useState('')
@@ -65,8 +104,6 @@ export default function Ventas() {
   const [errorEdicion, setErrorEdicion] = useState('')
 
   useEffect(() => { cargarDatos() }, [])
-  useEffect(() => { calcularVenta() }, [form, productosSeleccionados])
-
   // Limpiar overrides cuando cambian productos o plan
   useEffect(() => { setPrecioOverride(''); setObservacionAjuste(''); setSaldoInicialOverride('') }, [form.tipo_venta, form.plan_venta, productosSeleccionados])
 
@@ -101,47 +138,6 @@ export default function Ventas() {
     if (rjefes.status === 'fulfilled') setJefesCamioneta(rjefes.value.data.filter(u => u.activo))
     if (!ok) setErrorModal('Error al cargar algunos datos. Verifica tu conexión.')
     setCargandoModal(false)
-  }
-
-  const calcularVenta = () => {
-    if (productosSeleccionados.length === 0) { setCalculos(null); return }
-
-    const precio_original_total = productosSeleccionados.reduce((s, p) => s + (p.precio_original * p.cantidad), 0)
-
-    let precio_final_total = 0
-    let descuento = 0
-
-    if (form.tipo_venta === 'contado') {
-      descuento = 0.30
-      precio_final_total = precio_original_total * (1 - descuento)
-    } else {
-      if (form.plan_venta === 'un_mes')      { descuento = 0.30; precio_final_total = precio_original_total * 0.70 }
-      if (form.plan_venta === 'dos_meses')   { precio_final_total = productosSeleccionados.reduce((s, p) => s + (parseFloat(p.precio_2_meses || p.precio_original * 0.80) * p.cantidad), 0) }
-      if (form.plan_venta === 'tres_meses')  { precio_final_total = productosSeleccionados.reduce((s, p) => s + (parseFloat(p.precio_3_meses || p.precio_original * 0.80) * p.cantidad), 0) }
-      if (form.plan_venta === 'largo_plazo') { precio_final_total = precio_original_total }
-    }
-
-    const enganche_recibido = parseFloat(form.enganche_recibido_total) || 0
-    const enganche_objetivo = form.tipo_venta === 'plazo' ? precio_final_total * 0.10 : 0
-    const enganche_para_vendedor = Math.min(enganche_recibido, enganche_objetivo)
-    const enganche_regado = Math.max(0, enganche_objetivo - enganche_recibido)
-    const sobreenganche = Math.max(0, enganche_recibido - enganche_objetivo)
-    const monto_reportado = form.tipo_venta === 'contado' ? precio_original_total * 0.50 : sobreenganche
-    const utilidad_vendedor = form.tipo_venta === 'contado' ? precio_final_total - monto_reportado : 0
-    const saldo_cliente = form.tipo_venta === 'plazo' ? precio_final_total - enganche_recibido : 0
-
-    setCalculos({
-      precio_original_total,
-      precio_final_total,
-      descuento: descuento * 100,
-      enganche_objetivo,
-      enganche_para_vendedor,
-      enganche_regado,
-      sobreenganche,
-      monto_reportado,
-      utilidad_vendedor,
-      saldo_cliente
-    })
   }
 
   const agregarProducto = (prod) => {
@@ -180,7 +176,6 @@ export default function Ventas() {
     setProductoCustomNombre('')
     setProductoCustomPrecio('')
     setProductosSeleccionados([])
-    setCalculos(null)
     setPrecioOverride('')
     setObservacionAjuste('')
     setSaldoInicialOverride('')
