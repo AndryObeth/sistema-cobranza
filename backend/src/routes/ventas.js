@@ -69,7 +69,7 @@ router.post('/', auth, async (req, res) => {
       ? parseFloat(precio_final_total_override)
       : parseFloat(precio_final_total)
 
-    const enganche_objetivo = precio_original_total * 0.10
+    const enganche_objetivo = precio_final_usado * 0.10
     const enganche_para_vendedor = Math.min(enganche_recibido_total || 0, enganche_objetivo)
     const enganche_regado = Math.max(0, enganche_objetivo - (enganche_recibido_total || 0))
     const sobreenganche = Math.max(0, (enganche_recibido_total || 0) - enganche_objetivo)

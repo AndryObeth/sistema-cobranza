@@ -122,7 +122,7 @@ export default function Ventas() {
     }
 
     const enganche_recibido = parseFloat(form.enganche_recibido_total) || 0
-    const enganche_objetivo = form.tipo_venta === 'plazo' ? precio_original_total * 0.10 : 0
+    const enganche_objetivo = form.tipo_venta === 'plazo' ? precio_final_total * 0.10 : 0
     const enganche_para_vendedor = Math.min(enganche_recibido, enganche_objetivo)
     const enganche_regado = Math.max(0, enganche_objetivo - enganche_recibido)
     const sobreenganche = Math.max(0, enganche_recibido - enganche_objetivo)
