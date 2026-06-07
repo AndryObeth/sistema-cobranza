@@ -196,3 +196,19 @@ Scripts `.cjs` en `backend/` para correcciones puntuales de BD. Se ejecutan con 
 - Consulta de cobros por fecha en Dashboard (admin/supervisor/secretaria)
 - Ticket de comprobante al registrar pago (popup HTML imprimible); popup bloqueado no causa error falso
 - Zona horaria: todos los `toLocaleDateString` usan `timeZone:'America/Mexico_City'`; `GET /pagos/por-fecha` filtra con offset `-06:00`
+- Logo de Novedades Cancún en ticket HTML imprimible (cargado desde `/logo.png` vía `window.location.origin`)
+- Compartir ticket con RawBT: texto plano (sin imagen para evitar marca de agua de versión gratuita)
+- Auto-procesamiento de planes vencidos al abrir Dashboard: admin/supervisor llama `POST /cuentas/procesar-vencimientos` si `planes_vencidos > 0`; muestra banner verde con conteo de cuentas actualizadas
+- Fix enganche objetivo: usa `precio_final_total` como base (no `precio_original`) tanto en frontend (`useMemo`) como en backend (`ventas.js`)
+- Fix cálculo de ventas en tiempo real: reemplazado `useEffect + setState` por `useMemo` en `Ventas.jsx` para eliminar estado obsoleto (stale closure)
+
+## Scripts de utilidad (raíz del proyecto)
+
+- `generar-catalogo.js` — genera `catalogo-novedades-cancun-2026.pdf` con puppeteer
+  - Lee productos activos de la BD agrupados por categoría
+  - Una página A4 por producto: placeholder de imagen, precios, pagos semanales por plan
+  - **Precio Credicontado** = `precio_original × 0.70` (30% descuento contado)
+  - Pago 1 mes = `Math.ceil(precio_original × 0.70 / 4)` (redondeado arriba, sin centavos)
+  - Pagos 2/3 meses y largo plazo: leídos de campos del producto (`pago_semanal_2_meses`, etc.)
+  - Dependencias: puppeteer en `node_modules/` raíz, dotenv y Prisma desde `backend/node_modules/`
+  - Ejecutar: `node generar-catalogo.js` desde la raíz (cerrar el PDF antes de regenerar)

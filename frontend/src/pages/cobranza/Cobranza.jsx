@@ -978,6 +978,17 @@ export default function Cobranza() {
     moroso:  'bg-red-100 text-red-700',
   }
 
+  const calcPagoPeriodico = (c) => {
+    const precio = parseFloat(c.precio_plan_actual || 0)
+    const semanas = c.semanas_plazo || 1
+    const semanal = precio / semanas
+    switch (c.frecuencia_pago) {
+      case 'quincenal': return { monto: Math.ceil(semanal * 2), label: '/quincenal' }
+      case 'mensual':   return { monto: Math.ceil(semanal * 4), label: '/mes' }
+      default:          return { monto: Math.ceil(semanal),     label: '/semana' }
+    }
+  }
+
   const estadoSemanas = (semanas) => {
     if (!semanas) return null
     if (semanas === 1) return <span className="text-yellow-600 text-xs">1 semana de atraso</span>
@@ -1361,6 +1372,7 @@ export default function Cobranza() {
                           ? <p className="text-blue-600 text-xs font-mono font-semibold">Cta. {c.numero_cuenta}</p>
                           : <p className="text-gray-400 text-xs font-mono">{c.folio_cuenta}</p>
                         }
+                        {c.cliente?.colonia && <p className="text-gray-400 text-xs">{c.cliente.colonia}</p>}
                         {estadoSemanas(c.semanas_atraso)}
                       </div>
                     </div>
@@ -1385,6 +1397,11 @@ export default function Cobranza() {
                   <div>
                     <p className="text-xs text-gray-400">Saldo</p>
                     <p className={`text-xl font-bold ${esVisitado ? 'text-green-700' : 'text-gray-800'}`}>{fmt(c.saldo_actual)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-gray-400">Pago</p>
+                    <p className="text-sm font-bold text-indigo-600">{fmt(calcPagoPeriodico(c).monto)}</p>
+                    <p className="text-xs text-gray-400">{calcPagoPeriodico(c).label}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-400">Plan</p>
@@ -1520,6 +1537,7 @@ export default function Cobranza() {
                     })()}
                     <td className="px-6 py-4">
                       <p className={`font-medium ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>{c.cliente?.nombre}</p>
+                      {c.cliente?.colonia && <p className="text-xs text-gray-400">{c.cliente.colonia}</p>}
                       {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500">⚠️ Sin ubicación</span>}
                       {estadoSemanas(c.semanas_atraso)}
                       {esVisitado && <span className="text-xs text-green-600 font-medium">✓ Visitado</span>}
@@ -1536,8 +1554,9 @@ export default function Cobranza() {
                         <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Plan vencido</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-gray-500 text-xs">
-                      <span className="capitalize">{c.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</span>
+                    <td className="px-6 py-4 text-xs">
+                      <span className="text-gray-500 capitalize">{c.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</span>
+                      <p className="text-indigo-600 font-semibold">{fmt(calcPagoPeriodico(c).monto)}{calcPagoPeriodico(c).label}</p>
                       {c.horario_preferido && <p className="text-gray-400">{c.horario_preferido}</p>}
                     </td>
                     <td className={`px-6 py-4 font-bold ${esVisitado ? 'text-green-700' : 'text-gray-800'}`}>{fmt(c.saldo_actual)}</td>
