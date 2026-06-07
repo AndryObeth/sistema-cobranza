@@ -1398,11 +1398,6 @@ export default function Cobranza() {
                     <p className="text-xs text-gray-400">Saldo</p>
                     <p className={`text-xl font-bold ${esVisitado ? 'text-green-700' : 'text-gray-800'}`}>{fmt(c.saldo_actual)}</p>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">Pago</p>
-                    <p className="text-sm font-bold text-indigo-600">{fmt(calcPagoPeriodico(c).monto)}</p>
-                    <p className="text-xs text-gray-400">{calcPagoPeriodico(c).label}</p>
-                  </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-400">Plan</p>
                     <p className="text-sm text-gray-600">{c.plan_actual?.replace(/_/g, ' ')}</p>
@@ -1554,9 +1549,8 @@ export default function Cobranza() {
                         <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">Plan vencido</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-xs">
-                      <span className="text-gray-500 capitalize">{c.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</span>
-                      <p className="text-indigo-600 font-semibold">{fmt(calcPagoPeriodico(c).monto)}{calcPagoPeriodico(c).label}</p>
+                    <td className="px-6 py-4 text-gray-500 text-xs">
+                      <span className="capitalize">{c.frecuencia_pago?.replace(/_/g, ' ') || 'semanal'}</span>
                       {c.horario_preferido && <p className="text-gray-400">{c.horario_preferido}</p>}
                     </td>
                     <td className={`px-6 py-4 font-bold ${esVisitado ? 'text-green-700' : 'text-gray-800'}`}>{fmt(c.saldo_actual)}</td>
@@ -2609,6 +2603,7 @@ export default function Cobranza() {
                     </span>
                     <span className="text-xs text-gray-500">Plan: <span className="font-medium text-gray-700">{cuentaDetalle.plan_actual?.replace(/_/g, ' ')}</span></span>
                     <span className="text-xs text-gray-500">Frecuencia: <span className="font-medium text-gray-700 capitalize">{(cuentaDetalle.frecuencia_pago || 'semanal').replace(/_/g, ' ')}</span></span>
+                    <span className="text-xs text-gray-500">Pago requerido: <span className="font-bold text-indigo-600">{fmt(calcPagoPeriodico(cuentaDetalle).monto)}{calcPagoPeriodico(cuentaDetalle).label}</span></span>
                     {badgeCumplimiento(cuentaDetalle)}
                   </div>
 
