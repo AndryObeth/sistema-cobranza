@@ -1409,6 +1409,18 @@ export default function Cobranza() {
                 </div>
                 <div className="mb-3">{badgeCumplimiento(c)}</div>
                 <div className="flex gap-2">
+                  {c.cliente?.telefono && (
+                    <a
+                      href={`tel:${c.cliente.telefono}`}
+                      className="flex items-center justify-center gap-1.5 px-3 py-3 bg-green-50 hover:bg-green-100 text-green-700 rounded-xl text-sm font-semibold transition border border-green-200 shrink-0"
+                      title={c.cliente.telefono}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.01-.24 11.47 11.47 0 003.58.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.47 11.47 0 00.57 3.58 1 1 0 01-.25 1.02l-2.2 2.19z"/>
+                      </svg>
+                      <span className="text-xs">{c.cliente.telefono}</span>
+                    </a>
+                  )}
                   {modoCobranza && (
                     <button
                       onClick={() => toggleVisitado(c.id_cuenta)}
