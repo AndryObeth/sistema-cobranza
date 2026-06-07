@@ -263,6 +263,7 @@ model Cuenta {
   frecuencia_pago      FrecuenciaPago @default(semanal)
   fecha_primer_cobro   DateTime?
   horario_preferido    String?
+  abono_semanal        Decimal?  @db.Decimal(10, 2)
   observaciones        String?
   updated_at           DateTime @updatedAt
 

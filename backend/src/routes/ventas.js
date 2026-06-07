@@ -52,7 +52,7 @@ router.post('/', auth, async (req, res) => {
       precio_final_total_override, observacion_ajuste,
       enganche_recibido_total, observaciones,
       fecha_venta,
-      frecuencia_pago, fecha_primer_cobro, horario_preferido,
+      frecuencia_pago, fecha_primer_cobro, horario_preferido, abono_semanal,
       numero_cuenta,
       saldo_inicial_override,
       detalles,
@@ -140,7 +140,8 @@ router.post('/', auth, async (req, res) => {
           fecha_limite: new Date(Date.now() + semanas * 7 * 24 * 60 * 60 * 1000),
           frecuencia_pago:    frecuencia_pago    || 'semanal',
           fecha_primer_cobro: fecha_primer_cobro ? new Date(fecha_primer_cobro + 'T12:00:00') : null,
-          horario_preferido:  horario_preferido  || null
+          horario_preferido:  horario_preferido  || null,
+          abono_semanal:      abono_semanal != null ? parseFloat(abono_semanal) : null
         }
       })
     }

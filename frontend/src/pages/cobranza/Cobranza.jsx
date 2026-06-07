@@ -979,13 +979,14 @@ export default function Cobranza() {
   }
 
   const calcPagoPeriodico = (c) => {
-    const precio = parseFloat(c.precio_plan_actual || 0)
-    const semanas = c.semanas_plazo || 1
-    const semanal = precio / semanas
+    const base = c.abono_semanal
+      ? parseFloat(c.abono_semanal)
+      : Math.max(100, Math.ceil(parseFloat(c.precio_plan_actual || 0) / (c.semanas_plazo || 1)))
     switch (c.frecuencia_pago) {
-      case 'quincenal': return { monto: Math.ceil(semanal * 2), label: '/quincenal' }
-      case 'mensual':   return { monto: Math.ceil(semanal * 4), label: '/mes' }
-      default:          return { monto: Math.ceil(semanal),     label: '/semana' }
+      case 'quincenal': return { monto: base * 2,  label: '/quincenal' }
+      case 'mensual':   return { monto: base * 4,  label: '/mes' }
+      case 'dos_meses': return { monto: base * 8,  label: '/2 meses' }
+      default:          return { monto: base,       label: '/semana' }
     }
   }
 

@@ -39,6 +39,7 @@ export default function Ventas() {
     fecha_primer_cobro: '',
     horario_preferido: '',
     numero_cuenta: '',
+    abono_semanal: '',
   })
 
   const [productosSeleccionados, setProductosSeleccionados] = useState([])
@@ -74,6 +75,10 @@ export default function Ventas() {
     const utilidad_vendedor      = form.tipo_venta === 'contado' ? precio_final_total - monto_reportado : 0
     const saldo_cliente          = form.tipo_venta === 'plazo' ? precio_final_total - enganche_recibido : 0
 
+    const semanasPlan = { un_mes: 4, dos_meses: 8, tres_meses: 12, largo_plazo: 52 }
+    const semanas = semanasPlan[form.plan_venta] || 52
+    const abono_semanal_sugerido = Math.max(100, Math.ceil(precio_final_total / semanas))
+
     return {
       precio_original_total,
       precio_final_total,
@@ -84,7 +89,8 @@ export default function Ventas() {
       sobreenganche,
       monto_reportado,
       utilidad_vendedor,
-      saldo_cliente
+      saldo_cliente,
+      abono_semanal_sugerido
     }
   }, [form, productosSeleccionados])
 
@@ -170,7 +176,7 @@ export default function Ventas() {
 
   const cerrarModal = () => {
     setModalAbierto(false)
-    setForm({ id_cliente: '', id_vendedor: '', id_jefe_camioneta: '', tipo_venta: 'contado', plan_venta: 'contado_directo', enganche_recibido_total: '', observaciones: '', fecha_venta: hoyISO(), frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '', numero_cuenta: '' })
+    setForm({ id_cliente: '', id_vendedor: '', id_jefe_camioneta: '', tipo_venta: 'contado', plan_venta: 'contado_directo', enganche_recibido_total: '', observaciones: '', fecha_venta: hoyISO(), frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '', numero_cuenta: '', abono_semanal: '' })
     setBusquedaCliente('')
     setClienteDropdown(false)
     setProductoCustomNombre('')
@@ -227,6 +233,7 @@ export default function Ventas() {
         payload.fecha_primer_cobro = form.fecha_primer_cobro || null
         payload.horario_preferido  = form.horario_preferido  || null
         payload.numero_cuenta      = form.numero_cuenta       || null
+        payload.abono_semanal      = parseFloat(form.abono_semanal) || calculos.abono_semanal_sugerido
         if (esAdmin && saldoInicialOverride && parseFloat(saldoInicialOverride) >= 0) {
           payload.saldo_inicial_override = parseFloat(saldoInicialOverride)
         }
@@ -769,6 +776,27 @@ export default function Ventas() {
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="0.00"/>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Abono semanal
+                      {calculos?.abono_semanal_sugerido && (
+                        <span className="ml-2 text-xs font-normal text-gray-400">
+                          (sugerido: ${calculos.abono_semanal_sugerido.toLocaleString('es-MX')})
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="number"
+                      min="100"
+                      step="10"
+                      value={form.abono_semanal}
+                      onChange={e => setForm({...form, abono_semanal: e.target.value})}
+                      placeholder={calculos?.abono_semanal_sugerido ? String(calculos.abono_semanal_sugerido) : '100'}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Mínimo $100. Se escala por frecuencia (quincenal ×2, mensual ×4, cada 2 meses ×8).</p>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Frecuencia de pago</label>
