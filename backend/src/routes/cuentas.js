@@ -506,6 +506,7 @@ router.get('/listado-simple', auth, async (req, res) => {
     const cuentas = await prisma.cuenta.findMany({
       where: { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] } },
       select: {
+        id_cuenta:        true,
         numero_cuenta:    true,
         folio_cuenta:     true,
         saldo_actual:     true,
@@ -520,6 +521,7 @@ router.get('/listado-simple', auth, async (req, res) => {
     })
 
     let listado = cuentas.map(c => ({
+      id_cuenta:          c.id_cuenta,
       numero_cuenta:      c.numero_cuenta || c.folio_cuenta,
       nombre_cliente:     c.cliente?.nombre || '',
       numero_expediente:  c.cliente?.numero_expediente || '',
@@ -538,6 +540,87 @@ router.get('/listado-simple', auth, async (req, res) => {
     res.json(listado)
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener listado', detalle: error.message })
+  }
+})
+
+// ── 7. POST /api/cuentas/:id/anexar ──────────────────────────────────────────
+
+router.post('/:id/anexar', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'Solo el administrador puede anexar cuentas' })
+    }
+
+    const id_cuenta_origen  = parseInt(req.params.id)
+    const id_cuenta_destino = parseInt(req.body.id_cuenta_destino)
+
+    if (!id_cuenta_destino || isNaN(id_cuenta_destino)) {
+      return res.status(400).json({ error: 'Se requiere id_cuenta_destino' })
+    }
+    if (id_cuenta_origen === id_cuenta_destino) {
+      return res.status(400).json({ error: 'La cuenta origen y destino no pueden ser la misma' })
+    }
+
+    const [origen, destino] = await Promise.all([
+      prisma.cuenta.findUnique({
+        where:   { id_cuenta: id_cuenta_origen },
+        include: { cliente: { select: { nombre: true } } },
+      }),
+      prisma.cuenta.findUnique({
+        where:   { id_cuenta: id_cuenta_destino },
+        include: { cliente: { select: { nombre: true } } },
+      }),
+    ])
+
+    if (!origen)  return res.status(404).json({ error: 'Cuenta origen no encontrada' })
+    if (!destino) return res.status(404).json({ error: 'Cuenta destino no encontrada' })
+
+    if (['liquidada', 'cancelada'].includes(origen.estado_cuenta)) {
+      return res.status(400).json({ error: `La cuenta origen ya está ${origen.estado_cuenta}` })
+    }
+    if (['liquidada', 'cancelada'].includes(destino.estado_cuenta)) {
+      return res.status(400).json({ error: `La cuenta destino está ${destino.estado_cuenta}` })
+    }
+
+    const saldo_transferido   = parseFloat(origen.saldo_actual)
+    const nuevo_saldo_destino = parseFloat((parseFloat(destino.saldo_actual) + saldo_transferido).toFixed(2))
+
+    const hoyStr    = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })
+    const numOrigen = origen.numero_cuenta  || origen.folio_cuenta
+    const numDest   = destino.numero_cuenta || destino.folio_cuenta
+
+    const notaDestino = `Anexo el ${hoyStr}: incorporado $${saldo_transferido.toFixed(2)} de cuenta ${numOrigen} (${origen.cliente.nombre})`
+    const notaOrigen  = `Anexada a cuenta ${numDest} (${destino.cliente.nombre}) el ${hoyStr}. Saldo transferido: $${saldo_transferido.toFixed(2)}`
+
+    await prisma.$transaction(async (tx) => {
+      await tx.cuenta.update({
+        where: { id_cuenta: id_cuenta_destino },
+        data: {
+          saldo_actual:  nuevo_saldo_destino,
+          saldo_inicial: parseFloat(destino.saldo_inicial) + saldo_transferido,
+          observaciones: destino.observaciones ? `${destino.observaciones} | ${notaDestino}` : notaDestino,
+        },
+      })
+
+      await tx.cuenta.update({
+        where: { id_cuenta: id_cuenta_origen },
+        data: {
+          estado_cuenta: 'cancelada',
+          saldo_actual:  0,
+          observaciones: notaOrigen,
+        },
+      })
+    })
+
+    res.json({
+      mensaje:             'Cuenta anexada correctamente',
+      cuenta_origen:       numOrigen,
+      cuenta_destino:      numDest,
+      saldo_transferido,
+      saldo_nuevo_destino,
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al anexar cuenta', detalle: error.message })
   }
 })
 

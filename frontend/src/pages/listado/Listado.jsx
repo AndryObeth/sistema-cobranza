@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
@@ -21,12 +22,140 @@ const ORDEN_OPCIONES = [
   { value: 'ultimo_pago',   label: 'Fecha último pago' },
 ]
 
+function ModalAnexar({ cuentaOrigen, todasLasCuentas, onCerrar, onExito }) {
+  const [busquedaDest, setBusquedaDest]   = useState('')
+  const [cuentaDestino, setCuentaDestino] = useState(null)
+  const [cargando, setCargando]           = useState(false)
+  const [error, setError]                 = useState('')
+
+  const candidatas = todasLasCuentas.filter(c => {
+    if (c.id_cuenta === cuentaOrigen.id_cuenta) return false
+    const txt = busquedaDest.toLowerCase()
+    return (
+      c.numero_cuenta?.toLowerCase().includes(txt) ||
+      c.nombre_cliente?.toLowerCase().includes(txt) ||
+      c.numero_expediente?.toLowerCase().includes(txt)
+    )
+  })
+
+  const confirmar = async () => {
+    if (!cuentaDestino) return
+    setCargando(true)
+    setError('')
+    try {
+      await api.post(`/cuentas/${cuentaOrigen.id_cuenta}/anexar`, {
+        id_cuenta_destino: cuentaDestino.id_cuenta,
+      })
+      onExito()
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error al anexar cuenta')
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+
+        <div className="p-5 border-b">
+          <h3 className="text-lg font-bold text-gray-800">Anexar cuenta</h3>
+          <p className="text-sm text-gray-500 mt-0.5">El saldo restante se transfiere a otra cuenta y ésta queda cancelada.</p>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Cuenta origen */}
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <p className="text-xs font-semibold text-red-500 uppercase mb-1">Cuenta a cancelar</p>
+            <p className="font-bold text-gray-800 text-lg">{cuentaOrigen.numero_cuenta}</p>
+            <p className="text-gray-600 text-sm">{cuentaOrigen.nombre_cliente}</p>
+            <p className="text-red-700 font-semibold mt-1">Saldo a transferir: {fmt(cuentaOrigen.saldo_actual)}</p>
+          </div>
+
+          {/* Búsqueda destino */}
+          {!cuentaDestino ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Buscar cuenta destino</label>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Nombre, expediente o No. cuenta..."
+                value={busquedaDest}
+                onChange={e => setBusquedaDest(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {busquedaDest.length > 0 && (
+                <div className="mt-1 border border-gray-200 rounded-lg max-h-52 overflow-y-auto">
+                  {candidatas.length === 0 ? (
+                    <p className="text-center text-gray-400 text-sm py-4">Sin resultados</p>
+                  ) : (
+                    candidatas.slice(0, 20).map(c => (
+                      <button
+                        key={c.id_cuenta}
+                        onClick={() => { setCuentaDestino(c); setBusquedaDest('') }}
+                        className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b last:border-0 transition"
+                      >
+                        <span className="font-mono font-semibold text-blue-600 mr-2">{c.numero_cuenta}</span>
+                        <span className="text-gray-700 text-sm">{c.nombre_cliente}</span>
+                        <span className="text-gray-400 text-xs ml-2">{fmt(c.saldo_actual)}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-green-600 uppercase mb-1">Cuenta destino</p>
+              <p className="font-bold text-gray-800 text-lg">{cuentaDestino.numero_cuenta}</p>
+              <p className="text-gray-600 text-sm">{cuentaDestino.nombre_cliente}</p>
+              <p className="text-gray-500 text-sm mt-1">
+                Saldo actual: {fmt(cuentaDestino.saldo_actual)} → Nuevo: {fmt(parseFloat(cuentaDestino.saldo_actual) + parseFloat(cuentaOrigen.saldo_actual))}
+              </p>
+              <button
+                onClick={() => setCuentaDestino(null)}
+                className="mt-2 text-xs text-blue-600 hover:underline"
+              >
+                Cambiar cuenta destino
+              </button>
+            </div>
+          )}
+
+          {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+        </div>
+
+        <div className="p-5 border-t flex justify-end gap-3">
+          <button
+            onClick={onCerrar}
+            disabled={cargando}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={confirmar}
+            disabled={!cuentaDestino || cargando}
+            className="px-5 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition"
+          >
+            {cargando ? 'Procesando...' : 'Confirmar anexo'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Listado() {
-  const [cuentas, setCuentas]         = useState([])
-  const [cargando, setCargando]       = useState(true)
-  const [busqueda, setBusqueda]       = useState('')
-  const [filtroEstado, setFiltroEstado] = useState('')
-  const [orden, setOrden]             = useState('numero_cuenta')
+  const { usuario }                       = useAuth()
+  const [cuentas, setCuentas]             = useState([])
+  const [cargando, setCargando]           = useState(true)
+  const [busqueda, setBusqueda]           = useState('')
+  const [filtroEstado, setFiltroEstado]   = useState('')
+  const [orden, setOrden]                 = useState('numero_cuenta')
+  const [cuentaAnexar, setCuentaAnexar]   = useState(null)
+  const [mensajeExito, setMensajeExito]   = useState('')
+
+  const esAdmin = ['administrador', 'supervisor_cobranza'].includes(usuario?.rol)
 
   useEffect(() => { cargar(orden) }, [orden])
 
@@ -65,13 +194,20 @@ export default function Listado() {
       .map(fila => fila.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
       .join('\n')
 
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href     = url
     a.download = `cuentas-${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleExitoAnexar = () => {
+    setCuentaAnexar(null)
+    setMensajeExito('Cuenta anexada correctamente')
+    cargar(orden)
+    setTimeout(() => setMensajeExito(''), 4000)
   }
 
   const totalSaldo = filtradas.reduce((s, c) => s + parseFloat(c.saldo_actual), 0)
@@ -95,6 +231,12 @@ export default function Listado() {
             ⬇ Exportar CSV
           </button>
         </div>
+
+        {mensajeExito && (
+          <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm font-medium">
+            {mensajeExito}
+          </div>
+        )}
 
         {/* Filtros */}
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
@@ -145,6 +287,7 @@ export default function Listado() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Último pago</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Saldo</th>
+                    {esAdmin && <th className="px-4 py-3"></th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -164,12 +307,23 @@ export default function Listado() {
                         {c.fecha_ultimo_pago ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-800">{fmt(c.saldo_actual)}</td>
+                      {esAdmin && (
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => setCuentaAnexar(c)}
+                            className="text-xs text-orange-600 hover:text-orange-800 font-medium transition"
+                            title="Anexar saldo a otra cuenta"
+                          >
+                            Anexar
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
                 <tfoot className="bg-gray-50 border-t">
                   <tr>
-                    <td colSpan={7} className="px-4 py-3 text-sm font-semibold text-gray-600">Total</td>
+                    <td colSpan={esAdmin ? 8 : 7} className="px-4 py-3 text-sm font-semibold text-gray-600">Total</td>
                     <td className="px-4 py-3 text-right font-bold text-gray-800">{fmt(totalSaldo)}</td>
                   </tr>
                 </tfoot>
@@ -178,6 +332,15 @@ export default function Listado() {
           )}
         </div>
       </div>
+
+      {cuentaAnexar && (
+        <ModalAnexar
+          cuentaOrigen={cuentaAnexar}
+          todasLasCuentas={cuentas}
+          onCerrar={() => setCuentaAnexar(null)}
+          onExito={handleExitoAnexar}
+        />
+      )}
     </Layout>
   )
 }
