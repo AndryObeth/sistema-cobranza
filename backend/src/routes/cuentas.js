@@ -465,7 +465,7 @@ router.post('/fusionar', auth, async (req, res) => {
         data: {
           id_cuenta:             principal.id_cuenta,
           id_cliente:            principal.id_cliente,
-          id_cobrador:           req.usuario.id_usuario,
+          id_cobrador:           req.usuario.id,
           fecha_pago:            new Date(),
           monto_pago:            saldo_a_sumar,
           saldo_anterior:        parseFloat(principal.saldo_actual),
@@ -616,7 +616,7 @@ router.post('/:id/anexar', auth, async (req, res) => {
         data: {
           id_cuenta:            id_cuenta_destino,
           id_cliente:           destino.id_cliente,
-          id_cobrador:          req.usuario.id_usuario,
+          id_cobrador:          req.usuario.id,
           fecha_pago:           new Date(),
           monto_pago:           saldo_transferido,
           saldo_anterior:       parseFloat(destino.saldo_actual),
