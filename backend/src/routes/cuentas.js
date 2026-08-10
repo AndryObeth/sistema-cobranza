@@ -610,6 +610,23 @@ router.post('/:id/anexar', auth, async (req, res) => {
           observaciones: notaOrigen,
         },
       })
+
+      // Registrar entrada en historial de pagos de la cuenta destino
+      await tx.pago.create({
+        data: {
+          id_cuenta:            id_cuenta_destino,
+          id_cliente:           destino.id_cliente,
+          id_cobrador:          req.usuario.id_usuario,
+          fecha_pago:           new Date(),
+          monto_pago:           saldo_transferido,
+          saldo_anterior:       parseFloat(destino.saldo_actual),
+          saldo_nuevo:          nuevo_saldo_destino,
+          tipo_pago:            'pago_extra',
+          monto_aplicado_saldo: saldo_transferido,
+          observaciones:        `Anexo: cuenta ${numOrigen} (${origen.cliente.nombre}) — $${saldo_transferido.toFixed(2)}`,
+          origen_pago:          'oficina',
+        },
+      })
     })
 
     res.json({
