@@ -97,6 +97,7 @@ export default function Cobranza() {
   })
   const [editandoPosicion, setEditandoPosicion] = useState(null) // id_cuenta en edición
   const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroRuta, setFiltroRuta] = useState('')
   const [filtroMunicipio, setFiltroMunicipio] = useState('')
   const [filtroColonia, setFiltroColonia] = useState('')
   // Modo cobranza — checklist (persistido en localStorage)
@@ -1079,6 +1080,10 @@ export default function Cobranza() {
     return 1
   }
 
+  const rutasDisponibles = [...new Set(
+    cuentas.map(c => c.cliente?.ruta).filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b, 'es'))
+
   // Deduplicar municipios normalizando (ignora mayúsculas/minúsculas y acentos)
   const municipiosMap = new Map()
   cuentas.forEach(c => {
@@ -1100,7 +1105,7 @@ export default function Cobranza() {
     })
   const coloniasDisponibles = [...coloniasMap.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
 
-  const hayFiltros = filtroEstado || filtroMunicipio || filtroColonia || soloVencidas || ordenar !== 'cumplimiento'
+  const hayFiltros = filtroEstado || filtroRuta || filtroMunicipio || filtroColonia || soloVencidas || ordenar !== 'cumplimiento'
 
   const tieneUbicacion = (c) => {
     const u = c.cliente?.ubicaciones?.[0]
@@ -1112,6 +1117,7 @@ export default function Cobranza() {
     .filter(c => {
       if (soloVencidas && !estaVencida(c)) return false
       if (filtroEstado && c.estado_cuenta !== filtroEstado) return false
+      if (filtroRuta && c.cliente?.ruta !== filtroRuta) return false
       if (filtroMunicipio && normalizar(c.cliente?.municipio) !== filtroMunicipio) return false
       if (filtroColonia  && normalizar(c.cliente?.colonia)  !== filtroColonia)  return false
       const q = busqueda.toLowerCase()
@@ -1302,6 +1308,19 @@ export default function Cobranza() {
             <option value="moroso">Moroso</option>
           </select>
 
+          {rutasDisponibles.length > 0 && (
+            <select
+              value={filtroRuta}
+              onChange={e => setFiltroRuta(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">Ruta: Todas</option>
+              {rutasDisponibles.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          )}
+
           {municipiosDisponibles.length > 0 && (
             <select
               value={filtroMunicipio}
@@ -1330,7 +1349,7 @@ export default function Cobranza() {
 
           {hayFiltros && (
             <button
-              onClick={() => { setOrdenar(modoCobranza ? 'ruta' : 'cumplimiento'); setFiltroEstado(''); setFiltroMunicipio(''); setFiltroColonia(''); setSoloVencidas(false) }}
+              onClick={() => { setOrdenar(modoCobranza ? 'ruta' : 'cumplimiento'); setFiltroEstado(''); setFiltroRuta(''); setFiltroMunicipio(''); setFiltroColonia(''); setSoloVencidas(false) }}
               className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-100 transition"
             >
               ✕ Limpiar filtros
