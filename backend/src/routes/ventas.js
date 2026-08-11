@@ -123,7 +123,11 @@ router.post('/', auth, async (req, res) => {
         : plan_venta === 'tres_meses' ? 12
         : 52
 
-      await prisma.cuenta.create({
+      const saldoInicial = esAdmin && saldo_inicial_override != null
+        ? parseFloat(saldo_inicial_override)
+        : precio_final_usado - (enganche_recibido_total || 0)
+
+      const cuentaCreada = await prisma.cuenta.create({
         data: {
           folio_cuenta: 'CTA-' + Date.now(),
           numero_cuenta: numero_cuenta || null,
@@ -134,8 +138,8 @@ router.post('/', auth, async (req, res) => {
           precio_original_total,
           precio_plan_actual: precio_final_usado,
           abono_inicial: enganche_recibido_total || 0,
-          saldo_inicial: esAdmin && saldo_inicial_override != null ? parseFloat(saldo_inicial_override) : precio_final_usado - (enganche_recibido_total || 0),
-          saldo_actual:  esAdmin && saldo_inicial_override != null ? parseFloat(saldo_inicial_override) : precio_final_usado - (enganche_recibido_total || 0),
+          saldo_inicial: saldoInicial,
+          saldo_actual:  saldoInicial,
           semanas_plazo: semanas,
           fecha_limite: new Date(Date.now() + semanas * 7 * 24 * 60 * 60 * 1000),
           frecuencia_pago:    frecuencia_pago    || 'semanal',
@@ -144,6 +148,25 @@ router.post('/', auth, async (req, res) => {
           abono_semanal:      abono_semanal != null ? parseFloat(abono_semanal) : null
         }
       })
+
+      // Registrar el enganche como primer pago visible en el historial
+      if ((enganche_recibido_total || 0) > 0) {
+        await prisma.pago.create({
+          data: {
+            id_cuenta:            cuentaCreada.id_cuenta,
+            id_cliente,
+            id_cobrador:          req.usuario.id,
+            fecha_pago:           fecha_venta ? new Date(fecha_venta + 'T12:00:00') : new Date(),
+            monto_pago:           parseFloat(enganche_recibido_total),
+            saldo_anterior:       parseFloat(precio_final_usado),
+            saldo_nuevo:          saldoInicial,
+            tipo_pago:            'abono',
+            monto_aplicado_saldo: parseFloat(enganche_recibido_total),
+            observaciones:        'Enganche inicial',
+            origen_pago:          'oficina',
+          }
+        })
+      }
     }
 
     res.status(201).json({ mensaje: 'Venta registrada', venta })

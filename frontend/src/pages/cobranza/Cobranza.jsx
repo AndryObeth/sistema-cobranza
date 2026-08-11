@@ -2281,8 +2281,9 @@ export default function Cobranza() {
                     ))}
                     {/* Pagos sincronizados */}
                     {historialPagos.map(p => {
-                      const esFusion = p.observaciones?.startsWith('Fusión:')
-                      const esAnexo  = p.observaciones?.startsWith('Anexo:')
+                      const esFusion   = p.observaciones?.startsWith('Fusión:')
+                      const esAnexo    = p.observaciones?.startsWith('Anexo:')
+                      const esEnganche = p.observaciones === 'Enganche inicial'
                       if (esFusion) {
                         return (
                           <div key={p.id_pago} className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-lg px-4 py-2 text-sm">
@@ -2306,6 +2307,20 @@ export default function Cobranza() {
                               <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">Cuenta anexada</span>
                               <span className="font-medium text-orange-800 ml-2">+{fmt(p.monto_pago)}</span>
                               <p className="text-orange-600 text-xs mt-0.5">{detalle}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
+                              <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
+                            </div>
+                          </div>
+                        )
+                      }
+                      if (esEnganche) {
+                        return (
+                          <div key={p.id_pago} className="flex items-center justify-between bg-teal-50 border border-teal-200 rounded-lg px-4 py-2 text-sm">
+                            <div>
+                              <span className="text-xs font-semibold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">Enganche</span>
+                              <span className="font-medium text-teal-800 ml-2">{fmt(p.monto_pago)}</span>
                             </div>
                             <div className="text-right">
                               <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
