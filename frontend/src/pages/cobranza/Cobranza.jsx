@@ -287,6 +287,13 @@ export default function Cobranza() {
   const [guardandoFusion, setGuardandoFusion]       = useState(false)
   const [errorFusion, setErrorFusion]               = useState('')
 
+  // Cancelación de cuenta (solo admin)
+  const [modalCancelar, setModalCancelar]           = useState(false)
+  const [motivoCancelacion, setMotivoCancelacion]   = useState('')
+  const [notasCancelacion, setNotasCancelacion]     = useState('')
+  const [guardandoCancelacion, setGuardandoCancelacion] = useState(false)
+  const [errorCancelacion, setErrorCancelacion]     = useState('')
+
   // Corrección de ubicación desde campo
   const [panelUbicacion, setPanelUbicacion]   = useState(false)
   const [modoUbicacion, setModoUbicacion]     = useState(null) // 'opciones' | 'manual' | 'confirmar'
@@ -923,6 +930,32 @@ export default function Cobranza() {
       setErrorFusion(err.response?.data?.error || 'Error al fusionar cuentas')
     } finally {
       setGuardandoFusion(false)
+    }
+  }
+
+  const abrirCancelar = () => {
+    setMotivoCancelacion('')
+    setNotasCancelacion('')
+    setErrorCancelacion('')
+    setModalCancelar(true)
+  }
+
+  const handleCancelarCuenta = async () => {
+    if (!motivoCancelacion) { setErrorCancelacion('Selecciona un motivo'); return }
+    setGuardandoCancelacion(true)
+    setErrorCancelacion('')
+    try {
+      await api.post(`/cuentas/${cuentaSeleccionada.id_cuenta}/cancelar`, {
+        motivo: motivoCancelacion,
+        notas:  notasCancelacion,
+      })
+      setModalCancelar(false)
+      cerrarModal()
+      cargarCuentas()
+    } catch (err) {
+      setErrorCancelacion(err.response?.data?.error || 'Error al cancelar')
+    } finally {
+      setGuardandoCancelacion(false)
     }
   }
 
@@ -1795,15 +1828,24 @@ export default function Cobranza() {
                 </div>
               </div>
 
-              {/* Fusionar cuentas (solo admin) */}
-              {usuario?.rol === 'administrador' && (
-                <div className="mt-3 flex justify-end">
+              {/* Acciones admin: Fusionar y Cancelar */}
+              {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && (
+                <div className="mt-3 flex justify-end gap-2">
+                  {usuario?.rol === 'administrador' && (
+                    <button
+                      type="button"
+                      onClick={abrirFusion}
+                      className="text-xs bg-purple-50 text-purple-600 border border-purple-200 px-3 py-1.5 rounded-lg font-medium active:bg-purple-100"
+                    >
+                      Fusionar cuentas
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={abrirFusion}
-                    className="text-xs bg-purple-50 text-purple-600 border border-purple-200 px-3 py-1.5 rounded-lg font-medium active:bg-purple-100"
+                    onClick={abrirCancelar}
+                    className="text-xs bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg font-medium active:bg-red-100"
                   >
-                    Fusionar cuentas
+                    Cancelar cuenta
                   </button>
                 </div>
               )}
@@ -2487,6 +2529,77 @@ export default function Cobranza() {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──── MODAL CANCELAR CUENTA ──── */}
+      {modalCancelar && cuentaSeleccionada && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="p-5 border-b">
+              <h3 className="text-base font-bold text-gray-800">Cancelar cuenta</h3>
+              <p className="text-sm text-gray-500 mt-0.5">
+                <span className="font-semibold text-gray-700">{cuentaSeleccionada.cliente?.nombre}</span>
+                {' · '}<span className="font-mono text-blue-600">{cuentaSeleccionada.numero_cuenta || cuentaSeleccionada.folio_cuenta}</span>
+              </p>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+                <p className="font-semibold mb-0.5">Saldo pendiente: {fmt(cuentaSeleccionada.saldo_actual)}</p>
+                <p className="text-xs">El dinero cobrado hasta ahora no se devuelve. La cuenta quedará cancelada definitivamente.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Motivo de cancelación *</label>
+                <select
+                  value={motivoCancelacion}
+                  onChange={e => setMotivoCancelacion(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                >
+                  <option value="">Selecciona un motivo...</option>
+                  <option>No cumplió con los pagos</option>
+                  <option>Cliente problemático</option>
+                  <option>Cliente se arrepintió</option>
+                  <option>Producto devuelto</option>
+                  <option>Domicilio no localizado</option>
+                  <option>Otro</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notas adicionales <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <textarea
+                  value={notasCancelacion}
+                  onChange={e => setNotasCancelacion(e.target.value)}
+                  placeholder="Detalles adicionales..."
+                  rows={2}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
+                />
+              </div>
+
+              {errorCancelacion && (
+                <p className="text-red-600 text-sm bg-red-50 rounded-lg px-3 py-2">{errorCancelacion}</p>
+              )}
+            </div>
+
+            <div className="p-5 border-t flex justify-end gap-3">
+              <button
+                onClick={() => setModalCancelar(false)}
+                disabled={guardandoCancelacion}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition"
+              >
+                Volver
+              </button>
+              <button
+                onClick={handleCancelarCuenta}
+                disabled={!motivoCancelacion || guardandoCancelacion}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-lg transition"
+              >
+                {guardandoCancelacion ? 'Cancelando...' : 'Confirmar cancelación'}
+              </button>
             </div>
           </div>
         </div>

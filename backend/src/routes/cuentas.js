@@ -641,4 +641,73 @@ router.post('/:id/anexar', auth, async (req, res) => {
   }
 })
 
+// ── 8. POST /api/cuentas/:id/cancelar ────────────────────────────────────────
+
+const MOTIVOS_CANCELACION = [
+  'No cumplió con los pagos',
+  'Cliente problemático',
+  'Cliente se arrepintió',
+  'Producto devuelto',
+  'Domicilio no localizado',
+  'Otro',
+]
+
+router.post('/:id/cancelar', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'Solo el administrador puede cancelar cuentas' })
+    }
+
+    const id_cuenta = parseInt(req.params.id)
+    const { motivo, notas } = req.body
+
+    if (!motivo || !motivo.trim()) {
+      return res.status(400).json({ error: 'Se requiere un motivo de cancelación' })
+    }
+
+    const cuenta = await prisma.cuenta.findUnique({
+      where:   { id_cuenta },
+      include: { cliente: { select: { nombre: true } } },
+    })
+
+    if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
+
+    if (['liquidada', 'cancelada'].includes(cuenta.estado_cuenta)) {
+      return res.status(400).json({ error: `La cuenta ya está ${cuenta.estado_cuenta}` })
+    }
+
+    const hoyStr     = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })
+    const motivoCompleto = notas?.trim()
+      ? `${motivo} — ${notas.trim()}`
+      : motivo
+    const nota = `Cancelada el ${hoyStr} por: ${motivoCompleto}. Saldo pendiente al cancelar: $${parseFloat(cuenta.saldo_actual).toFixed(2)}`
+    const obsActualizada = cuenta.observaciones
+      ? `${cuenta.observaciones} | ${nota}`
+      : nota
+
+    await prisma.$transaction(async (tx) => {
+      await tx.cuenta.update({
+        where: { id_cuenta },
+        data: {
+          estado_cuenta: 'cancelada',
+          observaciones: obsActualizada,
+        },
+      })
+
+      await tx.venta.update({
+        where: { id_venta: cuenta.id_venta },
+        data:  { estatus_venta: 'cancelada' },
+      })
+    })
+
+    res.json({
+      mensaje:         'Cuenta cancelada correctamente',
+      motivo:          motivoCompleto,
+      saldo_al_cancelar: parseFloat(cuenta.saldo_actual),
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al cancelar cuenta', detalle: error.message })
+  }
+})
+
 module.exports = router
