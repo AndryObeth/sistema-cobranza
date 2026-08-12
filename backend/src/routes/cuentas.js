@@ -3,6 +3,7 @@ const router  = express.Router()
 const auth    = require('../middlewares/auth')
 const { PrismaClient } = require('@prisma/client')
 const prisma  = new PrismaClient()
+const { DIAS_POR_FRECUENCIA, calcularSemanasAtraso, calcularEstadoPorAtraso } = require('../utils/atraso')
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -77,13 +78,6 @@ async function cargarCuentaCompleta(id_cuenta) {
 
 // ── 0. GET /api/cuentas/estado-cumplimiento/:id_cuenta ───────────────────────
 
-const DIAS_POR_FRECUENCIA = {
-  semanal:    7,
-  quincenal:  15,
-  mensual:    30,
-  dos_meses:  60,
-}
-
 router.get('/estado-cumplimiento/:id_cuenta', auth, async (req, res) => {
   try {
     const cuenta = await prisma.cuenta.findUnique({
@@ -99,46 +93,28 @@ router.get('/estado-cumplimiento/:id_cuenta', auth, async (req, res) => {
     })
     if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
 
-    const hoy = new Date()
-    hoy.setHours(0, 0, 0, 0)
-
-    const dias = DIAS_POR_FRECUENCIA[cuenta.frecuencia_pago] || 7
-
-    // Si no hay fecha de inicio no podemos calcular
     if (!cuenta.fecha_primer_cobro) {
       return res.json({
         id_cuenta: cuenta.id_cuenta,
         esta_al_corriente: null,
         fecha_proximo_pago: null,
-        dias_restantes: null,
         periodos_sin_pagar: 0,
       })
     }
 
-    // Próximo pago esperado
-    const base = cuenta.fecha_ultimo_pago
-      ? new Date(cuenta.fecha_ultimo_pago)
-      : new Date(cuenta.fecha_primer_cobro)
+    const dias = DIAS_POR_FRECUENCIA[cuenta.frecuencia_pago] || 7
+    const base = cuenta.fecha_ultimo_pago ? new Date(cuenta.fecha_ultimo_pago) : new Date(cuenta.fecha_primer_cobro)
     base.setHours(0, 0, 0, 0)
-
     const fechaProximo = new Date(base)
     fechaProximo.setDate(fechaProximo.getDate() + dias)
 
-    const msxDia       = 1000 * 60 * 60 * 24
-    const diasRestantes = Math.ceil((fechaProximo - hoy) / msxDia) // negativo = atraso
-    const estaAlCorriente = diasRestantes >= 0
-
-    // Períodos sin pagar (cuántos ciclos han pasado sin pago)
-    const periodosSinPagar = estaAlCorriente
-      ? 0
-      : Math.floor(Math.abs(diasRestantes) / dias)
+    const periodosSinPagar = calcularSemanasAtraso(cuenta, new Date())
 
     res.json({
       id_cuenta:          cuenta.id_cuenta,
       fecha_ultimo_pago:  cuenta.fecha_ultimo_pago,
       fecha_proximo_pago: fechaProximo,
-      dias_restantes:     diasRestantes,
-      esta_al_corriente:  estaAlCorriente,
+      esta_al_corriente:  periodosSinPagar === 0,
       periodos_sin_pagar: periodosSinPagar,
     })
   } catch (error) {
@@ -372,6 +348,49 @@ router.post('/procesar-vencimientos', auth, async (req, res) => {
     res.json({ mensaje: 'Proceso completado', procesadas, omitidas, errores })
   } catch (error) {
     res.status(500).json({ error: 'Error al procesar vencimientos', detalle: error.message })
+  }
+})
+
+// ── 3b. POST /api/cuentas/recalcular-atrasos ──────────────────────────────────
+// Recalcula semanas_atraso/estado_cuenta por fecha para cuentas que no tuvieron
+// movimiento reciente (nadie registró pago, así que pagos.js nunca las tocó).
+
+router.post('/recalcular-atrasos', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'Solo el administrador puede recalcular atrasos' })
+    }
+
+    const cuentas = await prisma.cuenta.findMany({
+      where: {
+        estado_cuenta:      { in: ['activa', 'atraso', 'moroso'] },
+        fecha_primer_cobro: { not: null },
+      },
+      select: {
+        id_cuenta: true, estado_cuenta: true, semanas_atraso: true,
+        fecha_primer_cobro: true, fecha_ultimo_pago: true, frecuencia_pago: true,
+      }
+    })
+
+    let actualizadas = 0
+    const ahora = new Date()
+
+    for (const cuenta of cuentas) {
+      const semanasReales = calcularSemanasAtraso(cuenta, ahora)
+      const estadoReal     = calcularEstadoPorAtraso(semanasReales)
+
+      if (semanasReales === cuenta.semanas_atraso && estadoReal === cuenta.estado_cuenta) continue
+
+      await prisma.cuenta.update({
+        where: { id_cuenta: cuenta.id_cuenta },
+        data:  { semanas_atraso: semanasReales, estado_cuenta: estadoReal }
+      })
+      actualizadas++
+    }
+
+    res.json({ mensaje: 'Recálculo completado', revisadas: cuentas.length, actualizadas })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al recalcular atrasos', detalle: error.message })
   }
 })
 

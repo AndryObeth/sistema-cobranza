@@ -3,6 +3,7 @@ const router = express.Router()
 const auth = require('../middlewares/auth')
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
+const { calcularSemanasAtraso, calcularEstadoPorAtraso } = require('../utils/atraso')
 
 // GET /api/pagos/cartera/:id_cobrador — cartera del cobrador
 router.get('/cartera/:id_cobrador', auth, async (req, res) => {
@@ -209,11 +210,16 @@ router.post('/', auth, async (req, res) => {
     const saldo_nuevo = parseFloat((saldo_anterior - monto).toFixed(2))
     const comision = parseFloat((monto * 0.12).toFixed(2))
 
-    // Calcular nuevo estado
-    const nuevo_estado = saldo_nuevo === 0 ? 'liquidada'
-      : cuenta.semanas_atraso > 4 ? 'moroso'
-      : cuenta.semanas_atraso > 1 ? 'atraso'
-      : 'activa'
+    // Semanas de atraso reales: se recalculan por fecha (no por el contador viejo),
+    // usando fechaPago como nuevo fecha_ultimo_pago y "ahora" como referencia.
+    // Así una migración con fecha_pago retroactiva refleja el atraso real acumulado desde entonces.
+    const semanas_atraso_nueva = saldo_nuevo === 0 ? 0 : calcularSemanasAtraso({
+      fecha_primer_cobro: cuenta.fecha_primer_cobro,
+      fecha_ultimo_pago:  fechaPago,
+      frecuencia_pago:    cuenta.frecuencia_pago,
+    })
+
+    const nuevo_estado = saldo_nuevo === 0 ? 'liquidada' : calcularEstadoPorAtraso(semanas_atraso_nueva)
 
     // Si es recuperación de enganche, cargar la venta para obtener id_vendedor y enganche_regado
     const esRecuperacion = tipo_pago === 'recuperacion_enganche'
@@ -259,9 +265,9 @@ router.post('/', auth, async (req, res) => {
       where: { id_cuenta: parseInt(id_cuenta) },
       data: {
         saldo_actual: saldo_nuevo,
-        fecha_ultimo_pago: new Date(),
+        fecha_ultimo_pago: fechaPago,
         estado_cuenta: nuevo_estado,
-        semanas_atraso: saldo_nuevo === 0 ? 0 : cuenta.semanas_atraso
+        semanas_atraso: semanas_atraso_nueva
       }
     })
 

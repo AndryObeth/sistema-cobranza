@@ -52,6 +52,18 @@ export default function Dashboard() {
             }
           } catch (_) {}
         }
+
+        // Recalcula semanas_atraso/estado_cuenta por fecha real para cuentas
+        // sin movimiento reciente (pagos.js solo recalcula al registrar un pago)
+        if (esAdmin) {
+          try {
+            const r = await api.post('/cuentas/recalcular-atrasos')
+            if (r.data.actualizadas > 0) {
+              const actualizado = await api.get('/dashboard/resumen')
+              setResumen(actualizado.data)
+            }
+          } catch (_) {}
+        }
       })
       .catch(() => console.error('Error al cargar resumen'))
       .finally(() => setCargando(false))
