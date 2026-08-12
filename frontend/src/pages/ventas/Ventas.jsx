@@ -18,6 +18,7 @@ export default function Ventas() {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [mostrarLiquidadas, setMostrarLiquidadas] = useState(false)
+  const [busqueda, setBusqueda] = useState('')
 
   // Datos del modal — se cargan al abrirlo
   const [productos, setProductos] = useState([])
@@ -314,7 +315,14 @@ export default function Ventas() {
   const ventasFiltradas = ventas.filter(v => {
     // Ocultar ventas cuya cuenta fue cancelada por fusión
     if (v.cuenta?.estado_cuenta === 'cancelada' && v.cuenta?.observaciones?.startsWith('Fusionada con')) return false
-    return mostrarLiquidadas ? true : v.estatus_venta !== 'liquidada'
+    if (!mostrarLiquidadas && v.estatus_venta === 'liquidada') return false
+    const q = busqueda.trim().toLowerCase()
+    if (q && !(
+      v.cliente?.nombre?.toLowerCase().includes(q) ||
+      v.cuenta?.numero_cuenta?.toLowerCase().includes(q) ||
+      v.cuenta?.folio_cuenta?.toLowerCase().includes(q)
+    )) return false
+    return true
   })
 
   // Precio efectivo que se usará al guardar (override o calculado)
@@ -339,6 +347,24 @@ export default function Ventas() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="relative">
+            <input
+              type="text"
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              placeholder="Buscar por cuenta o nombre..."
+              className="border border-gray-300 rounded-lg pl-3 pr-8 py-1.5 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {busqueda && (
+              <button
+                type="button"
+                onClick={() => setBusqueda('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            )}
+          </div>
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <div
               onClick={() => setMostrarLiquidadas(!mostrarLiquidadas)}
