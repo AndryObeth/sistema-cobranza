@@ -30,9 +30,9 @@ function ModalAnexar({ cuentaOrigen, todasLasCuentas, onCerrar, onExito }) {
 
   const candidatas = todasLasCuentas.filter(c => {
     if (c.id_cuenta === cuentaOrigen.id_cuenta) return false
-    const txt = busquedaDest.toLowerCase()
+    const txt = busquedaDest.trim().toLowerCase()
     return (
-      c.numero_cuenta?.toLowerCase().includes(txt) ||
+      c.numero_cuenta?.toLowerCase().startsWith(txt) ||
       c.nombre_cliente?.toLowerCase().includes(txt) ||
       c.numero_expediente?.toLowerCase().includes(txt)
     )
@@ -170,9 +170,9 @@ export default function Listado() {
   }
 
   const filtradas = cuentas.filter(c => {
-    const txt = busqueda.toLowerCase()
+    const txt = busqueda.trim().toLowerCase()
     const coincide =
-      c.numero_cuenta?.toLowerCase().includes(txt) ||
+      c.numero_cuenta?.toLowerCase().startsWith(txt) ||
       c.nombre_cliente?.toLowerCase().includes(txt) ||
       c.numero_expediente?.toLowerCase().includes(txt)
     const estado = filtroEstado ? c.estado_cuenta === filtroEstado : true

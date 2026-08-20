@@ -319,7 +319,7 @@ export default function Ventas() {
     const q = busqueda.trim().toLowerCase()
     if (q && !(
       v.cliente?.nombre?.toLowerCase().includes(q) ||
-      v.cuenta?.numero_cuenta?.toLowerCase().includes(q) ||
+      v.cuenta?.numero_cuenta?.toLowerCase().startsWith(q) ||
       v.cuenta?.folio_cuenta?.toLowerCase().includes(q)
     )) return false
     return true
