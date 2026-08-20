@@ -372,6 +372,14 @@ export default function Clientes() {
   const [textosFusion, setTextosFusion]         = useState({}) // clave -> texto editable
   const [fusionandoClave, setFusionandoClave]   = useState(null)
 
+  // Fusión manual (para casos que el detector automático no agrupa, ej. "Tuxtepec" vs "Tuxtepec Oaxaca")
+  const [todosMunicipios, setTodosMunicipios]   = useState([])
+  const [todasColonias, setTodasColonias]       = useState([])
+  const [campoManual, setCampoManual]           = useState('municipio')
+  const [seleccionManual, setSeleccionManual]   = useState(new Set())
+  const [textoManual, setTextoManual]           = useState('')
+  const [fusionandoManual, setFusionandoManual] = useState(false)
+
   useEffect(() => { cargarClientes() }, [])
 
   const cargarClientes = async () => {
@@ -425,8 +433,14 @@ export default function Clientes() {
   const abrirModalOrtografia = async () => {
     setModalOrtografia(true)
     setCargandoOrtografia(true)
+    setSeleccionManual(new Set())
+    setTextoManual('')
     try {
       const res = await api.get('/clientes/valores-distintos')
+      const municipiosOrdenados = [...res.data.municipios].sort((a, b) => b.count - a.count)
+      const coloniasOrdenadas   = [...res.data.colonias].sort((a, b) => b.count - a.count)
+      setTodosMunicipios(municipiosOrdenados)
+      setTodasColonias(coloniasOrdenadas)
       const gm = agruparSimilares(res.data.municipios)
       const gc = agruparSimilares(res.data.colonias)
       setGruposMunicipio(gm)
@@ -439,6 +453,48 @@ export default function Clientes() {
       alert('Error al buscar municipios/colonias parecidos')
     } finally {
       setCargandoOrtografia(false)
+    }
+  }
+
+  const toggleSeleccionManual = (valor) => {
+    setSeleccionManual(prev => {
+      const next = new Set(prev)
+      next.has(valor) ? next.delete(valor) : next.add(valor)
+      return next
+    })
+  }
+
+  const fusionarManual = async () => {
+    const valorFinal = textoManual.trim()
+    if (!valorFinal) { alert('Escribe la ortografía correcta'); return }
+    if (seleccionManual.size < 2) { alert('Selecciona al menos 2 valores para fusionar'); return }
+    setFusionandoManual(true)
+    try {
+      await api.put('/clientes/fusionar-valor', {
+        campo: campoManual,
+        valores_originales: [...seleccionManual],
+        valor_final: valorFinal
+      })
+      if (campoManual === 'municipio') {
+        setTodosMunicipios(prev => {
+          const restantes = prev.filter(v => !seleccionManual.has(v.valor))
+          const sumaSeleccion = prev.filter(v => seleccionManual.has(v.valor)).reduce((s, v) => s + v.count, 0)
+          return [...restantes, { valor: valorFinal, count: sumaSeleccion }].sort((a, b) => b.count - a.count)
+        })
+      } else {
+        setTodasColonias(prev => {
+          const restantes = prev.filter(v => !seleccionManual.has(v.valor))
+          const sumaSeleccion = prev.filter(v => seleccionManual.has(v.valor)).reduce((s, v) => s + v.count, 0)
+          return [...restantes, { valor: valorFinal, count: sumaSeleccion }].sort((a, b) => b.count - a.count)
+        })
+      }
+      setSeleccionManual(new Set())
+      setTextoManual('')
+      cargarClientes()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al fusionar')
+    } finally {
+      setFusionandoManual(false)
     }
   }
 
@@ -922,10 +978,11 @@ export default function Clientes() {
             <div className="p-6 space-y-6">
               {cargandoOrtografia ? (
                 <p className="text-center text-gray-500 py-8">Buscando parecidos...</p>
-              ) : gruposMunicipio.length === 0 && gruposColonia.length === 0 ? (
-                <p className="text-center text-gray-400 py-8">No se encontraron nombres parecidos 🎉</p>
               ) : (
                 <>
+                  {gruposMunicipio.length === 0 && gruposColonia.length === 0 && (
+                    <p className="text-sm text-gray-400">No se encontraron nombres muy parecidos automáticamente 🎉</p>
+                  )}
                   {gruposMunicipio.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold text-gray-700 mb-2">Municipios</h4>
@@ -989,6 +1046,51 @@ export default function Clientes() {
                       </div>
                     </div>
                   )}
+
+                  <div className="border-t pt-5">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-1">Fusión manual</h4>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Para casos que el detector automático no agrupa (ej. "Tuxtepec" y "Tuxtepec Oaxaca").
+                      Elige el campo, marca los valores que son el mismo lugar y escribe la ortografía correcta.
+                    </p>
+                    <div className="flex gap-2 mb-3">
+                      <button type="button"
+                        onClick={() => { setCampoManual('municipio'); setSeleccionManual(new Set()); setTextoManual('') }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                          campoManual === 'municipio' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'
+                        }`}>
+                        Municipios
+                      </button>
+                      <button type="button"
+                        onClick={() => { setCampoManual('colonia'); setSeleccionManual(new Set()); setTextoManual('') }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                          campoManual === 'colonia' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'
+                        }`}>
+                        Localidades / Colonias
+                      </button>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                      {(campoManual === 'municipio' ? todosMunicipios : todasColonias).map(v => (
+                        <label key={v.valor} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                          <input type="checkbox" checked={seleccionManual.has(v.valor)}
+                            onChange={() => toggleSeleccionManual(v.valor)} />
+                          <span className="flex-1">{v.valor}</span>
+                          <span className="text-xs text-gray-400">{v.count}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <input type="text" value={textoManual}
+                        onChange={e => setTextoManual(e.target.value)}
+                        placeholder="Ortografía correcta"
+                        className={INPUT} />
+                      <button type="button" disabled={fusionandoManual}
+                        onClick={fusionarManual}
+                        className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                        {fusionandoManual ? 'Fusionando...' : `Fusionar (${seleccionManual.size})`}
+                      </button>
+                    </div>
+                  </div>
                 </>
               )}
             </div>

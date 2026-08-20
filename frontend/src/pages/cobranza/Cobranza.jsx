@@ -1116,17 +1116,21 @@ export default function Cobranza() {
   )].sort((a, b) => a.localeCompare(b, 'es'))
 
   // Deduplicar municipios normalizando (ignora mayúsculas/minúsculas y acentos)
+  // Acotados a la ruta seleccionada, si hay una
   const municipiosMap = new Map()
-  cuentas.forEach(c => {
-    const raw = c.cliente?.municipio
-    if (!raw) return
-    const key = normalizar(raw)
-    if (!municipiosMap.has(key)) municipiosMap.set(key, toTitleCase(raw))
-  })
+  cuentas
+    .filter(c => !filtroRuta || c.cliente?.ruta === filtroRuta)
+    .forEach(c => {
+      const raw = c.cliente?.municipio
+      if (!raw) return
+      const key = normalizar(raw)
+      if (!municipiosMap.has(key)) municipiosMap.set(key, toTitleCase(raw))
+    })
   const municipiosDisponibles = [...municipiosMap.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
 
   const coloniasMap = new Map()
   cuentas
+    .filter(c => !filtroRuta || c.cliente?.ruta === filtroRuta)
     .filter(c => !filtroMunicipio || normalizar(c.cliente?.municipio) === filtroMunicipio)
     .forEach(c => {
       const raw = c.cliente?.colonia
@@ -1348,7 +1352,7 @@ export default function Cobranza() {
           {rutasDisponibles.length > 0 && (
             <select
               value={filtroRuta}
-              onChange={e => setFiltroRuta(e.target.value)}
+              onChange={e => { setFiltroRuta(e.target.value); setFiltroMunicipio(''); setFiltroColonia('') }}
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="">Ruta: Todas</option>
