@@ -359,14 +359,16 @@ export default function Cobranza() {
 
   const abrirModal = async (cuenta) => {
     try {
-      const [resCuenta, resVisitas] = await Promise.all([
-        api.get(`/pagos/cuenta/${cuenta.id_cuenta}`),
-        api.get(`/visitas/cuenta/${cuenta.id_cuenta}`)
-      ])
+      const resCuenta = await api.get(`/pagos/cuenta/${cuenta.id_cuenta}`)
       const detalle = resCuenta.data
       setCuentaSeleccionada(detalle)
       setHistorialPagos(detalle.pagos || [])
-      setHistorialVisitas(resVisitas.data)
+      try {
+        const resVisitas = await api.get(`/visitas/cuenta/${cuenta.id_cuenta}`)
+        setHistorialVisitas(resVisitas.data)
+      } catch {
+        setHistorialVisitas([])
+      }
       setNoHuboPago(false)
       setRegistrarVisitaTambien(false)
       setFormPago(FORM_PAGO_VACIO)
@@ -466,13 +468,15 @@ export default function Cobranza() {
     setCargandoDetalle(true)
     setModalDetalle(true)
     try {
-      const [resCuenta, resVisitas] = await Promise.all([
-        api.get(`/pagos/cuenta/${cuenta.id_cuenta}`),
-        api.get(`/visitas/cuenta/${cuenta.id_cuenta}`)
-      ])
+      const resCuenta = await api.get(`/pagos/cuenta/${cuenta.id_cuenta}`)
       setCuentaDetalle(resCuenta.data)
       setHistorialPagosDetalle(resCuenta.data.pagos || [])
-      setHistorialVisitasDetalle(resVisitas.data)
+      try {
+        const resVisitas = await api.get(`/visitas/cuenta/${cuenta.id_cuenta}`)
+        setHistorialVisitasDetalle(resVisitas.data)
+      } catch {
+        setHistorialVisitasDetalle([])
+      }
     } catch {
       console.error('Error al cargar detalle')
     } finally {

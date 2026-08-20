@@ -72,6 +72,17 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          {
+            // GET /api/visitas/cuenta/:id — historial de visitas de una cuenta
+            urlPattern: ({ url }) => url.pathname.includes('/api/visitas/cuenta/'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-visitas-cuenta',
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 12 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
       },
     }),
