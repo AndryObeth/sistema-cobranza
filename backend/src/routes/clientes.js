@@ -54,6 +54,33 @@ router.get('/', auth, async (req, res) => {
   }
 })
 
+// GET /api/clientes/valores-distintos — municipios y colonias distintos con conteo
+// (para detectar y corregir errores de ortografía que dividen un mismo lugar en varios)
+router.get('/valores-distintos', auth, async (req, res) => {
+  try {
+    const where = { activo: true }
+    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
+      where.ruta = req.usuario.ruta_asignada
+    }
+    const clientes = await prisma.cliente.findMany({
+      where,
+      select: { municipio: true, colonia: true }
+    })
+    const contar = (campo) => {
+      const mapa = new Map()
+      clientes.forEach(c => {
+        const v = c[campo]?.trim()
+        if (!v) return
+        mapa.set(v, (mapa.get(v) || 0) + 1)
+      })
+      return [...mapa.entries()].map(([valor, count]) => ({ valor, count }))
+    }
+    res.json({ municipios: contar('municipio'), colonias: contar('colonia') })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener valores', detalle: error.message })
+  }
+})
+
 // GET /api/clientes/:id — detalle de un cliente
 router.get('/:id', auth, async (req, res) => {
   try {
@@ -408,6 +435,32 @@ router.put('/asignar-dia-lote', auth, async (req, res) => {
     res.json({ actualizados: resultado.count })
   } catch (error) {
     res.status(500).json({ error: 'Error al asignar día de cobranza', detalle: error.message })
+  }
+})
+
+// PUT /api/clientes/fusionar-valor — corregir ortografía de municipio/colonia en lote
+router.put('/fusionar-valor', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'Solo el administrador puede corregir estos datos' })
+    }
+    const { campo, valores_originales, valor_final } = req.body
+    if (!['municipio', 'colonia'].includes(campo)) {
+      return res.status(400).json({ error: 'Campo inválido' })
+    }
+    if (!Array.isArray(valores_originales) || valores_originales.length === 0) {
+      return res.status(400).json({ error: 'Se requiere al menos un valor original' })
+    }
+    if (!valor_final?.trim()) {
+      return res.status(400).json({ error: 'Se requiere el valor final' })
+    }
+    const resultado = await prisma.cliente.updateMany({
+      where: { [campo]: { in: valores_originales } },
+      data: { [campo]: valor_final.trim() }
+    })
+    res.json({ actualizados: resultado.count })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al corregir valores', detalle: error.message })
   }
 })
 

@@ -8,6 +8,53 @@ import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
 
+// ─── Detección de errores de ortografía en municipio/colonia ────────────────
+const normalizarTexto = (s) =>
+  (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+
+function distanciaEdicion(a, b) {
+  const m = a.length, n = b.length
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+  for (let i = 0; i <= m; i++) dp[i][0] = i
+  for (let j = 0; j <= n; j++) dp[0][j] = j
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1])
+    }
+  }
+  return dp[m][n]
+}
+
+// Agrupa valores con ortografía muy parecida (typos de 1-2 letras) usando union-find
+function agruparSimilares(valores) {
+  const n = valores.length
+  const parent = Array.from({ length: n }, (_, i) => i)
+  const find = i => parent[i] === i ? i : (parent[i] = find(parent[i]))
+  const union = (i, j) => { const ri = find(i), rj = find(j); if (ri !== rj) parent[ri] = rj }
+
+  const normalizados = valores.map(v => normalizarTexto(v.valor))
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const a = normalizados[i], b = normalizados[j]
+      if (!a || !b) continue
+      const umbral = Math.min(a.length, b.length) < 6 ? 1 : 2
+      if (a === b || distanciaEdicion(a, b) <= umbral) union(i, j)
+    }
+  }
+  const grupos = new Map()
+  for (let i = 0; i < n; i++) {
+    const raiz = find(i)
+    if (!grupos.has(raiz)) grupos.set(raiz, [])
+    grupos.get(raiz).push(valores[i])
+  }
+  return [...grupos.values()]
+    .filter(g => g.length > 1)
+    .map(g => g.sort((a, b) => b.count - a.count))
+    .sort((a, b) => b.reduce((s, v) => s + v.count, 0) - a.reduce((s, v) => s + v.count, 0))
+}
+
 const estadoCuentaColor = {
   activa:    'bg-green-100 text-green-700',
   atraso:    'bg-yellow-100 text-yellow-700',
@@ -317,6 +364,14 @@ export default function Clientes() {
   const [aplicandoDia, setAplicandoDia]     = useState(false)
   const [resultadoDia, setResultadoDia]     = useState(null)
 
+  // Revisión de ortografía (municipio / colonia)
+  const [modalOrtografia, setModalOrtografia]   = useState(false)
+  const [cargandoOrtografia, setCargandoOrtografia] = useState(false)
+  const [gruposMunicipio, setGruposMunicipio]   = useState([])
+  const [gruposColonia, setGruposColonia]       = useState([])
+  const [textosFusion, setTextosFusion]         = useState({}) // clave -> texto editable
+  const [fusionandoClave, setFusionandoClave]   = useState(null)
+
   useEffect(() => { cargarClientes() }, [])
 
   const cargarClientes = async () => {
@@ -364,6 +419,46 @@ export default function Clientes() {
       alert(err.response?.data?.error || 'Error al asignar día de cobranza')
     } finally {
       setAplicandoDia(false)
+    }
+  }
+
+  const abrirModalOrtografia = async () => {
+    setModalOrtografia(true)
+    setCargandoOrtografia(true)
+    try {
+      const res = await api.get('/clientes/valores-distintos')
+      const gm = agruparSimilares(res.data.municipios)
+      const gc = agruparSimilares(res.data.colonias)
+      setGruposMunicipio(gm)
+      setGruposColonia(gc)
+      const textos = {}
+      gm.forEach((g, i) => { textos[`municipio-${i}`] = g[0].valor })
+      gc.forEach((g, i) => { textos[`colonia-${i}`] = g[0].valor })
+      setTextosFusion(textos)
+    } catch {
+      alert('Error al buscar municipios/colonias parecidos')
+    } finally {
+      setCargandoOrtografia(false)
+    }
+  }
+
+  const fusionarGrupo = async (campo, clave, grupo) => {
+    const valorFinal = (textosFusion[clave] || '').trim()
+    if (!valorFinal) { alert('Escribe la ortografía correcta'); return }
+    setFusionandoClave(clave)
+    try {
+      await api.put('/clientes/fusionar-valor', {
+        campo,
+        valores_originales: grupo.map(v => v.valor),
+        valor_final: valorFinal
+      })
+      if (campo === 'municipio') setGruposMunicipio(prev => prev.filter(g => g !== grupo))
+      else setGruposColonia(prev => prev.filter(g => g !== grupo))
+      cargarClientes()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al fusionar')
+    } finally {
+      setFusionandoClave(null)
     }
   }
 
@@ -489,10 +584,16 @@ export default function Clientes() {
         </div>
         <div className="flex items-center gap-2">
           {esAdmin && (
-            <button onClick={abrirModalDia}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition">
-              📅 Asignar día por zona
-            </button>
+            <>
+              <button onClick={abrirModalOrtografia}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+                🔤 Revisar ortografía
+              </button>
+              <button onClick={abrirModalDia}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+                📅 Asignar día por zona
+              </button>
+            </>
           )}
           <button onClick={abrirNuevo}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
@@ -799,6 +900,97 @@ export default function Clientes() {
                   {aplicandoDia ? 'Aplicando...' : 'Aplicar'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: revisión de ortografía (municipio / colonia) */}
+      {modalOrtografia && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">Revisar ortografía</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Nombres parecidos que probablemente son el mismo lugar escrito distinto
+                </p>
+              </div>
+              <button onClick={() => setModalOrtografia(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {cargandoOrtografia ? (
+                <p className="text-center text-gray-500 py-8">Buscando parecidos...</p>
+              ) : gruposMunicipio.length === 0 && gruposColonia.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">No se encontraron nombres parecidos 🎉</p>
+              ) : (
+                <>
+                  {gruposMunicipio.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Municipios</h4>
+                      <div className="space-y-3">
+                        {gruposMunicipio.map((g, i) => {
+                          const clave = `municipio-${i}`
+                          return (
+                            <div key={clave} className="border border-gray-200 rounded-lg p-3">
+                              <div className="flex flex-wrap gap-1.5 mb-2">
+                                {g.map(v => (
+                                  <span key={v.valor} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                                    {v.valor} <span className="text-gray-400">({v.count})</span>
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="flex gap-2">
+                                <input type="text" value={textosFusion[clave] ?? ''}
+                                  onChange={e => setTextosFusion({ ...textosFusion, [clave]: e.target.value })}
+                                  className={INPUT} placeholder="Ortografía correcta" />
+                                <button type="button" disabled={fusionandoClave === clave}
+                                  onClick={() => fusionarGrupo('municipio', clave, g)}
+                                  className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                                  {fusionandoClave === clave ? 'Fusionando...' : 'Fusionar'}
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {gruposColonia.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Localidades / Colonias</h4>
+                      <div className="space-y-3">
+                        {gruposColonia.map((g, i) => {
+                          const clave = `colonia-${i}`
+                          return (
+                            <div key={clave} className="border border-gray-200 rounded-lg p-3">
+                              <div className="flex flex-wrap gap-1.5 mb-2">
+                                {g.map(v => (
+                                  <span key={v.valor} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                                    {v.valor} <span className="text-gray-400">({v.count})</span>
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="flex gap-2">
+                                <input type="text" value={textosFusion[clave] ?? ''}
+                                  onChange={e => setTextosFusion({ ...textosFusion, [clave]: e.target.value })}
+                                  className={INPUT} placeholder="Ortografía correcta" />
+                                <button type="button" disabled={fusionandoClave === clave}
+                                  onClick={() => fusionarGrupo('colonia', clave, g)}
+                                  className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                                  {fusionandoClave === clave ? 'Fusionando...' : 'Fusionar'}
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
