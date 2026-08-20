@@ -266,6 +266,34 @@ router.get('/sin-coordenadas', auth, async (req, res) => {
   }
 })
 
+// PUT /api/clientes/:id/dia-cobranza — cambiar el día de cobranza de un cliente
+// (el cobrador puede reacomodar su propia ruta entre días, sin depender del admin)
+router.put('/:id/dia-cobranza', auth, async (req, res) => {
+  try {
+    const { dia_cobranza } = req.body
+    const DIAS_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
+    if (dia_cobranza != null && !DIAS_VALIDOS.includes(dia_cobranza)) {
+      return res.status(400).json({ error: 'Día inválido' })
+    }
+    const idCliente = parseInt(req.params.id)
+
+    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
+      const actual = await prisma.cliente.findUnique({ where: { id_cliente: idCliente }, select: { ruta: true } })
+      if (!actual || actual.ruta !== req.usuario.ruta_asignada) {
+        return res.status(403).json({ error: 'No puedes modificar clientes fuera de tu ruta' })
+      }
+    }
+
+    const cliente = await prisma.cliente.update({
+      where: { id_cliente: idCliente },
+      data: { dia_cobranza: dia_cobranza || null }
+    })
+    res.json({ dia_cobranza: cliente.dia_cobranza })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al cambiar el día de cobranza', detalle: error.message })
+  }
+})
+
 // PUT /api/clientes/:id/coordenadas — guardar lat/lng (y plus_code opcional) de un cliente
 router.put('/:id/coordenadas', auth, async (req, res) => {
   try {

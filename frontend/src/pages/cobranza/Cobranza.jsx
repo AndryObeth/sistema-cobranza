@@ -384,6 +384,28 @@ export default function Cobranza() {
     }
   }
 
+  // El cobrador puede reacomodar su propia ruta entre días, sin depender del admin
+  const cambiarDiaCliente = async (cuenta, nuevoDia) => {
+    const idCliente = cuenta.cliente?.id_cliente
+    if (!idCliente) return
+    const anterior = cuenta.cliente?.dia_cobranza || ''
+    setCuentas(prev => prev.map(c =>
+      c.id_cuenta === cuenta.id_cuenta
+        ? { ...c, cliente: { ...c.cliente, dia_cobranza: nuevoDia || null } }
+        : c
+    ))
+    try {
+      await api.put(`/clientes/${idCliente}/dia-cobranza`, { dia_cobranza: nuevoDia || null })
+    } catch {
+      setCuentas(prev => prev.map(c =>
+        c.id_cuenta === cuenta.id_cuenta
+          ? { ...c, cliente: { ...c.cliente, dia_cobranza: anterior || null } }
+          : c
+      ))
+      alert('No se pudo cambiar el día (revisa tu conexión)')
+    }
+  }
+
   const abrirModal = async (cuenta) => {
     try {
       const resCuenta = await api.get(`/pagos/cuenta/${cuenta.id_cuenta}`)
@@ -1168,6 +1190,12 @@ export default function Cobranza() {
       return true
     })
     .sort((a, b) => {
+      // En modo cobranza el orden manual/GPS de la ruta siempre manda,
+      // sin depender de que "Ordenar" esté puesto en "Por ruta de cobranza"
+      if (modoCobranza) {
+        const pa = ordenManual.indexOf(a.id_cuenta); const pb = ordenManual.indexOf(b.id_cuenta)
+        return (pa === -1 ? 9999 : pa) - (pb === -1 ? 9999 : pb)
+      }
       switch (ordenar) {
         case 'nombre_az':   return (a.cliente?.nombre || '').localeCompare(b.cliente?.nombre || '', 'es')
         case 'nombre_za':   return (b.cliente?.nombre || '').localeCompare(a.cliente?.nombre || '', 'es')
@@ -1321,22 +1349,27 @@ export default function Cobranza() {
           className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <div className="flex flex-wrap gap-2 items-center">
-          <select
-            value={ordenar}
-            onChange={e => setOrdenar(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-          >
-            {modoCobranza && <option value="ruta">📍 Por ruta de cobranza</option>}
-            <option value="cumplimiento">Ordenar: Cumplimiento</option>
-            <option value="nombre_az">Nombre A → Z</option>
-            <option value="nombre_za">Nombre Z → A</option>
-            <option value="cuenta_asc">No. cuenta ↑</option>
-            <option value="cuenta_desc">No. cuenta ↓</option>
-            <option value="saldo_asc">Saldo menor → mayor</option>
-            <option value="saldo_desc">Saldo mayor → menor</option>
-            <option value="municipio">Municipio A → Z</option>
-            <option value="ultimo_pago">Último pago reciente</option>
-          </select>
+          {modoCobranza ? (
+            <span className="text-xs px-3 py-1.5 rounded-lg bg-green-50 text-green-700 border border-green-200 font-medium">
+              📍 Arrastra las tarjetas para acomodar tu ruta
+            </span>
+          ) : (
+            <select
+              value={ordenar}
+              onChange={e => setOrdenar(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="cumplimiento">Ordenar: Cumplimiento</option>
+              <option value="nombre_az">Nombre A → Z</option>
+              <option value="nombre_za">Nombre Z → A</option>
+              <option value="cuenta_asc">No. cuenta ↑</option>
+              <option value="cuenta_desc">No. cuenta ↓</option>
+              <option value="saldo_asc">Saldo menor → mayor</option>
+              <option value="saldo_desc">Saldo mayor → menor</option>
+              <option value="municipio">Municipio A → Z</option>
+              <option value="ultimo_pago">Último pago reciente</option>
+            </select>
+          )}
 
           <select
             value={filtroEstado}
@@ -1425,7 +1458,7 @@ export default function Cobranza() {
         ) : (() => {
           const renderCard = (c, dragListeners) => {
             const esVisitado = visitados.has(c.id_cuenta)
-            const pos = modoCobranza && ordenar === 'ruta' ? ordenManual.indexOf(c.id_cuenta) : -1
+            const pos = modoCobranza ? ordenManual.indexOf(c.id_cuenta) : -1
             return (
               <div className={`rounded-2xl shadow p-4 transition-all ${esVisitado ? 'bg-green-50 border border-green-200' : 'bg-white'}`}>
                 <div className="flex items-start justify-between gap-2 mb-3">
@@ -1491,6 +1524,20 @@ export default function Cobranza() {
                         className="text-gray-300 hover:text-gray-500 text-base leading-none"
                         title="Ocultar de la ruta de hoy"
                       >👁️</button>
+                    )}
+                    {modoCobranza && usaDiasCobranza && (
+                      <select
+                        value={c.cliente?.dia_cobranza || ''}
+                        onChange={e => cambiarDiaCliente(c, e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                        title="Cambiar el día de cobranza de este cliente"
+                        className="text-xs border border-gray-200 rounded-lg px-1.5 py-0.5 text-gray-500 bg-white"
+                      >
+                        <option value="">Sin día</option>
+                        {DIAS_COBRANZA.map(d => (
+                          <option key={d} value={d}>{LABEL_DIA_COBRANZA[d]}</option>
+                        ))}
+                      </select>
                     )}
                     {esVisitado && (
                       <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">Visitado</span>
@@ -1558,7 +1605,7 @@ export default function Cobranza() {
             )
           }
 
-          if (modoCobranza && ordenar === 'ruta') {
+          if (modoCobranza) {
             return (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={cuentasFiltradas.map(c => String(c.id_cuenta))} strategy={verticalListSortingStrategy}>
@@ -1589,7 +1636,7 @@ export default function Cobranza() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   {modoCobranza && <th className="px-4 py-3 w-10"></th>}
-                  {modoCobranza && ordenar === 'ruta' && <th className="px-2 py-3 w-16 text-gray-400 font-medium text-xs text-center">Orden</th>}
+                  {modoCobranza && <th className="px-2 py-3 w-16 text-gray-400 font-medium text-xs text-center">Orden</th>}
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Cliente</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Cuenta</th>
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
@@ -1618,7 +1665,7 @@ export default function Cobranza() {
                         </button>
                       </td>
                     )}
-                    {modoCobranza && ordenar === 'ruta' && (() => {
+                    {modoCobranza && (() => {
                       const posIdx = ordenManual.indexOf(c.id_cuenta)
                       return (
                         <td className="px-2 py-4">
@@ -1703,6 +1750,19 @@ export default function Cobranza() {
                               className="px-2 py-1.5 rounded-lg text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 border border-gray-200 transition"
                               title="Ocultar de la ruta de hoy"
                             >👁️</button>
+                            {usaDiasCobranza && (
+                              <select
+                                value={c.cliente?.dia_cobranza || ''}
+                                onChange={e => cambiarDiaCliente(c, e.target.value)}
+                                title="Cambiar el día de cobranza de este cliente"
+                                className="text-xs border border-gray-200 rounded-lg px-1.5 py-1 text-gray-500 bg-white"
+                              >
+                                <option value="">Sin día</option>
+                                {DIAS_COBRANZA.map(d => (
+                                  <option key={d} value={d}>{LABEL_DIA_COBRANZA[d]}</option>
+                                ))}
+                              </select>
+                            )}
                           </>
                         )}
                         <button
