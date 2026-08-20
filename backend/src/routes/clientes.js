@@ -454,8 +454,22 @@ router.put('/fusionar-valor', auth, async (req, res) => {
     if (!valor_final?.trim()) {
       return res.status(400).json({ error: 'Se requiere el valor final' })
     }
+
+    // Los valores originales llegan recortados (así los agrupa /valores-distintos),
+    // pero el dato real en la BD puede tener espacios al inicio/final que rompen
+    // una comparación exacta — por eso se compara recortando ambos lados en JS
+    // en vez de un "where: { in: valores_originales } }" directo.
+    const buscados = new Set(valores_originales.map(v => v.trim()))
+    const candidatos = await prisma.cliente.findMany({
+      where: { [campo]: { not: null } },
+      select: { id_cliente: true, [campo]: true }
+    })
+    const idsCoincidentes = candidatos
+      .filter(c => buscados.has(c[campo].trim()))
+      .map(c => c.id_cliente)
+
     const resultado = await prisma.cliente.updateMany({
-      where: { [campo]: { in: valores_originales } },
+      where: { id_cliente: { in: idsCoincidentes } },
       data: { [campo]: valor_final.trim() }
     })
     res.json({ actualizados: resultado.count })
