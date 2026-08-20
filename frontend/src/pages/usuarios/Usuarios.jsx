@@ -27,7 +27,7 @@ const rolLabel = {
 }
 
 const formVacio = {
-  nombre: '', usuario: '', contrasena: '', rol: 'vendedor', ruta_asignada: '', activo: true
+  nombre: '', usuario: '', contrasena: '', rol: 'vendedor', rutas_asignadas: [], activo: true
 }
 
 export default function Usuarios() {
@@ -41,8 +41,9 @@ export default function Usuarios() {
   const [nuevaContrasena, setNuevaContrasena] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [rutasDisponibles, setRutasDisponibles] = useState([])
 
-  useEffect(() => { cargarUsuarios() }, [])
+  useEffect(() => { cargarUsuarios(); cargarRutasDisponibles() }, [])
 
   const cargarUsuarios = async () => {
     try {
@@ -53,6 +54,24 @@ export default function Usuarios() {
     } finally {
       setCargando(false)
     }
+  }
+
+  const cargarRutasDisponibles = async () => {
+    try {
+      const res = await api.get('/clientes/valores-distintos')
+      setRutasDisponibles(res.data.rutas.map(r => r.valor).sort((a, b) => a.localeCompare(b, 'es')))
+    } catch {
+      console.error('Error al cargar rutas')
+    }
+  }
+
+  const toggleRutaForm = (ruta) => {
+    setForm(prev => ({
+      ...prev,
+      rutas_asignadas: prev.rutas_asignadas.includes(ruta)
+        ? prev.rutas_asignadas.filter(r => r !== ruta)
+        : [...prev.rutas_asignadas, ruta]
+    }))
   }
 
   const abrirNuevo = () => {
@@ -68,12 +87,12 @@ export default function Usuarios() {
     setModoEdicion(true)
     setUsuarioEditando(u)
     setForm({
-      nombre:        u.nombre,
-      usuario:       u.usuario,
-      contrasena:    '',
-      rol:           u.rol,
-      ruta_asignada: u.ruta_asignada || '',
-      activo:        u.activo,
+      nombre:          u.nombre,
+      usuario:         u.usuario,
+      contrasena:      '',
+      rol:             u.rol,
+      rutas_asignadas: u.rutas_asignadas || [],
+      activo:          u.activo,
     })
     setNuevaContrasena('')
     setError('')
@@ -96,11 +115,11 @@ export default function Usuarios() {
     try {
       if (modoEdicion) {
         await api.put(`/usuarios/${usuarioEditando.id_usuario}`, {
-          nombre:        form.nombre,
-          usuario:       form.usuario,
-          rol:           form.rol,
-          ruta_asignada: form.ruta_asignada || null,
-          activo:        form.activo,
+          nombre:          form.nombre,
+          usuario:         form.usuario,
+          rol:             form.rol,
+          rutas_asignadas: form.rutas_asignadas,
+          activo:          form.activo,
         })
         if (nuevaContrasena.trim() !== '') {
           await api.put(`/usuarios/${usuarioEditando.id_usuario}/password`, {
@@ -109,11 +128,11 @@ export default function Usuarios() {
         }
       } else {
         await api.post('/usuarios', {
-          nombre:        form.nombre,
-          usuario:       form.usuario,
-          contrasena:    form.contrasena,
-          rol:           form.rol,
-          ruta_asignada: form.ruta_asignada || null,
+          nombre:          form.nombre,
+          usuario:         form.usuario,
+          contrasena:      form.contrasena,
+          rol:             form.rol,
+          rutas_asignadas: form.rutas_asignadas,
         })
       }
       cerrarModal()
@@ -171,7 +190,7 @@ export default function Usuarios() {
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">Nombre</th>
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">Usuario</th>
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">Rol</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Ruta asignada</th>
+                <th className="text-left px-6 py-3 text-gray-600 font-medium">Rutas asignadas</th>
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">Estado</th>
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">Fecha registro</th>
                 <th className="px-6 py-3"></th>
@@ -187,7 +206,7 @@ export default function Usuarios() {
                       {rolLabel[u.rol] || u.rol}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-gray-600">{u.ruta_asignada || '—'}</td>
+                  <td className="px-6 py-4 text-gray-600">{u.rutas_asignadas?.length ? u.rutas_asignadas.join(', ') : '—'}</td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
                       {u.activo ? 'Activo' : 'Inactivo'}
@@ -285,14 +304,27 @@ export default function Usuarios() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ruta asignada</label>
-                <input
-                  type="text"
-                  value={form.ruta_asignada}
-                  onChange={e => setForm({ ...form, ruta_asignada: e.target.value })}
-                  placeholder="Ej: Ruta Norte, Cancún Centro..."
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Rutas asignadas <span className="text-gray-400 font-normal">(puede tener más de una)</span>
+                </label>
+                {rutasDisponibles.length === 0 ? (
+                  <p className="text-xs text-gray-400">No hay rutas registradas todavía en Clientes</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {rutasDisponibles.map(r => (
+                      <label key={r} className={`px-3 py-1.5 rounded-lg text-sm border cursor-pointer transition ${
+                        form.rutas_asignadas.includes(r)
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                      }`}>
+                        <input type="checkbox" className="hidden"
+                          checked={form.rutas_asignadas.includes(r)}
+                          onChange={() => toggleRutaForm(r)} />
+                        {r}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {modoEdicion && (

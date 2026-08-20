@@ -65,8 +65,8 @@ router.get('/cuenta/:id_cuenta', auth, async (req, res) => {
 router.get('/todas-cuentas', auth, async (req, res) => {
   try {
     const where = { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] } }
-    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
-      where.cliente = { ruta: req.usuario.ruta_asignada }
+    if (req.usuario.rol === 'cobrador' && req.usuario.rutas_asignadas?.length) {
+      where.cliente = { ruta: { in: req.usuario.rutas_asignadas } }
     }
     const cuentas = await prisma.cuenta.findMany({
       where,

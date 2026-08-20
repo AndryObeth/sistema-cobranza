@@ -17,7 +17,7 @@ model Usuario {
   usuario        String   @unique
   contrasena     String
   rol            RolUsuario
-  ruta_asignada    String?
+  rutas_asignadas  String[] @default([])
   orden_ruta       Json?
   activo           Boolean  @default(true)
   fecha_creacion   DateTime @default(now())

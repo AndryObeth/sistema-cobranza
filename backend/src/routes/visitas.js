@@ -61,8 +61,8 @@ router.get('/todas-pendientes', auth, async (req, res) => {
     hoy.setHours(0, 0, 0, 0)
 
     const where = { fecha_programada: { gte: hoy } }
-    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
-      where.cliente = { ruta: req.usuario.ruta_asignada }
+    if (req.usuario.rol === 'cobrador' && req.usuario.rutas_asignadas?.length) {
+      where.cliente = { ruta: { in: req.usuario.rutas_asignadas } }
     }
 
     const visitas = await prisma.seguimientoCliente.findMany({

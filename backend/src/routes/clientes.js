@@ -34,8 +34,8 @@ async function plusCodeDesdeCoordenadas(lat, lng) {
 router.get('/', auth, async (req, res) => {
   try {
     const where = { activo: true }
-    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
-      where.ruta = req.usuario.ruta_asignada
+    if (req.usuario.rol === 'cobrador' && req.usuario.rutas_asignadas?.length) {
+      where.ruta = { in: req.usuario.rutas_asignadas }
     }
     const clientes = await prisma.cliente.findMany({
       where,
@@ -59,8 +59,8 @@ router.get('/', auth, async (req, res) => {
 router.get('/valores-distintos', auth, async (req, res) => {
   try {
     const where = { activo: true }
-    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
-      where.ruta = req.usuario.ruta_asignada
+    if (req.usuario.rol === 'cobrador' && req.usuario.rutas_asignadas?.length) {
+      where.ruta = { in: req.usuario.rutas_asignadas }
     }
     const clientes = await prisma.cliente.findMany({
       where,
@@ -200,8 +200,8 @@ router.post('/geocodificar-lote', auth, async (req, res) => {
   if (!apiKey) return res.status(500).json({ error: 'GOOGLE_MAPS_KEY no configurada en el servidor' })
 
   const where = { activo: true, OR: [{ latitud: null }, { longitud: null }] }
-  if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
-    where.ruta = req.usuario.ruta_asignada
+  if (req.usuario.rol === 'cobrador' && req.usuario.rutas_asignadas?.length) {
+    where.ruta = { in: req.usuario.rutas_asignadas }
   }
   const clientes = await prisma.cliente.findMany({
     where,
@@ -253,8 +253,8 @@ router.post('/geocodificar-lote', auth, async (req, res) => {
 router.get('/sin-coordenadas', auth, async (req, res) => {
   try {
     const where = { activo: true, OR: [{ latitud: null }, { longitud: null }] }
-    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
-      where.ruta = req.usuario.ruta_asignada
+    if (req.usuario.rol === 'cobrador' && req.usuario.rutas_asignadas?.length) {
+      where.ruta = { in: req.usuario.rutas_asignadas }
     }
     const clientes = await prisma.cliente.findMany({
       where,
@@ -277,9 +277,9 @@ router.put('/:id/dia-cobranza', auth, async (req, res) => {
     }
     const idCliente = parseInt(req.params.id)
 
-    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
+    if (req.usuario.rol === 'cobrador' && req.usuario.rutas_asignadas?.length) {
       const actual = await prisma.cliente.findUnique({ where: { id_cliente: idCliente }, select: { ruta: true } })
-      if (!actual || actual.ruta !== req.usuario.ruta_asignada) {
+      if (!actual || !req.usuario.rutas_asignadas.includes(actual.ruta)) {
         return res.status(403).json({ error: 'No puedes modificar clientes fuera de tu ruta' })
       }
     }
@@ -450,8 +450,8 @@ router.put('/asignar-dia-lote', auth, async (req, res) => {
       return res.status(400).json({ error: 'Día inválido' })
     }
     const where = { activo: true }
-    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
-      where.ruta = req.usuario.ruta_asignada
+    if (req.usuario.rol === 'cobrador' && req.usuario.rutas_asignadas?.length) {
+      where.ruta = { in: req.usuario.rutas_asignadas }
     }
     if (municipio) where.municipio = municipio
     if (colonia)   where.colonia   = colonia

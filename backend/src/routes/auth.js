@@ -24,7 +24,7 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id_usuario, rol: user.rol, nombre: user.nombre, ruta_asignada: user.ruta_asignada },
+      { id: user.id_usuario, rol: user.rol, nombre: user.nombre, rutas_asignadas: user.rutas_asignadas },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     )
@@ -35,7 +35,7 @@ router.post('/login', async (req, res) => {
         id: user.id_usuario,
         nombre: user.nombre,
         rol: user.rol,
-        ruta_asignada: user.ruta_asignada
+        rutas_asignadas: user.rutas_asignadas
       }
     })
   } catch (error) {
