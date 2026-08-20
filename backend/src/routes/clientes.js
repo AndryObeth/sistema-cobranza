@@ -64,7 +64,7 @@ router.get('/valores-distintos', auth, async (req, res) => {
     }
     const clientes = await prisma.cliente.findMany({
       where,
-      select: { municipio: true, colonia: true }
+      select: { municipio: true, colonia: true, ruta: true }
     })
     const contar = (campo) => {
       const mapa = new Map()
@@ -75,7 +75,7 @@ router.get('/valores-distintos', auth, async (req, res) => {
       })
       return [...mapa.entries()].map(([valor, count]) => ({ valor, count }))
     }
-    res.json({ municipios: contar('municipio'), colonias: contar('colonia') })
+    res.json({ municipios: contar('municipio'), colonias: contar('colonia'), rutas: contar('ruta') })
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener valores', detalle: error.message })
   }
@@ -473,7 +473,7 @@ router.put('/fusionar-valor', auth, async (req, res) => {
       return res.status(403).json({ error: 'Solo el administrador puede corregir estos datos' })
     }
     const { campo, valores_originales, valor_final } = req.body
-    if (!['municipio', 'colonia'].includes(campo)) {
+    if (!['municipio', 'colonia', 'ruta'].includes(campo)) {
       return res.status(400).json({ error: 'Campo inválido' })
     }
     if (!Array.isArray(valores_originales) || valores_originales.length === 0) {

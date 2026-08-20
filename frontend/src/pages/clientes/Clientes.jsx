@@ -364,17 +364,19 @@ export default function Clientes() {
   const [aplicandoDia, setAplicandoDia]     = useState(false)
   const [resultadoDia, setResultadoDia]     = useState(null)
 
-  // Revisión de ortografía (municipio / colonia)
+  // Revisión de ortografía (municipio / colonia / ruta)
   const [modalOrtografia, setModalOrtografia]   = useState(false)
   const [cargandoOrtografia, setCargandoOrtografia] = useState(false)
   const [gruposMunicipio, setGruposMunicipio]   = useState([])
   const [gruposColonia, setGruposColonia]       = useState([])
+  const [gruposRuta, setGruposRuta]             = useState([])
   const [textosFusion, setTextosFusion]         = useState({}) // clave -> texto editable
   const [fusionandoClave, setFusionandoClave]   = useState(null)
 
   // Fusión manual (para casos que el detector automático no agrupa, ej. "Tuxtepec" vs "Tuxtepec Oaxaca")
   const [todosMunicipios, setTodosMunicipios]   = useState([])
   const [todasColonias, setTodasColonias]       = useState([])
+  const [todasRutas, setTodasRutas]             = useState([])
   const [campoManual, setCampoManual]           = useState('municipio')
   const [seleccionManual, setSeleccionManual]   = useState(new Set())
   const [textoManual, setTextoManual]           = useState('')
@@ -430,6 +432,9 @@ export default function Clientes() {
     }
   }
 
+  const SETTERS_TODOS  = { municipio: setTodosMunicipios, colonia: setTodasColonias, ruta: setTodasRutas }
+  const SETTERS_GRUPOS = { municipio: setGruposMunicipio, colonia: setGruposColonia, ruta: setGruposRuta }
+
   const abrirModalOrtografia = async () => {
     setModalOrtografia(true)
     setCargandoOrtografia(true)
@@ -437,20 +442,17 @@ export default function Clientes() {
     setTextoManual('')
     try {
       const res = await api.get('/clientes/valores-distintos')
-      const municipiosOrdenados = [...res.data.municipios].sort((a, b) => b.count - a.count)
-      const coloniasOrdenadas   = [...res.data.colonias].sort((a, b) => b.count - a.count)
-      setTodosMunicipios(municipiosOrdenados)
-      setTodasColonias(coloniasOrdenadas)
-      const gm = agruparSimilares(res.data.municipios)
-      const gc = agruparSimilares(res.data.colonias)
-      setGruposMunicipio(gm)
-      setGruposColonia(gc)
       const textos = {}
-      gm.forEach((g, i) => { textos[`municipio-${i}`] = g[0].valor })
-      gc.forEach((g, i) => { textos[`colonia-${i}`] = g[0].valor })
+      ;['municipio', 'colonia', 'ruta'].forEach(campo => {
+        const lista = { municipio: res.data.municipios, colonia: res.data.colonias, ruta: res.data.rutas }[campo]
+        SETTERS_TODOS[campo]([...lista].sort((a, b) => b.count - a.count))
+        const grupos = agruparSimilares(lista)
+        SETTERS_GRUPOS[campo](grupos)
+        grupos.forEach((g, i) => { textos[`${campo}-${i}`] = g[0].valor })
+      })
       setTextosFusion(textos)
     } catch {
-      alert('Error al buscar municipios/colonias parecidos')
+      alert('Error al buscar valores parecidos')
     } finally {
       setCargandoOrtografia(false)
     }
@@ -475,19 +477,11 @@ export default function Clientes() {
         valores_originales: [...seleccionManual],
         valor_final: valorFinal
       })
-      if (campoManual === 'municipio') {
-        setTodosMunicipios(prev => {
-          const restantes = prev.filter(v => !seleccionManual.has(v.valor))
-          const sumaSeleccion = prev.filter(v => seleccionManual.has(v.valor)).reduce((s, v) => s + v.count, 0)
-          return [...restantes, { valor: valorFinal, count: sumaSeleccion }].sort((a, b) => b.count - a.count)
-        })
-      } else {
-        setTodasColonias(prev => {
-          const restantes = prev.filter(v => !seleccionManual.has(v.valor))
-          const sumaSeleccion = prev.filter(v => seleccionManual.has(v.valor)).reduce((s, v) => s + v.count, 0)
-          return [...restantes, { valor: valorFinal, count: sumaSeleccion }].sort((a, b) => b.count - a.count)
-        })
-      }
+      SETTERS_TODOS[campoManual](prev => {
+        const restantes = prev.filter(v => !seleccionManual.has(v.valor))
+        const sumaSeleccion = prev.filter(v => seleccionManual.has(v.valor)).reduce((s, v) => s + v.count, 0)
+        return [...restantes, { valor: valorFinal, count: sumaSeleccion }].sort((a, b) => b.count - a.count)
+      })
       setSeleccionManual(new Set())
       setTextoManual('')
       cargarClientes()
@@ -508,8 +502,7 @@ export default function Clientes() {
         valores_originales: grupo.map(v => v.valor),
         valor_final: valorFinal
       })
-      if (campo === 'municipio') setGruposMunicipio(prev => prev.filter(g => g !== grupo))
-      else setGruposColonia(prev => prev.filter(g => g !== grupo))
+      SETTERS_GRUPOS[campo](prev => prev.filter(g => g !== grupo))
       cargarClientes()
     } catch (err) {
       alert(err.response?.data?.error || 'Error al fusionar')
@@ -980,15 +973,19 @@ export default function Clientes() {
                 <p className="text-center text-gray-500 py-8">Buscando parecidos...</p>
               ) : (
                 <>
-                  {gruposMunicipio.length === 0 && gruposColonia.length === 0 && (
+                  {gruposMunicipio.length === 0 && gruposColonia.length === 0 && gruposRuta.length === 0 && (
                     <p className="text-sm text-gray-400">No se encontraron nombres muy parecidos automáticamente 🎉</p>
                   )}
-                  {gruposMunicipio.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Municipios</h4>
+                  {[
+                    { campo: 'municipio', label: 'Municipios', grupos: gruposMunicipio },
+                    { campo: 'colonia',   label: 'Localidades / Colonias', grupos: gruposColonia },
+                    { campo: 'ruta',      label: 'Rutas', grupos: gruposRuta },
+                  ].filter(s => s.grupos.length > 0).map(seccion => (
+                    <div key={seccion.campo}>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">{seccion.label}</h4>
                       <div className="space-y-3">
-                        {gruposMunicipio.map((g, i) => {
-                          const clave = `municipio-${i}`
+                        {seccion.grupos.map((g, i) => {
+                          const clave = `${seccion.campo}-${i}`
                           return (
                             <div key={clave} className="border border-gray-200 rounded-lg p-3">
                               <div className="flex flex-wrap gap-1.5 mb-2">
@@ -1003,7 +1000,7 @@ export default function Clientes() {
                                   onChange={e => setTextosFusion({ ...textosFusion, [clave]: e.target.value })}
                                   className={INPUT} placeholder="Ortografía correcta" />
                                 <button type="button" disabled={fusionandoClave === clave}
-                                  onClick={() => fusionarGrupo('municipio', clave, g)}
+                                  onClick={() => fusionarGrupo(seccion.campo, clave, g)}
                                   className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50">
                                   {fusionandoClave === clave ? 'Fusionando...' : 'Fusionar'}
                                 </button>
@@ -1013,39 +1010,7 @@ export default function Clientes() {
                         })}
                       </div>
                     </div>
-                  )}
-
-                  {gruposColonia.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Localidades / Colonias</h4>
-                      <div className="space-y-3">
-                        {gruposColonia.map((g, i) => {
-                          const clave = `colonia-${i}`
-                          return (
-                            <div key={clave} className="border border-gray-200 rounded-lg p-3">
-                              <div className="flex flex-wrap gap-1.5 mb-2">
-                                {g.map(v => (
-                                  <span key={v.valor} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-                                    {v.valor} <span className="text-gray-400">({v.count})</span>
-                                  </span>
-                                ))}
-                              </div>
-                              <div className="flex gap-2">
-                                <input type="text" value={textosFusion[clave] ?? ''}
-                                  onChange={e => setTextosFusion({ ...textosFusion, [clave]: e.target.value })}
-                                  className={INPUT} placeholder="Ortografía correcta" />
-                                <button type="button" disabled={fusionandoClave === clave}
-                                  onClick={() => fusionarGrupo('colonia', clave, g)}
-                                  className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50">
-                                  {fusionandoClave === clave ? 'Fusionando...' : 'Fusionar'}
-                                </button>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  ))}
 
                   <div className="border-t pt-5">
                     <h4 className="text-sm font-semibold text-gray-700 mb-1">Fusión manual</h4>
@@ -1054,23 +1019,22 @@ export default function Clientes() {
                       Elige el campo, marca los valores que son el mismo lugar y escribe la ortografía correcta.
                     </p>
                     <div className="flex gap-2 mb-3">
-                      <button type="button"
-                        onClick={() => { setCampoManual('municipio'); setSeleccionManual(new Set()); setTextoManual('') }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                          campoManual === 'municipio' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'
-                        }`}>
-                        Municipios
-                      </button>
-                      <button type="button"
-                        onClick={() => { setCampoManual('colonia'); setSeleccionManual(new Set()); setTextoManual('') }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                          campoManual === 'colonia' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'
-                        }`}>
-                        Localidades / Colonias
-                      </button>
+                      {[
+                        { campo: 'municipio', label: 'Municipios' },
+                        { campo: 'colonia',   label: 'Localidades / Colonias' },
+                        { campo: 'ruta',      label: 'Rutas' },
+                      ].map(op => (
+                        <button key={op.campo} type="button"
+                          onClick={() => { setCampoManual(op.campo); setSeleccionManual(new Set()); setTextoManual('') }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                            campoManual === op.campo ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'
+                          }`}>
+                          {op.label}
+                        </button>
+                      ))}
                     </div>
                     <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
-                      {(campoManual === 'municipio' ? todosMunicipios : todasColonias).map(v => (
+                      {({ municipio: todosMunicipios, colonia: todasColonias, ruta: todasRutas }[campoManual]).map(v => (
                         <label key={v.valor} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
                           <input type="checkbox" checked={seleccionManual.has(v.valor)}
                             onChange={() => toggleSeleccionManual(v.valor)} />
