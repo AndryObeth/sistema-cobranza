@@ -53,6 +53,50 @@ router.post('/', auth, async (req, res) => {
   }
 })
 
+// GET /api/usuarios/mi-orden?dia=lunes — orden de ruta guardado del cobrador autenticado para ese día
+// (dia='general' cuando el cobrador no usa enrutado por día)
+router.get('/mi-orden', auth, async (req, res) => {
+  try {
+    const dia = req.query.dia || 'general'
+    const u = await prisma.usuario.findUnique({
+      where: { id_usuario: req.usuario.id },
+      select: { orden_ruta: true }
+    })
+    const guardado = u?.orden_ruta
+    let orden = []
+    if (Array.isArray(guardado)) {
+      // Formato antiguo (un solo orden global, previo al enrutado por día)
+      if (dia === 'general') orden = guardado
+    } else if (guardado && typeof guardado === 'object') {
+      orden = guardado[dia] ?? []
+    }
+    res.json({ orden })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener orden de ruta', detalle: error.message })
+  }
+})
+
+// PUT /api/usuarios/mi-orden — guardar orden de ruta del cobrador autenticado para un día
+router.put('/mi-orden', auth, async (req, res) => {
+  try {
+    const { orden, dia } = req.body
+    if (!Array.isArray(orden)) return res.status(400).json({ error: 'orden debe ser un array' })
+    const clave = dia || 'general'
+    const u = await prisma.usuario.findUnique({
+      where: { id_usuario: req.usuario.id },
+      select: { orden_ruta: true }
+    })
+    const actual = (u?.orden_ruta && !Array.isArray(u.orden_ruta)) ? u.orden_ruta : {}
+    await prisma.usuario.update({
+      where: { id_usuario: req.usuario.id },
+      data: { orden_ruta: { ...actual, [clave]: orden } }
+    })
+    res.json({ ok: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar orden de ruta', detalle: error.message })
+  }
+})
+
 // PUT /api/usuarios/:id — editar datos del usuario
 router.put('/:id', auth, async (req, res) => {
   try {
@@ -83,34 +127,6 @@ router.put('/:id', auth, async (req, res) => {
     res.json(actualizado)
   } catch (error) {
     res.status(500).json({ error: 'Error al actualizar usuario', detalle: error.message })
-  }
-})
-
-// GET /api/usuarios/mi-orden — orden de ruta guardado del cobrador autenticado
-router.get('/mi-orden', auth, async (req, res) => {
-  try {
-    const u = await prisma.usuario.findUnique({
-      where: { id_usuario: req.usuario.id },
-      select: { orden_ruta: true }
-    })
-    res.json({ orden: u?.orden_ruta ?? [] })
-  } catch (error) {
-    res.status(500).json({ error: 'Error al obtener orden de ruta', detalle: error.message })
-  }
-})
-
-// PUT /api/usuarios/mi-orden — guardar orden de ruta del cobrador autenticado
-router.put('/mi-orden', auth, async (req, res) => {
-  try {
-    const { orden } = req.body
-    if (!Array.isArray(orden)) return res.status(400).json({ error: 'orden debe ser un array' })
-    await prisma.usuario.update({
-      where: { id_usuario: req.usuario.id },
-      data: { orden_ruta: orden }
-    })
-    res.json({ ok: true })
-  } catch (error) {
-    res.status(500).json({ error: 'Error al guardar orden de ruta', detalle: error.message })
   }
 })
 

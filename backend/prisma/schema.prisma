@@ -73,6 +73,7 @@ model Cliente {
   longitud                 Float?
   foto_fachada             String?
   plus_code                String?
+  dia_cobranza             DiaCobranza?
   activo                   Boolean  @default(true)
 
   // Relaciones
@@ -114,6 +115,16 @@ enum NivelRiesgo {
   bajo
   medio
   alto
+}
+
+enum DiaCobranza {
+  lunes
+  martes
+  miercoles
+  jueves
+  viernes
+  sabado
+  domingo
 }
 
 // ─────────────────────────────────────────

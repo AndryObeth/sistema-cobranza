@@ -28,6 +28,12 @@ const tipoSeguimientoLabel = {
 const estadoClienteOpciones = ['activo', 'moroso', 'bloqueado', 'inactivo']
 const nivelRiesgoOpciones   = ['', 'bajo', 'medio', 'alto']
 
+const DIAS_COBRANZA = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
+const LABEL_DIA_COBRANZA = {
+  lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves',
+  viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo'
+}
+
 // ─── Modal Expediente ────────────────────────────
 function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
   const [tab, setTab] = useState('datos')
@@ -280,7 +286,8 @@ const FORM_VACIO = {
   nombre: '', alias: '', telefono: '',
   municipio: '', colonia: '', direccion: '',
   referencias: '', ruta: '', plus_code: '',
-  estado_cliente: 'activo', nivel_riesgo: '', observaciones_generales: ''
+  estado_cliente: 'activo', nivel_riesgo: '', observaciones_generales: '',
+  dia_cobranza: ''
 }
 
 // ─── Página principal ────────────────────────────
@@ -302,6 +309,14 @@ export default function Clientes() {
   const [verificandoPC, setVerificandoPC]   = useState(false)
   const [previewPC, setPreviewPC]           = useState(null) // { lat, lng }
 
+  // Asignación de día de cobranza por zona
+  const [modalDia, setModalDia]             = useState(false)
+  const [zonaMunicipio, setZonaMunicipio]   = useState('')
+  const [zonaColonia, setZonaColonia]       = useState('')
+  const [zonaDia, setZonaDia]               = useState('lunes')
+  const [aplicandoDia, setAplicandoDia]     = useState(false)
+  const [resultadoDia, setResultadoDia]     = useState(null)
+
   useEffect(() => { cargarClientes() }, [])
 
   const cargarClientes = async () => {
@@ -316,6 +331,41 @@ export default function Clientes() {
   }
 
   const rutasDisponibles = [...new Set(clientes.map(c => c.ruta).filter(Boolean))].sort()
+
+  const municipiosZona = [...new Set(clientes.map(c => c.municipio).filter(Boolean))].sort()
+  const coloniasZona = [...new Set(
+    clientes
+      .filter(c => !zonaMunicipio || c.municipio === zonaMunicipio)
+      .map(c => c.colonia)
+      .filter(Boolean)
+  )].sort()
+
+  const abrirModalDia = () => {
+    setZonaMunicipio('')
+    setZonaColonia('')
+    setZonaDia('lunes')
+    setResultadoDia(null)
+    setModalDia(true)
+  }
+
+  const aplicarDiaZona = async () => {
+    if (!zonaMunicipio && !zonaColonia) { alert('Selecciona al menos municipio o colonia'); return }
+    setAplicandoDia(true)
+    setResultadoDia(null)
+    try {
+      const res = await api.put('/clientes/asignar-dia-lote', {
+        municipio: zonaMunicipio || undefined,
+        colonia: zonaColonia || undefined,
+        dia_cobranza: zonaDia
+      })
+      setResultadoDia(res.data.actualizados)
+      cargarClientes()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al asignar día de cobranza')
+    } finally {
+      setAplicandoDia(false)
+    }
+  }
 
   const clientesFiltrados = clientes.filter(c => {
     if (filtroExp    && !c.numero_expediente.toLowerCase().includes(filtroExp.toLowerCase())) return false
@@ -346,7 +396,8 @@ export default function Clientes() {
       plus_code:               c.plus_code || '',
       estado_cliente:          c.estado_cliente || 'activo',
       nivel_riesgo:            c.nivel_riesgo || '',
-      observaciones_generales: c.observaciones_generales || ''
+      observaciones_generales: c.observaciones_generales || '',
+      dia_cobranza:            c.dia_cobranza || ''
     })
     setPreviewPC(null)
     setError('')
@@ -436,10 +487,18 @@ export default function Clientes() {
               : `${clientes.length} clientes registrados`}
           </p>
         </div>
-        <button onClick={abrirNuevo}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
-          + Nuevo cliente
-        </button>
+        <div className="flex items-center gap-2">
+          {esAdmin && (
+            <button onClick={abrirModalDia}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+              📅 Asignar día por zona
+            </button>
+          )}
+          <button onClick={abrirNuevo}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+            + Nuevo cliente
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-col sm:flex-row gap-2">
@@ -490,6 +549,7 @@ export default function Clientes() {
                   <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Teléfono</th>
                   <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Municipio</th>
                   <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Ruta</th>
+                  <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Día</th>
                   <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Estado</th>
                   {esAdmin && <th className="px-4 md:px-6 py-3"></th>}
                 </tr>
@@ -506,6 +566,7 @@ export default function Clientes() {
                     <td className="hidden sm:table-cell px-6 py-4 text-gray-600">{c.telefono || '—'}</td>
                     <td className="hidden md:table-cell px-6 py-4 text-gray-600">{c.municipio || '—'}</td>
                     <td className="hidden sm:table-cell px-6 py-4 text-gray-600">{c.ruta || '—'}</td>
+                    <td className="hidden md:table-cell px-6 py-4 text-gray-600">{LABEL_DIA_COBRANZA[c.dia_cobranza] || '—'}</td>
                     <td className="px-4 md:px-6 py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cliente]}`}>
                         {c.estado_cliente}
@@ -631,6 +692,16 @@ export default function Clientes() {
                     className={INPUT} />
                 </Campo>
 
+                <Campo label="Día de cobranza">
+                  <select value={form.dia_cobranza}
+                    onChange={e => setForm({...form, dia_cobranza: e.target.value})} className={INPUT}>
+                    <option value="">— Sin asignar —</option>
+                    {DIAS_COBRANZA.map(d => (
+                      <option key={d} value={d}>{LABEL_DIA_COBRANZA[d]}</option>
+                    ))}
+                  </select>
+                </Campo>
+
                 {/* Campos solo visibles en edición */}
                 {clienteEditando && (
                   <>
@@ -674,6 +745,61 @@ export default function Clientes() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: asignar día de cobranza por zona */}
+      {modalDia && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-bold text-gray-800">Asignar día de cobranza por zona</h3>
+              <button onClick={() => setModalDia(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-gray-500">
+                Aplica un día de cobranza a todos los clientes activos de un municipio y/o localidad.
+                Selecciona al menos uno de los dos.
+              </p>
+              <Campo label="Municipio">
+                <select value={zonaMunicipio}
+                  onChange={e => { setZonaMunicipio(e.target.value); setZonaColonia('') }} className={INPUT}>
+                  <option value="">Todos</option>
+                  {municipiosZona.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </Campo>
+              <Campo label="Localidad / Colonia">
+                <select value={zonaColonia}
+                  onChange={e => setZonaColonia(e.target.value)} className={INPUT}>
+                  <option value="">Todas</option>
+                  {coloniasZona.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Campo>
+              <Campo label="Día de cobranza">
+                <select value={zonaDia}
+                  onChange={e => setZonaDia(e.target.value)} className={INPUT}>
+                  {DIAS_COBRANZA.map(d => (
+                    <option key={d} value={d}>{LABEL_DIA_COBRANZA[d]}</option>
+                  ))}
+                </select>
+              </Campo>
+              {resultadoDia !== null && (
+                <p className="text-green-700 text-sm bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                  ✅ {resultadoDia} cliente(s) actualizado(s)
+                </p>
+              )}
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setModalDia(false)}
+                  className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50 transition">
+                  Cerrar
+                </button>
+                <button type="button" onClick={aplicarDiaZona} disabled={aplicandoDia}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                  {aplicandoDia ? 'Aplicando...' : 'Aplicar'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

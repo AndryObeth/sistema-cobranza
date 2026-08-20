@@ -45,7 +45,7 @@ router.get('/', auth, async (req, res) => {
         telefono: true, municipio: true, colonia: true, direccion: true,
         referencias: true, ruta: true, estado_cliente: true, nivel_riesgo: true,
         observaciones_generales: true, latitud: true, longitud: true,
-        plus_code: true, activo: true
+        plus_code: true, dia_cobranza: true, activo: true
       }
     })
     res.json(clientes)
@@ -151,6 +151,7 @@ router.post('/', auth, async (req, res) => {
       estado_cliente:          b.estado_cliente          || 'activo',
       nivel_riesgo:            b.nivel_riesgo            || null,
       observaciones_generales: b.observaciones_generales || null,
+      dia_cobranza:            b.dia_cobranza            || null,
       id_vendedor_alta:        req.usuario.id,
     }
 
@@ -382,6 +383,34 @@ router.delete('/:id/ubicaciones/:uid', auth, async (req, res) => {
   }
 })
 
+// PUT /api/clientes/asignar-dia-lote — asignar día de cobranza a todos los clientes de una zona
+router.put('/asignar-dia-lote', auth, async (req, res) => {
+  try {
+    const { municipio, colonia, dia_cobranza } = req.body
+    if (!municipio && !colonia) {
+      return res.status(400).json({ error: 'Se requiere municipio o colonia' })
+    }
+    const DIAS_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
+    if (dia_cobranza != null && !DIAS_VALIDOS.includes(dia_cobranza)) {
+      return res.status(400).json({ error: 'Día inválido' })
+    }
+    const where = { activo: true }
+    if (req.usuario.rol === 'cobrador' && req.usuario.ruta_asignada) {
+      where.ruta = req.usuario.ruta_asignada
+    }
+    if (municipio) where.municipio = municipio
+    if (colonia)   where.colonia   = colonia
+
+    const resultado = await prisma.cliente.updateMany({
+      where,
+      data: { dia_cobranza: dia_cobranza || null }
+    })
+    res.json({ actualizados: resultado.count })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al asignar día de cobranza', detalle: error.message })
+  }
+})
+
 // PUT /api/clientes/:id — actualizar cliente
 router.put('/:id', auth, async (req, res) => {
   try {
@@ -399,6 +428,7 @@ router.put('/:id', auth, async (req, res) => {
       estado_cliente:          b.estado_cliente          || 'activo',
       nivel_riesgo:            b.nivel_riesgo            || null,
       observaciones_generales: b.observaciones_generales || null,
+      dia_cobranza:            b.dia_cobranza            || null,
     }
 
     if (b.latitud  != null) data.latitud  = parseFloat(b.latitud)

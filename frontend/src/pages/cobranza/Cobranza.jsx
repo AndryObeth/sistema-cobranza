@@ -83,6 +83,14 @@ const SIGUIENTES_PLANES = {
   tres_meses: ['largo_plazo'],
 }
 
+const DIAS_SEMANA_JS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] // índice = Date.getDay()
+const DIAS_COBRANZA  = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
+const LABEL_DIA_COBRANZA = {
+  lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves',
+  viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo'
+}
+function diaDeHoy() { return DIAS_SEMANA_JS[new Date().getDay()] }
+
 export default function Cobranza() {
   const { usuario } = useAuth()
   const location = useLocation()
@@ -92,8 +100,16 @@ export default function Cobranza() {
   const [soloVencidas, setSoloVencidas] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [ordenar, setOrdenar] = useState('cumplimiento')
+  // Día de cobranza seleccionado ('' = todos, elegido explícitamente; null = aún no configurado)
+  const [filtroDia, setFiltroDia] = useState(() => {
+    try {
+      const raw = localStorage.getItem('cobranza_filtro_dia')
+      return raw != null ? JSON.parse(raw) : null
+    } catch { return null }
+  })
+  const claveOrdenDia = filtroDia || 'general'
   const [ordenManual, setOrdenManual] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('cobranza_orden_manual')) ?? [] } catch { return [] }
+    try { return JSON.parse(localStorage.getItem(`cobranza_orden_manual_${claveOrdenDia}`)) ?? [] } catch { return [] }
   })
   const [editandoPosicion, setEditandoPosicion] = useState(null) // id_cuenta en edición
   const [filtroEstado, setFiltroEstado] = useState('')
@@ -115,7 +131,7 @@ export default function Cobranza() {
   useEffect(() => { localStorage.setItem('cobranza_modo', JSON.stringify(modoCobranza)) }, [modoCobranza])
   useEffect(() => { localStorage.setItem('cobranza_visitados', JSON.stringify([...visitados])) }, [visitados])
   useEffect(() => { localStorage.setItem('cobranza_solo_pendientes', JSON.stringify(soloPendientes)) }, [soloPendientes])
-  useEffect(() => { localStorage.setItem('cobranza_orden_manual', JSON.stringify(ordenManual)) }, [ordenManual])
+  useEffect(() => { localStorage.setItem('cobranza_filtro_dia', JSON.stringify(filtroDia)) }, [filtroDia])
 
   const toggleVisitado = (id) => {
     setVisitados(prev => {
@@ -153,7 +169,7 @@ export default function Cobranza() {
     const nuevoOrden = [...ordenadosIds, ...sinUbicacion]
     setOrdenManual(nuevoOrden)
     setOrdenar('ruta')
-    guardarOrdenRuta(nuevoOrden)
+    guardarOrdenRuta(nuevoOrden, claveOrdenDia)
   }
 
   const pedirGPSYCalcular = (cuentasData) => {
@@ -168,22 +184,30 @@ export default function Cobranza() {
     }
   }
 
-  // Cuando cargan las cuentas con modoCobranza activo (restaurado de localStorage):
-  // intentar cargar orden guardado en BD; si no hay, calcular por GPS
-  useEffect(() => {
-    if (modoCobranza && cuentas.length > 0 && ordenManual.length === 0) {
-      cargarOrdenRuta().then(tieneOrden => {
-        if (!tieneOrden) pedirGPSYCalcular(cuentas)
-      })
-    }
-  }, [cuentas.length, modoCobranza]) // eslint-disable-line
+  // Cuentas del día seleccionado (para enrutado por día); si no se usa la función, son todas
+  const usaDiasCobranza    = cuentas.some(c => c.cliente?.dia_cobranza)
+  const cuentasDelDiaFiltro = filtroDia ? cuentas.filter(c => c.cliente?.dia_cobranza === filtroDia) : cuentas
 
-  const activarModoCobranza = async () => {
+  // Al activar modo cobranza (o al cambiar de día): cargar el orden guardado para ese día.
+  // Primero desde localStorage (funciona offline), luego se confirma/actualiza con el backend.
+  useEffect(() => {
+    if (!modoCobranza || cuentas.length === 0) return
+    if (filtroDia == null && usaDiasCobranza) { setFiltroDia(diaDeHoy()); return }
+    let local = []
+    try { local = JSON.parse(localStorage.getItem(`cobranza_orden_manual_${claveOrdenDia}`)) ?? [] } catch {}
+    if (local.length > 0) {
+      setOrdenManual(local)
+      setOrdenar('ruta')
+    }
+    cargarOrdenRuta(claveOrdenDia).then(tieneOrden => {
+      if (!tieneOrden && local.length === 0) pedirGPSYCalcular(cuentasDelDiaFiltro)
+    })
+  }, [modoCobranza, filtroDia, cuentas.length]) // eslint-disable-line
+
+  const activarModoCobranza = () => {
     setModoCobranza(true)
     setVisitados(new Set())
     setSoloPendientes(false)
-    const tieneOrdenGuardado = await cargarOrdenRuta()
-    if (!tieneOrdenGuardado) pedirGPSYCalcular(cuentas)
   }
 
   const salirModoCobranza = () => {
@@ -209,7 +233,7 @@ export default function Cobranza() {
         const newIdx = prev.indexOf(overId)
         if (oldIdx === -1 || newIdx === -1) return prev
         const next = arrayMove(prev, oldIdx, newIdx)
-        guardarOrdenRuta(next)
+        guardarOrdenRuta(next, claveOrdenDia)
         return next
       })
     } catch (e) {
@@ -224,7 +248,7 @@ export default function Cobranza() {
       const newIdx = idx + dir
       if (newIdx < 0 || newIdx >= prev.length) return prev
       const next = arrayMove(prev, idx, newIdx)
-      guardarOrdenRuta(next)
+      guardarOrdenRuta(next, claveOrdenDia)
       return next
     })
   }
@@ -237,7 +261,7 @@ export default function Cobranza() {
       if (idx === -1) return prev
       const destino = Math.min(pos - 1, prev.length - 1)
       const next = arrayMove(prev, idx, destino)
-      guardarOrdenRuta(next)
+      guardarOrdenRuta(next, claveOrdenDia)
       return next
     })
     setEditandoPosicion(null)
@@ -319,20 +343,23 @@ export default function Cobranza() {
 
   const saveTimerRef = useRef(null)
 
-  const guardarOrdenRuta = useCallback((orden) => {
+  const guardarOrdenRuta = useCallback((orden, dia) => {
+    const clave = dia || 'general'
+    localStorage.setItem(`cobranza_orden_manual_${clave}`, JSON.stringify(orden))
     clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
-      api.put('/usuarios/mi-orden', { orden }).catch(() => {})
+      api.put('/usuarios/mi-orden', { orden, dia: clave }).catch(() => {})
     }, 1200)
   }, [])
 
-  const cargarOrdenRuta = async () => {
+  const cargarOrdenRuta = async (dia) => {
     try {
-      const res = await api.get('/usuarios/mi-orden')
+      const res = await api.get('/usuarios/mi-orden', { params: { dia: dia || 'general' } })
       const orden = res.data.orden
       if (Array.isArray(orden) && orden.length > 0) {
         setOrdenManual(orden)
         setOrdenar('ruta')
+        localStorage.setItem(`cobranza_orden_manual_${dia || 'general'}`, JSON.stringify(orden))
         return true
       }
     } catch {}
@@ -1109,13 +1136,13 @@ export default function Cobranza() {
     })
   const coloniasDisponibles = [...coloniasMap.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
 
-  const hayFiltros = filtroEstado || filtroRuta || filtroMunicipio || filtroColonia || soloVencidas || ordenar !== 'cumplimiento'
+  const hayFiltros = filtroEstado || filtroRuta || filtroMunicipio || filtroColonia || filtroDia || soloVencidas || ordenar !== 'cumplimiento'
 
   const tieneUbicacion = (c) => {
     const u = c.cliente?.ubicaciones?.[0]
     return !!(u?.latitud || c.cliente?.latitud)
   }
-  const sinUbicacionCount = modoCobranza ? cuentas.filter(c => !tieneUbicacion(c)).length : 0
+  const sinUbicacionCount = modoCobranza ? cuentasDelDiaFiltro.filter(c => !tieneUbicacion(c)).length : 0
 
   const cuentasFiltradas = cuentas
     .filter(c => {
@@ -1124,6 +1151,7 @@ export default function Cobranza() {
       if (filtroRuta && c.cliente?.ruta !== filtroRuta) return false
       if (filtroMunicipio && normalizar(c.cliente?.municipio) !== filtroMunicipio) return false
       if (filtroColonia  && normalizar(c.cliente?.colonia)  !== filtroColonia)  return false
+      if (filtroDia && c.cliente?.dia_cobranza !== filtroDia) return false
       const q = busqueda.toLowerCase()
       if (q) return (
         c.cliente?.nombre.toLowerCase().includes(q) ||
@@ -1211,6 +1239,11 @@ export default function Cobranza() {
         <div className="mb-4 bg-green-50 border border-green-200 rounded-2xl px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <div>
+              {filtroDia && (
+                <span className="block text-xs font-semibold text-green-700 uppercase tracking-wide mb-0.5">
+                  📅 {LABEL_DIA_COBRANZA[filtroDia]}
+                </span>
+              )}
               <span className="text-sm font-semibold text-green-800">
                 {visitados.size} visitado{visitados.size !== 1 ? 's' : ''}
               </span>
@@ -1265,7 +1298,7 @@ export default function Cobranza() {
                 </span>
               )}
               <button
-                onClick={() => pedirGPSYCalcular(cuentas)}
+                onClick={() => pedirGPSYCalcular(cuentasDelDiaFiltro)}
                 className="text-xs text-green-700 hover:text-green-900 font-medium underline"
               >
                 Recalcular ruta
@@ -1351,9 +1384,22 @@ export default function Cobranza() {
             </select>
           )}
 
+          {usaDiasCobranza && (
+            <select
+              value={filtroDia || ''}
+              onChange={e => setFiltroDia(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">Día: Todos</option>
+              {DIAS_COBRANZA.map(d => (
+                <option key={d} value={d}>{LABEL_DIA_COBRANZA[d]}</option>
+              ))}
+            </select>
+          )}
+
           {hayFiltros && (
             <button
-              onClick={() => { setOrdenar(modoCobranza ? 'ruta' : 'cumplimiento'); setFiltroEstado(''); setFiltroRuta(''); setFiltroMunicipio(''); setFiltroColonia(''); setSoloVencidas(false) }}
+              onClick={() => { setOrdenar(modoCobranza ? 'ruta' : 'cumplimiento'); setFiltroEstado(''); setFiltroRuta(''); setFiltroMunicipio(''); setFiltroColonia(''); setFiltroDia(''); setSoloVencidas(false) }}
               className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-100 transition"
             >
               ✕ Limpiar filtros

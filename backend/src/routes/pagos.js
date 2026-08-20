@@ -19,7 +19,7 @@ router.get('/cartera/:id_cobrador', auth, async (req, res) => {
           telefono: true, municipio: true, colonia: true, direccion: true,
           referencias: true, ruta: true, estado_cliente: true, nivel_riesgo: true,
           observaciones_generales: true, latitud: true, longitud: true,
-          plus_code: true, activo: true,
+          plus_code: true, dia_cobranza: true, activo: true,
           ubicaciones: { where: { es_principal: true, activo: true }, take: 1,
             select: { latitud: true, longitud: true, plus_code: true } }
         }},
@@ -44,7 +44,7 @@ router.get('/cuenta/:id_cuenta', auth, async (req, res) => {
           telefono: true, municipio: true, colonia: true, direccion: true,
           referencias: true, ruta: true, estado_cliente: true, nivel_riesgo: true,
           observaciones_generales: true, latitud: true, longitud: true,
-          plus_code: true, activo: true,
+          plus_code: true, dia_cobranza: true, activo: true,
         }},
         venta: { include: { detalles: true, vendedor: { select: { nombre: true } }, jefe_camioneta: { select: { nombre: true } } } },
         pagos: {
@@ -76,7 +76,7 @@ router.get('/todas-cuentas', auth, async (req, res) => {
           telefono: true, municipio: true, colonia: true, direccion: true,
           referencias: true, ruta: true, estado_cliente: true, nivel_riesgo: true,
           observaciones_generales: true, latitud: true, longitud: true,
-          plus_code: true, activo: true,
+          plus_code: true, dia_cobranza: true, activo: true,
           ubicaciones: { where: { es_principal: true, activo: true }, take: 1,
             select: { latitud: true, longitud: true, plus_code: true } }
         }},
