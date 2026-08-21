@@ -127,6 +127,9 @@ export default function Cobranza() {
     try { return JSON.parse(localStorage.getItem('cobranza_solo_pendientes')) ?? false } catch { return false }
   })
   const [ocultosRuta, setOcultosRuta] = useState(new Set())
+  // Organizar tarjetero — asignar día a cada cuenta manualmente
+  const [modoTarjetero, setModoTarjetero] = useState(false)
+  const [soloSinDia, setSoloSinDia] = useState(false)
 
   useEffect(() => { localStorage.setItem('cobranza_modo', JSON.stringify(modoCobranza)) }, [modoCobranza])
   useEffect(() => { localStorage.setItem('cobranza_visitados', JSON.stringify([...visitados])) }, [visitados])
@@ -206,6 +209,7 @@ export default function Cobranza() {
 
   const activarModoCobranza = () => {
     setModoCobranza(true)
+    setModoTarjetero(false)
     setVisitados(new Set())
     setSoloPendientes(false)
   }
@@ -216,6 +220,12 @@ export default function Cobranza() {
     setSoloPendientes(false)
     setOcultosRuta(new Set())
     setOrdenar('cumplimiento')
+  }
+
+  const toggleModoTarjetero = () => {
+    setModoTarjetero(prev => !prev)
+    setModoCobranza(false)
+    setSoloSinDia(false)
   }
 
   const sensors = useSensors(
@@ -1224,6 +1234,14 @@ export default function Cobranza() {
   const totalVisitados   = modoCobranza ? [...visitados].filter(id => cuentasFiltradas.find(c => c.id_cuenta === id) || visitados.has(id)).length : 0
   const pendientesModo   = modoCobranza ? cuentasFiltradas.filter(c => !visitados.has(c.id_cuenta)).length : 0
 
+  const conteoPorDia = modoTarjetero
+    ? DIAS_COBRANZA.reduce((acc, d) => { acc[d] = cuentas.filter(c => c.cliente?.dia_cobranza === d).length; return acc }, {})
+    : {}
+  const sinDiaCount = modoTarjetero ? cuentas.filter(c => !c.cliente?.dia_cobranza).length : 0
+  const cuentasTarjetero = modoTarjetero
+    ? cuentasFiltradas.filter(c => !soloSinDia || !c.cliente?.dia_cobranza)
+    : []
+
   const saldo          = parseFloat(cuentaSeleccionada?.saldo_actual || 0)
   const montoIngresado = parseFloat(formPago.monto_pago || 0)
   const saldoTrasAbono = isNaN(montoIngresado) ? saldo : Math.max(0, saldo - montoIngresado)
@@ -1254,16 +1272,30 @@ export default function Cobranza() {
               {soloVencidas ? '⚠️ Mostrando vencidas' : '⚠️ Ver vencidas'}
             </button>
           )}
-          <button
-            onClick={modoCobranza ? salirModoCobranza : activarModoCobranza}
-            className={`text-sm px-3 py-1.5 rounded-lg font-medium transition border ${
-              modoCobranza
-                ? 'bg-green-500 text-white border-green-500'
-                : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
-            }`}
-          >
-            {modoCobranza ? '✓ Salir modo cobranza' : '☑ Modo cobranza'}
-          </button>
+          {!modoCobranza && (
+            <button
+              onClick={toggleModoTarjetero}
+              className={`text-sm px-3 py-1.5 rounded-lg font-medium transition border ${
+                modoTarjetero
+                  ? 'bg-purple-600 text-white border-purple-600'
+                  : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+              }`}
+            >
+              {modoTarjetero ? '✓ Salir de organizar tarjetero' : '🗂️ Organizar mi tarjetero'}
+            </button>
+          )}
+          {!modoTarjetero && (
+            <button
+              onClick={modoCobranza ? salirModoCobranza : activarModoCobranza}
+              className={`text-sm px-3 py-1.5 rounded-lg font-medium transition border ${
+                modoCobranza
+                  ? 'bg-green-500 text-white border-green-500'
+                  : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+              }`}
+            >
+              {modoCobranza ? '✓ Salir modo cobranza' : '☑ Modo cobranza'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1450,6 +1482,72 @@ export default function Cobranza() {
         </div>
       </div>
 
+      {modoTarjetero ? (
+        <div className="space-y-3">
+          {/* Contador por día */}
+          <div className="bg-purple-50 border border-purple-200 rounded-2xl px-4 py-3 flex flex-wrap gap-x-4 gap-y-1">
+            {DIAS_COBRANZA.map(d => (
+              <span key={d} className="text-xs font-medium text-purple-800">
+                {LABEL_DIA_COBRANZA[d]}: <strong>{conteoPorDia[d] || 0}</strong>
+              </span>
+            ))}
+            <span className="text-xs font-medium text-gray-500 ml-auto">
+              Sin día: <strong>{sinDiaCount}</strong>
+            </span>
+          </div>
+
+          <button
+            onClick={() => setSoloSinDia(!soloSinDia)}
+            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition border ${
+              soloSinDia
+                ? 'bg-purple-600 text-white border-purple-600'
+                : 'bg-white text-purple-700 border-purple-300 hover:bg-purple-50'
+            }`}
+          >
+            {soloSinDia ? 'Mostrando solo sin día' : 'Mostrar solo sin asignar'}
+          </button>
+
+          {cargando ? (
+            <p className="text-center text-gray-500 py-12">Cargando...</p>
+          ) : cuentasTarjetero.length === 0 ? (
+            <p className="text-center text-gray-400 py-12">No hay cuentas que mostrar</p>
+          ) : (
+            <div className="bg-white rounded-2xl shadow divide-y divide-gray-100">
+              {cuentasTarjetero.map(c => (
+                <div key={c.id_cuenta} className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-800 truncate">{c.cliente?.nombre}</p>
+                    <p className="text-xs text-gray-400 truncate">
+                      {c.cliente?.colonia || c.cliente?.municipio || '—'}
+                      {c.numero_cuenta && <span className="ml-2 text-blue-600 font-mono">Cta. {c.numero_cuenta}</span>}
+                    </p>
+                  </div>
+                  <div className="flex gap-1 flex-wrap shrink-0">
+                    {DIAS_COBRANZA.map(d => {
+                      const activo = c.cliente?.dia_cobranza === d
+                      return (
+                        <button
+                          key={d}
+                          onClick={() => cambiarDiaCliente(c, activo ? '' : d)}
+                          className={`w-9 h-9 rounded-lg text-xs font-semibold transition border ${
+                            activo
+                              ? 'bg-purple-600 text-white border-purple-600'
+                              : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-purple-400'
+                          }`}
+                          title={LABEL_DIA_COBRANZA[d]}
+                        >
+                          {LABEL_DIA_COBRANZA[d].slice(0, 2)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+      <>
       {/* Cards — móvil */}
       <div className="sm:hidden space-y-3">
         {cargando ? (
@@ -1790,6 +1888,8 @@ export default function Cobranza() {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* ──────────────── MODAL ──────────────── */}
       {modalAbierto && cuentaSeleccionada && (
