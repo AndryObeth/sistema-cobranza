@@ -240,7 +240,7 @@ export default function Ventas() {
         }
       }
 
-      await api.post('/ventas', payload)
+      await api.post('/ventas', payload, { timeout: 15000 })
       cerrarModal()
       cargarDatos()
     } catch {
@@ -277,7 +277,7 @@ export default function Ventas() {
           enganche_recibido_total: parseFloat(formEdicion.enganche_recibido_total),
           observaciones:           formEdicion.observaciones,
           estatus_venta:           formEdicion.estatus_venta,
-        })
+        }, { timeout: 10000 })
       ]
       // Si es a plazo y tiene cuenta, actualizar frecuencia si cambió
       if (ventaEditando.tipo_venta === 'plazo' && ventaEditando.cuenta?.id_cuenta) {
@@ -287,7 +287,7 @@ export default function Ventas() {
         if (formEdicion.numero_cuenta !== (ventaEditando.cuenta.numero_cuenta || ''))
           cuentaData.numero_cuenta = formEdicion.numero_cuenta
         if (Object.keys(cuentaData).length > 0) {
-          promesas.push(api.put(`/pagos/cuenta/${ventaEditando.cuenta.id_cuenta}/frecuencia`, cuentaData))
+          promesas.push(api.put(`/pagos/cuenta/${ventaEditando.cuenta.id_cuenta}/frecuencia`, cuentaData, { timeout: 10000 }))
         }
       }
       await Promise.all(promesas)

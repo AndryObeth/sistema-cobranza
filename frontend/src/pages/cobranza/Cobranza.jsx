@@ -364,13 +364,13 @@ export default function Cobranza() {
     localStorage.setItem(`cobranza_orden_manual_${clave}`, JSON.stringify(orden))
     clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
-      api.put('/usuarios/mi-orden', { orden, dia: clave }).catch(() => {})
+      api.put('/usuarios/mi-orden', { orden, dia: clave }, { timeout: 10000 }).catch(() => {})
     }, 1200)
   }, [])
 
   const cargarOrdenRuta = async (dia) => {
     try {
-      const res = await api.get('/usuarios/mi-orden', { params: { dia: dia || 'general' } })
+      const res = await api.get('/usuarios/mi-orden', { params: { dia: dia || 'general' }, timeout: 10000 })
       const orden = res.data.orden
       if (Array.isArray(orden) && orden.length > 0) {
         setOrdenManual(orden)
@@ -388,6 +388,22 @@ export default function Cobranza() {
       setSoloVencidas(true)
     }
   }, [])
+
+  // Si la carga inicial falló (sin señal), reintentar solo cuando vuelva la
+  // conexión — si no, el cobrador se queda atorado en la pantalla de error
+  // aunque recupere señal, hasta que recargue la app a mano.
+  useEffect(() => {
+    if (!errorCarga) return
+    const handleOnline = () => cargarCuentas()
+    window.addEventListener('online', handleOnline)
+    const intervalo = setInterval(() => {
+      if (navigator.onLine) cargarCuentas()
+    }, 30000)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      clearInterval(intervalo)
+    }
+  }, [errorCarga]) // eslint-disable-line
 
   const cargarCuentas = async () => {
     try {
@@ -488,6 +504,7 @@ export default function Cobranza() {
       setModalAbierto(true)
     } catch {
       console.error('Error al cargar cuenta')
+      alert('No se pudo abrir esta cuenta: sin conexión y sin datos guardados de ella. Intenta de nuevo cuando tengas señal.')
     }
   }
 
@@ -1077,7 +1094,7 @@ export default function Cobranza() {
 
   const abrirFusion = async () => {
     try {
-      const res = await api.get(`/cuentas/cliente/${cuentaSeleccionada.id_cliente}`)
+      const res = await api.get(`/cuentas/cliente/${cuentaSeleccionada.id_cliente}`, { timeout: 10000 })
       const otras = res.data.filter(c => c.id_cuenta !== cuentaSeleccionada.id_cuenta)
       setCuentasCliente(otras)
       setCuentasSecSel([])
@@ -1102,7 +1119,7 @@ export default function Cobranza() {
       const res = await api.post('/cuentas/fusionar', {
         id_cuenta_principal:   cuentaSeleccionada.id_cuenta,
         id_cuentas_secundarias: cuentasSecSel,
-      })
+      }, { timeout: 10000 })
       setModalFusion(false)
       cerrarModal()
       cargarCuentas()
@@ -1129,7 +1146,7 @@ export default function Cobranza() {
       await api.post(`/cuentas/${cuentaSeleccionada.id_cuenta}/cancelar`, {
         motivo: motivoCancelacion,
         notas:  notasCancelacion,
-      })
+      }, { timeout: 10000 })
       setModalCancelar(false)
       cerrarModal()
       cargarCuentas()
@@ -1143,7 +1160,7 @@ export default function Cobranza() {
   const abrirCambiarPlan = async () => {
     // Obtener preview del cambio desde el backend
     try {
-      const res = await api.get('/cuentas/verificar-vencimientos')
+      const res = await api.get('/cuentas/verificar-vencimientos', { timeout: 10000 })
       const info = res.data.find(v => v.id_cuenta === cuentaSeleccionada.id_cuenta)
       if (info?.nuevo_plan_sugerido) {
         setNuevoPlanSugerido(info.nuevo_plan_sugerido)
@@ -1167,7 +1184,7 @@ export default function Cobranza() {
     if (!nuevoPlanSugerido) return
     setGuardandoPlan(true)
     try {
-      await api.post(`/cuentas/${cuentaSeleccionada.id_cuenta}/cambiar-plan`, { nuevo_plan: nuevoPlanSugerido })
+      await api.post(`/cuentas/${cuentaSeleccionada.id_cuenta}/cambiar-plan`, { nuevo_plan: nuevoPlanSugerido }, { timeout: 10000 })
       setModalCambiarPlan(false)
       cerrarModal()
       cargarCuentas()
@@ -3252,7 +3269,11 @@ export default function Cobranza() {
                   </button>
                 </div>
               </>
-            ) : null}
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                📴 No se pudo cargar esta cuenta: sin conexión y sin datos guardados de ella.
+              </div>
+            )}
 
           </div>
         </div>
