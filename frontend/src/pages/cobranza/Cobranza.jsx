@@ -867,47 +867,59 @@ export default function Cobranza() {
           return
         }
 
-        // ── Modo offline: encolar y salir ──
-        if (!navigator.onLine) {
+        const datosPago = {
+          id_cuenta: cuentaSeleccionada.id_cuenta,
+          ...formPago,
+          monto_pago: monto,
+          ...(pagoHistorico && fechaPagoHistorico && { fecha_pago: fechaPagoHistorico })
+        }
+        const datosVisitaExtra = (registrarVisitaTambien && formVisita.comentario.trim()) ? {
+          id_cliente:       cuentaSeleccionada.id_cliente,
+          id_cuenta:        cuentaSeleccionada.id_cuenta,
+          tipo_seguimiento: 'visita',
+          comentario:       formVisita.comentario.trim(),
+        } : null
+
+        const encolarPagoYSalir = () => {
           encolarPago({
-            id_cuenta:   cuentaSeleccionada.id_cuenta,
-            ...formPago,
-            monto_pago:  monto,
+            ...datosPago,
             _meta: {
               cliente_nombre: cuentaSeleccionada.cliente?.nombre,
               folio_cuenta:   cuentaSeleccionada.folio_cuenta,
             }
           })
-          if (registrarVisitaTambien && formVisita.comentario.trim()) {
-            encolarVisita({
-              id_cliente:       cuentaSeleccionada.id_cliente,
-              id_cuenta:        cuentaSeleccionada.id_cuenta,
-              tipo_seguimiento: 'visita',
-              comentario:       formVisita.comentario.trim(),
-            })
-          }
+          if (datosVisitaExtra) encolarVisita(datosVisitaExtra)
           setExito('__offline__')
           setFormPago(FORM_PAGO_VACIO)
           setFormVisita(FORM_VISITA_VACIO)
           setRegistrarVisitaTambien(false)
+        }
+
+        // ── Modo offline: encolar y salir ──
+        if (!navigator.onLine) { encolarPagoYSalir(); return }
+
+        let res
+        try {
+          res = await api.post('/pagos', datosPago, { timeout: 10000 })
+        } catch (err) {
+          if (err.response) {
+            setError(err.response.data?.error || 'Error al guardar')
+            return
+          }
+          // Sin respuesta del servidor (señal mala o se agotó el tiempo): se encola
+          // en vez de perder el pago.
+          encolarPagoYSalir()
           return
         }
 
-        const res = await api.post('/pagos', {
-          id_cuenta: cuentaSeleccionada.id_cuenta,
-          ...formPago,
-          monto_pago: monto,
-          ...(pagoHistorico && fechaPagoHistorico && { fecha_pago: fechaPagoHistorico })
-        })
-
-        // Si checkbox activo y hay comentario, registrar visita tipo "visita"
-        if (registrarVisitaTambien && formVisita.comentario.trim()) {
-          await api.post('/visitas', {
-            id_cliente:       cuentaSeleccionada.id_cliente,
-            id_cuenta:        cuentaSeleccionada.id_cuenta,
-            tipo_seguimiento: 'visita',
-            comentario:       formVisita.comentario.trim()
-          })
+        // Si checkbox activo y hay comentario, registrar visita tipo "visita".
+        // El pago ya se guardó; si esto falla por red, se encola aparte.
+        if (datosVisitaExtra) {
+          try {
+            await api.post('/visitas', datosVisitaExtra, { timeout: 10000 })
+          } catch (err) {
+            if (!err.response) encolarVisita(datosVisitaExtra)
+          }
         }
 
         const liquidada = res.data.estado_nuevo === 'liquidada'
@@ -949,13 +961,17 @@ export default function Cobranza() {
           setFormVisita(FORM_VISITA_VACIO)
           setRegistrarVisitaTambien(false)
           cargarCuentas()
-          const [actualizada, nuevasVisitas] = await Promise.all([
-            api.get(`/pagos/cuenta/${cuentaSeleccionada.id_cuenta}`),
-            api.get(`/visitas/cuenta/${cuentaSeleccionada.id_cuenta}`)
-          ])
-          setCuentaSeleccionada(actualizada.data)
-          setHistorialPagos(actualizada.data.pagos || [])
-          setHistorialVisitas(nuevasVisitas.data)
+          // El pago ya se guardó; si esto falla (ej. se cortó la señal justo
+          // después), no debe mostrarse como error — el pago sigue siendo válido.
+          try {
+            const [actualizada, nuevasVisitas] = await Promise.all([
+              api.get(`/pagos/cuenta/${cuentaSeleccionada.id_cuenta}`),
+              api.get(`/visitas/cuenta/${cuentaSeleccionada.id_cuenta}`)
+            ])
+            setCuentaSeleccionada(actualizada.data)
+            setHistorialPagos(actualizada.data.pagos || [])
+            setHistorialVisitas(nuevasVisitas.data)
+          } catch {}
         }
       } else {
         // ── FLUJO 2: Solo registrar visita ──
@@ -964,31 +980,39 @@ export default function Cobranza() {
           return
         }
 
-        if (!navigator.onLine) {
-          encolarVisita({
-            id_cliente:       cuentaSeleccionada.id_cliente,
-            id_cuenta:        cuentaSeleccionada.id_cuenta,
-            tipo_seguimiento: formVisita.tipo_seguimiento,
-            comentario:       formVisita.comentario || null,
-            fecha_programada: formVisita.fecha_programada || null,
-          })
-          setExito('__offline__')
-          setFormVisita({ ...FORM_VISITA_VACIO, tipo_seguimiento: 'no_localizado' })
-          return
-        }
-
-        await api.post('/visitas', {
+        const datosVisita = {
           id_cliente:       cuentaSeleccionada.id_cliente,
           id_cuenta:        cuentaSeleccionada.id_cuenta,
           tipo_seguimiento: formVisita.tipo_seguimiento,
           comentario:       formVisita.comentario || null,
-          fecha_programada: formVisita.fecha_programada || null
-        })
+          fecha_programada: formVisita.fecha_programada || null,
+        }
+
+        const encolarVisitaYSalir = () => {
+          encolarVisita(datosVisita)
+          setExito('__offline__')
+          setFormVisita({ ...FORM_VISITA_VACIO, tipo_seguimiento: 'no_localizado' })
+        }
+
+        if (!navigator.onLine) { encolarVisitaYSalir(); return }
+
+        try {
+          await api.post('/visitas', datosVisita, { timeout: 10000 })
+        } catch (err) {
+          if (err.response) {
+            setError(err.response.data?.error || 'Error al guardar')
+            return
+          }
+          encolarVisitaYSalir()
+          return
+        }
 
         setExito('Visita registrada correctamente')
         setFormVisita({ ...FORM_VISITA_VACIO, tipo_seguimiento: 'no_localizado' })
-        const nuevasVisitas = await api.get(`/visitas/cuenta/${cuentaSeleccionada.id_cuenta}`)
-        setHistorialVisitas(nuevasVisitas.data)
+        try {
+          const nuevasVisitas = await api.get(`/visitas/cuenta/${cuentaSeleccionada.id_cuenta}`)
+          setHistorialVisitas(nuevasVisitas.data)
+        } catch {}
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Error al guardar')

@@ -96,15 +96,15 @@ export async function sincronizarCola() {
   for (const op of pendientes) {
     try {
       if (op.tipo === 'POST_PAGO') {
-        await api.post('/pagos', op.datos)
+        await api.post('/pagos', op.datos, { timeout: 10000 })
       } else if (op.tipo === 'POST_VISITA') {
-        await api.post('/visitas', op.datos)
+        await api.post('/visitas', op.datos, { timeout: 10000 })
       } else if (op.tipo === 'PUT_DIA') {
-        await api.put(`/clientes/${op.datos.id_cliente}/dia-cobranza`, { dia_cobranza: op.datos.dia_cobranza })
+        await api.put(`/clientes/${op.datos.id_cliente}/dia-cobranza`, { dia_cobranza: op.datos.dia_cobranza }, { timeout: 10000 })
       } else if (op.tipo === 'PUT_UBICACION') {
         await api.put(`/clientes/${op.datos.id_cliente}/coordenadas`, {
           latitud: op.datos.latitud, longitud: op.datos.longitud, plus_code: op.datos.plus_code
-        })
+        }, { timeout: 10000 })
       }
       // Marcar como sincronizado
       const idx = queue.findIndex(q => q.id === op.id)

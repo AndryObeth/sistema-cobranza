@@ -44,20 +44,25 @@ export default function Layout({ children }) {
   }
 
   useEffect(() => {
+    let sincronizando = false
     const actualizarConteo = () => setPendientes(queueCount())
 
-    const sincronizarSiHayPendientes = async () => {
+    const sincronizarSiHayPendientes = async (silencioso = false) => {
       const pendientesActuales = queueCount()
-      if (pendientesActuales > 0) {
-        mostrarToast(`Sincronizando ${pendientesActuales} cambio(s) pendiente(s)...`, 'info')
+      if (pendientesActuales === 0 || sincronizando) return
+      sincronizando = true
+      try {
+        if (!silencioso) mostrarToast(`Sincronizando ${pendientesActuales} cambio(s) pendiente(s)...`, 'info')
         const resultado = await sincronizarCola()
         setPendientes(queueCount())
         if (resultado.sincronizados > 0) {
           mostrarToast(`✅ ${resultado.sincronizados} cambio(s) sincronizados correctamente`, 'exito')
         }
-        if (resultado.errores > 0) {
+        if (resultado.errores > 0 && !silencioso) {
           mostrarToast(`⚠️ ${resultado.errores} cambio(s) no pudieron sincronizarse`, 'error')
         }
+      } finally {
+        sincronizando = false
       }
     }
 
@@ -75,10 +80,19 @@ export default function Layout({ children }) {
     // Sincronizar al montar si ya hay conexión y hay pendientes
     if (navigator.onLine) sincronizarSiHayPendientes()
 
+    // Reintento periódico: el navegador puede seguir "creyendo" que hay señal
+    // aunque esté muy débil y las peticiones fallen, sin que el evento 'online'
+    // vuelva a dispararse. Se reintenta cada minuto en silencio (solo avisa si
+    // realmente logra sincronizar algo).
+    const intervalo = setInterval(() => {
+      if (navigator.onLine) sincronizarSiHayPendientes(true)
+    }, 60000)
+
     return () => {
       window.removeEventListener('online',  handleOnline)
       window.removeEventListener('offline', handleOffline)
       window.removeEventListener('offline-queue-changed', actualizarConteo)
+      clearInterval(intervalo)
     }
   }, [])
 
