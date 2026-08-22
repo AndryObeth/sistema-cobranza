@@ -2695,6 +2695,7 @@ export default function Cobranza() {
                           <span className="font-medium text-yellow-800">{fmt(op.datos.monto_pago)}</span>
                           <span className="text-yellow-600 ml-2 text-xs">{op.datos.tipo_pago}</span>
                           <span className="ml-2 px-1.5 py-0.5 bg-yellow-200 text-yellow-800 text-xs rounded-full font-medium">Pendiente de sincronizar</span>
+                          {op.datos.observaciones && <p className="text-yellow-700 text-xs mt-0.5">{op.datos.observaciones}</p>}
                         </div>
                         <p className="text-yellow-600 text-xs">{new Date(op.timestamp).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
                       </div>
