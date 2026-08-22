@@ -90,6 +90,11 @@ const LABEL_DIA_COBRANZA = {
   viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo'
 }
 function diaDeHoy() { return DIAS_SEMANA_JS[new Date().getDay()] }
+// Fecha local (no UTC): toISOString() se corre a las 6pm hora México por el offset -06:00
+function fechaLocalHoy() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default function Cobranza() {
   const { usuario } = useAuth()
@@ -404,8 +409,7 @@ export default function Cobranza() {
     if (!['cobrador', 'supervisor_cobranza'].includes(usuario?.rol)) return
     if (cuentas.length === 0) return
     if (!navigator.onLine) return
-    const hoy = new Date().toISOString().slice(0, 10)
-    const clave = `cobranza_precache_${hoy}`
+    const clave = `cobranza_precache_${fechaLocalHoy()}`
     if (localStorage.getItem(clave) === 'listo') return
 
     let cancelado = false
@@ -415,8 +419,8 @@ export default function Cobranza() {
         if (cancelado || !navigator.onLine) return
         const lote = cuentas.slice(i, i + LOTE)
         await Promise.allSettled(lote.flatMap(c => [
-          api.get(`/pagos/cuenta/${c.id_cuenta}`),
-          api.get(`/visitas/cuenta/${c.id_cuenta}`)
+          api.get(`/pagos/cuenta/${c.id_cuenta}`, { timeout: 10000 }),
+          api.get(`/visitas/cuenta/${c.id_cuenta}`, { timeout: 10000 })
         ]))
         await new Promise(r => setTimeout(r, 150))
       }
@@ -441,7 +445,7 @@ export default function Cobranza() {
     const payload = { id_cliente: idCliente, dia_cobranza: nuevoDia || null }
     if (!navigator.onLine) { encolarCambioDia(payload); return }
     try {
-      await api.put(`/clientes/${idCliente}/dia-cobranza`, { dia_cobranza: nuevoDia || null })
+      await api.put(`/clientes/${idCliente}/dia-cobranza`, { dia_cobranza: nuevoDia || null }, { timeout: 10000 })
     } catch (err) {
       if (err.response) {
         setCuentas(prev => prev.map(c =>
@@ -561,7 +565,7 @@ export default function Cobranza() {
         latitud:   ubicPendiente.lat,
         longitud:  ubicPendiente.lng,
         plus_code: ubicPendiente.plus_code,
-      })
+      }, { timeout: 10000 })
       cerrarCorreccionUbicacion()
       setExito('Ubicación actualizada ✅')
       setTimeout(() => setExito(''), 4000)
@@ -648,7 +652,7 @@ export default function Cobranza() {
         latitud:   ubicPendDet.lat,
         longitud:  ubicPendDet.lng,
         plus_code: ubicPendDet.plus_code,
-      })
+      }, { timeout: 10000 })
       setPanelUbicDet(false)
       setModoUbicDet(null)
       setUbicPendDet(null)
@@ -1028,7 +1032,7 @@ export default function Cobranza() {
         frecuencia_pago:    formFrecuencia.frecuencia_pago,
         fecha_primer_cobro: formFrecuencia.fecha_primer_cobro || null,
         horario_preferido:  formFrecuencia.horario_preferido  || null,
-      })
+      }, { timeout: 10000 })
       setCuentaSeleccionada(prev => ({ ...prev, ...res.data.cuenta }))
       setEditandoFrecuencia(false)
     } catch {

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { queueCount, sincronizarCola } from '../utils/offlineQueue'
+import { queueCount, queueErrorCount, sincronizarCola } from '../utils/offlineQueue'
 
 const menu = [
   { path: '/',          label: 'Dashboard',  icono: '📊', roles: ['administrador', 'supervisor_cobranza'] },
@@ -28,6 +28,7 @@ export default function Layout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [enLinea, setEnLinea]       = useState(navigator.onLine)
   const [pendientes, setPendientes] = useState(queueCount())
+  const [conErrores, setConErrores] = useState(queueErrorCount())
   const [toast, setToast]           = useState(null)
 
   const mostrarToast = (mensaje, tipo = 'info') => {
@@ -45,7 +46,7 @@ export default function Layout({ children }) {
 
   useEffect(() => {
     let sincronizando = false
-    const actualizarConteo = () => setPendientes(queueCount())
+    const actualizarConteo = () => { setPendientes(queueCount()); setConErrores(queueErrorCount()) }
 
     const sincronizarSiHayPendientes = async (silencioso = false) => {
       const pendientesActuales = queueCount()
@@ -55,6 +56,7 @@ export default function Layout({ children }) {
         if (!silencioso) mostrarToast(`Sincronizando ${pendientesActuales} cambio(s) pendiente(s)...`, 'info')
         const resultado = await sincronizarCola()
         setPendientes(queueCount())
+        setConErrores(queueErrorCount())
         if (resultado.sincronizados > 0) {
           mostrarToast(`✅ ${resultado.sincronizados} cambio(s) sincronizados correctamente`, 'exito')
         }
@@ -205,15 +207,17 @@ export default function Layout({ children }) {
         {/* Indicador de conexión */}
         <div className={[
           'mx-2 mb-2 px-3 py-2 rounded-lg text-xs flex items-center gap-2',
-          enLinea ? 'bg-gray-800 text-gray-300' : 'bg-red-900/60 text-red-300',
+          conErrores > 0 ? 'bg-amber-900/60 text-amber-300' : enLinea ? 'bg-gray-800 text-gray-300' : 'bg-red-900/60 text-red-300',
           colapsado ? 'justify-center' : '',
         ].join(' ')}>
-          <span className={`w-2 h-2 rounded-full shrink-0 ${enLinea ? 'bg-green-400' : 'bg-red-400 animate-pulse'}`} />
+          <span className={`w-2 h-2 rounded-full shrink-0 ${conErrores > 0 ? 'bg-amber-400 animate-pulse' : enLinea ? 'bg-green-400' : 'bg-red-400 animate-pulse'}`} />
           {!colapsado && (
             <span>
-              {enLinea
-                ? 'En línea'
-                : `Sin conexión${pendientes > 0 ? ` — ${pendientes} cambio(s) pendiente(s)` : ''}`
+              {conErrores > 0
+                ? `⚠️ ${conErrores} no se pudo(pudieron) enviar — revisar`
+                : enLinea
+                  ? 'En línea'
+                  : `Sin conexión${pendientes > 0 ? ` — ${pendientes} cambio(s) pendiente(s)` : ''}`
               }
             </span>
           )}

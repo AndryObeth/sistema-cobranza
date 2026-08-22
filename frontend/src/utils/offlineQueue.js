@@ -21,6 +21,13 @@ export function queueCount() {
   return getQueue().filter(op => !op.sincronizado).length
 }
 
+// Operaciones que el servidor rechazó de verdad (no un simple fallo de red) —
+// se siguen reintentando en segundo plano pero probablemente nunca se resuelvan
+// solas; alguien debe revisarlas.
+export function queueErrorCount() {
+  return getQueue().filter(op => !op.sincronizado && op.error && !op.errorEsDeRed).length
+}
+
 // ── Agregar operación a la cola ───────────────────────────────────────────────
 
 export function encolarPago(datos) {
@@ -111,11 +118,17 @@ export async function sincronizarCola() {
       if (idx !== -1) {
         queue[idx].sincronizado = true
         queue[idx].error = null
+        queue[idx].errorEsDeRed = false
       }
       sincronizados++
     } catch (err) {
       const idx = queue.findIndex(q => q.id === op.id)
-      if (idx !== -1) queue[idx].error = err.response?.data?.error || 'Error de red'
+      if (idx !== -1) {
+        // Sin err.response = fallo de red/tiempo agotado (se reintentará solo).
+        // Con err.response = el servidor lo rechazó de verdad (necesita revisión).
+        queue[idx].error = err.response?.data?.error || 'Error de red'
+        queue[idx].errorEsDeRed = !err.response
+      }
       errores++
     }
   }

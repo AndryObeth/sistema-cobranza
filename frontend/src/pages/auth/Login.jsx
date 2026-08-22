@@ -17,11 +17,11 @@ export default function Login() {
     setCargando(true)
     setError('')
     try {
-      const res = await api.post('/auth/login', form)
+      const res = await api.post('/auth/login', form, { timeout: 10000 })
       login(res.data.usuario, res.data.token)
       navigate('/')
-    } catch {
-      setError('Usuario o contraseña incorrectos')
+    } catch (err) {
+      setError(err.response ? 'Usuario o contraseña incorrectos' : 'Sin conexión — revisa tu señal e intenta de nuevo')
     } finally {
       setCargando(false)
     }

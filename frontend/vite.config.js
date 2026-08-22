@@ -86,6 +86,17 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          {
+            // GET /api/visitas/* — Agenda (pendientes, cobros sugeridos, etc.)
+            urlPattern: ({ url }) => url.pathname.includes('/api/visitas') && !url.pathname.includes('/api/visitas/cuenta/'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-visitas-agenda',
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 12 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
       },
     }),

@@ -19,6 +19,14 @@ const updateSW = registerSW({
   onOfflineReady() {
     console.log('App lista para uso offline')
   },
+  onRegisteredSW(_swUrl, registration) {
+    // Si alguien deja la app abierta todo el día, el navegador puede tardar en
+    // notar que hay una versión nueva. Se revisa cada 30 min mientras esté activa.
+    if (!registration) return
+    setInterval(() => {
+      if (navigator.onLine) registration.update()
+    }, 30 * 60 * 1000)
+  },
 })
 
 createRoot(document.getElementById('root')).render(
