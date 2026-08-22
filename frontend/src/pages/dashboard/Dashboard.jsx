@@ -18,12 +18,19 @@ export default function Dashboard() {
   const [fechaConsulta, setFechaConsulta]     = useState(new Date().toISOString().split('T')[0])
   const [consultando, setConsultando]         = useState(false)
   const [resultadoConsulta, setResultadoConsulta] = useState(null)
-  const [verDetallePagos, setVerDetallePagos] = useState(false)
+  const [cobradoresExpandidos, setCobradoresExpandidos] = useState(new Set())
+  const toggleCobradorExpandido = (nombre) => {
+    setCobradoresExpandidos(prev => {
+      const next = new Set(prev)
+      next.has(nombre) ? next.delete(nombre) : next.add(nombre)
+      return next
+    })
+  }
 
   const consultarPorFecha = async () => {
     setConsultando(true)
     setResultadoConsulta(null)
-    setVerDetallePagos(false)
+    setCobradoresExpandidos(new Set())
     try {
       const res = await api.get(`/pagos/por-fecha?fecha=${fechaConsulta}`)
       setResultadoConsulta(res.data)
@@ -280,52 +287,51 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Por cobrador */}
+                  {/* Por cobrador, con detalle expandible individual */}
                   {resultadoConsulta.por_cobrador?.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Por cobrador</p>
                       <div className="space-y-1.5">
-                        {resultadoConsulta.por_cobrador.map(c => (
-                          <div key={c.nombre} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2">
-                            <span className="text-sm text-gray-700 font-medium">{c.nombre}</span>
-                            <div className="text-right">
-                              <span className="text-sm font-bold text-gray-800">{fmt(c.total)}</span>
-                              <span className="text-xs text-gray-400 ml-2">{c.cantidad} pago{c.cantidad !== 1 ? 's' : ''}</span>
+                        {resultadoConsulta.por_cobrador.map(c => {
+                          const expandido = cobradoresExpandidos.has(c.nombre)
+                          const pagosCobrador = resultadoConsulta.pagos?.filter(p => p.cobrador_nombre === c.nombre) || []
+                          return (
+                            <div key={c.nombre} className="bg-gray-50 rounded-lg overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => toggleCobradorExpandido(c.nombre)}
+                                className="w-full flex items-center justify-between px-4 py-2 text-left"
+                              >
+                                <span className="text-sm text-gray-700 font-medium">
+                                  {expandido ? '▲' : '▼'} {c.nombre}
+                                </span>
+                                <div className="text-right">
+                                  <span className="text-sm font-bold text-gray-800">{fmt(c.total)}</span>
+                                  <span className="text-xs text-gray-400 ml-2">{c.cantidad} pago{c.cantidad !== 1 ? 's' : ''}</span>
+                                </div>
+                              </button>
+                              {expandido && (
+                                <div className="px-3 pb-2 space-y-1 max-h-72 overflow-y-auto">
+                                  {pagosCobrador.map(p => (
+                                    <div key={p.id_pago} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 text-xs">
+                                      <div className="min-w-0">
+                                        <p className="font-medium text-gray-800 truncate">{p.cliente_nombre}</p>
+                                        <p className="text-gray-400">{p.tipo_pago?.replace(/_/g, ' ')}</p>
+                                      </div>
+                                      <div className="text-right shrink-0 ml-3">
+                                        <p className="font-bold text-gray-700">{fmt(p.monto_pago)}</p>
+                                        <p className="text-gray-400">
+                                          {new Date(p.fecha_pago).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
-                    </div>
-                  )}
-
-                  {/* Toggle detalle */}
-                  {resultadoConsulta.pagos?.length > 0 && (
-                    <div>
-                      <button
-                        onClick={() => setVerDetallePagos(!verDetallePagos)}
-                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                      >
-                        {verDetallePagos ? '▲ Ocultar detalle' : `▼ Ver detalle (${resultadoConsulta.pagos.length} pagos)`}
-                      </button>
-
-                      {verDetallePagos && (
-                        <div className="mt-2 space-y-1 max-h-72 overflow-y-auto">
-                          {resultadoConsulta.pagos.map(p => (
-                            <div key={p.id_pago} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-xs">
-                              <div className="min-w-0">
-                                <p className="font-medium text-gray-800 truncate">{p.cliente_nombre}</p>
-                                <p className="text-gray-400">{p.cobrador_nombre} · {p.tipo_pago?.replace(/_/g, ' ')}</p>
-                              </div>
-                              <div className="text-right shrink-0 ml-3">
-                                <p className="font-bold text-gray-700">{fmt(p.monto_pago)}</p>
-                                <p className="text-gray-400">
-                                  {new Date(p.fecha_pago).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   )}
 
