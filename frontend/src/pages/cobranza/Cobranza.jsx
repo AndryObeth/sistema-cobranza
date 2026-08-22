@@ -697,6 +697,7 @@ export default function Cobranza() {
       center('Comprobante de Pago'),
       center(folio),
       center(`${fechaStr}  ${horaStr}`),
+      ...(datos.pendienteSync ? [center('*** PROVISIONAL, PENDIENTE ***'), center('DE SINCRONIZAR')] : []),
       sep,
       row('Cliente:', nombre),
       row('Expediente:', datos.numero_expediente || ''),
@@ -725,7 +726,8 @@ export default function Cobranza() {
       tipo_pago, origen_pago,
       cliente_nombre, numero_expediente, numero_cuenta, folio_cuenta, plan_actual,
       cobrador_nombre,
-      precio_original_total, precio_final_total
+      precio_original_total, precio_final_total,
+      pendienteSync,
     } = datos
 
     const precioOrig  = parseFloat(precio_original_total || 0)
@@ -785,6 +787,7 @@ export default function Cobranza() {
     <div class="titulo">Comprobante de Pago</div>
     <div class="folio">${folioPago}</div>
     <div class="folio">${fechaStr} &nbsp; ${horaStr}</div>
+    ${pendienteSync ? '<div style="margin-top:2mm;border:1px dashed #92400e;background:#fef3c7;color:#92400e;font-size:9px;font-weight:bold;padding:2px;">⏳ PROVISIONAL — PENDIENTE DE SINCRONIZAR</div>' : ''}
   </div>
 
   <div class="sep-sol"></div>
@@ -871,7 +874,7 @@ export default function Cobranza() {
           return
         }
 
-        const datosPago = {
+        const payloadPago = {
           id_cuenta: cuentaSeleccionada.id_cuenta,
           ...formPago,
           monto_pago: monto,
@@ -886,13 +889,36 @@ export default function Cobranza() {
 
         const encolarPagoYSalir = () => {
           encolarPago({
-            ...datosPago,
+            ...payloadPago,
             _meta: {
               cliente_nombre: cuentaSeleccionada.cliente?.nombre,
               folio_cuenta:   cuentaSeleccionada.folio_cuenta,
             }
           })
           if (datosVisitaExtra) encolarVisita(datosVisitaExtra)
+
+          // Comprobante provisional con los datos disponibles localmente —
+          // el saldo se confirma al sincronizar, pero el cobrador ya tiene
+          // qué darle al cliente en el momento.
+          const saldoAntes = parseFloat(cuentaSeleccionada.saldo_actual || 0)
+          setDatosPago({
+            id_pago:         'PENDIENTE',
+            fecha_pago:      new Date().toISOString(),
+            monto_pago:      monto,
+            saldo_anterior:  saldoAntes,
+            saldo_nuevo:     Math.max(0, saldoAntes - monto),
+            tipo_pago:       formPago.tipo_pago,
+            origen_pago:     formPago.origen_pago,
+            cliente_nombre:  cuentaSeleccionada.cliente?.nombre,
+            numero_expediente: cuentaSeleccionada.cliente?.numero_expediente,
+            numero_cuenta:     cuentaSeleccionada.numero_cuenta,
+            folio_cuenta:      cuentaSeleccionada.folio_cuenta,
+            plan_actual:     cuentaSeleccionada.plan_actual,
+            cobrador_nombre: usuario?.nombre || 'Cobrador',
+            precio_original_total: cuentaSeleccionada.venta?.precio_original_total,
+            precio_final_total:    cuentaSeleccionada.venta?.precio_final_total,
+            pendienteSync: true,
+          })
           setExito('__offline__')
           setFormPago(FORM_PAGO_VACIO)
           setFormVisita(FORM_VISITA_VACIO)
@@ -904,7 +930,7 @@ export default function Cobranza() {
 
         let res
         try {
-          res = await api.post('/pagos', datosPago, { timeout: 10000 })
+          res = await api.post('/pagos', payloadPago, { timeout: 10000 })
         } catch (err) {
           if (err.response) {
             setError(err.response.data?.error || 'Error al guardar')
@@ -994,6 +1020,7 @@ export default function Cobranza() {
 
         const encolarVisitaYSalir = () => {
           encolarVisita(datosVisita)
+          setDatosPago(null) // no hubo pago; que no se muestre un ticket de una visita anterior
           setExito('__offline__')
           setFormVisita({ ...FORM_VISITA_VACIO, tipo_seguimiento: 'no_localizado' })
         }
@@ -2524,10 +2551,30 @@ export default function Cobranza() {
               {/* Mensajes */}
               {error && <p className="text-red-500 text-sm">{error}</p>}
               {exito === '__offline__' ? (
-                <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3">
+                <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 space-y-2">
                   <p className="text-yellow-800 text-sm font-medium">
                     📴 Guardado localmente — se enviará cuando haya conexión
                   </p>
+                  {datosPago && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => generarTicket(datosPago)}
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded-lg text-sm font-medium transition"
+                      >
+                        🖨️ Ver comprobante provisional
+                      </button>
+                      {'share' in navigator && (
+                        <button
+                          type="button"
+                          onClick={() => compartirTicket(datosPago)}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded-lg text-sm font-medium transition"
+                        >
+                          📲 Compartir / RawBT
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : exito ? (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
