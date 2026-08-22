@@ -284,6 +284,7 @@ export default function Cobranza() {
   }
 
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null)
+  const [datosLimitados, setDatosLimitados] = useState(false) // true = se usó el respaldo de la lista, no el detalle del servidor
   const [modalAbierto, setModalAbierto] = useState(false)
 
   // Flujo del modal
@@ -346,6 +347,7 @@ export default function Cobranza() {
   // Modal detalle
   const [modalDetalle, setModalDetalle]               = useState(false)
   const [cuentaDetalle, setCuentaDetalle]             = useState(null)
+  const [datosLimitadosDetalle, setDatosLimitadosDetalle] = useState(false)
   const [historialPagosDetalle, setHistorialPagosDetalle]   = useState([])
   const [historialVisitasDetalle, setHistorialVisitasDetalle] = useState([])
   const [cargandoDetalle, setCargandoDetalle]         = useState(false)
@@ -478,39 +480,48 @@ export default function Cobranza() {
   }
 
   const abrirModal = async (cuenta) => {
+    // Si /pagos/cuenta/:id no está en caché (sin señal y nunca se abrió antes),
+    // usar los datos que ya tenemos en memoria de la lista (todas-cuentas) en
+    // vez de bloquear el registro de pago — trae todo lo necesario (saldo,
+    // cliente, precio del plan), solo falta el historial de pagos.
+    let detalle
+    let pagos = []
     try {
       const resCuenta = await api.get(`/pagos/cuenta/${cuenta.id_cuenta}`)
-      const detalle = resCuenta.data
-      setCuentaSeleccionada(detalle)
-      setHistorialPagos(detalle.pagos || [])
-      try {
-        const resVisitas = await api.get(`/visitas/cuenta/${cuenta.id_cuenta}`)
-        setHistorialVisitas(resVisitas.data)
-      } catch {
-        setHistorialVisitas([])
-      }
-      setNoHuboPago(false)
-      setRegistrarVisitaTambien(false)
-      setFormPago(FORM_PAGO_VACIO)
-      setFormVisita(FORM_VISITA_VACIO)
-      setError('')
-      setExito('')
-      setEditandoFrecuencia(false)
-      setFormFrecuencia({
-        frecuencia_pago:    detalle.frecuencia_pago    || 'semanal',
-        fecha_primer_cobro: detalle.fecha_primer_cobro ? detalle.fecha_primer_cobro.split('T')[0] : '',
-        horario_preferido:  detalle.horario_preferido  || '',
-      })
-      setModalAbierto(true)
+      detalle = resCuenta.data
+      pagos = detalle.pagos || []
+      setDatosLimitados(false)
     } catch {
-      console.error('Error al cargar cuenta')
-      alert('No se pudo abrir esta cuenta: sin conexión y sin datos guardados de ella. Intenta de nuevo cuando tengas señal.')
+      detalle = cuenta
+      setDatosLimitados(true)
     }
+    setCuentaSeleccionada(detalle)
+    setHistorialPagos(pagos)
+    try {
+      const resVisitas = await api.get(`/visitas/cuenta/${cuenta.id_cuenta}`)
+      setHistorialVisitas(resVisitas.data)
+    } catch {
+      setHistorialVisitas([])
+    }
+    setNoHuboPago(false)
+    setRegistrarVisitaTambien(false)
+    setFormPago(FORM_PAGO_VACIO)
+    setFormVisita(FORM_VISITA_VACIO)
+    setError('')
+    setExito('')
+    setEditandoFrecuencia(false)
+    setFormFrecuencia({
+      frecuencia_pago:    detalle.frecuencia_pago    || 'semanal',
+      fecha_primer_cobro: detalle.fecha_primer_cobro ? detalle.fecha_primer_cobro.split('T')[0] : '',
+      horario_preferido:  detalle.horario_preferido  || '',
+    })
+    setModalAbierto(true)
   }
 
   const cerrarModal = () => {
     setModalAbierto(false)
     setCuentaSeleccionada(null)
+    setDatosLimitados(false)
     setNoHuboPago(false)
     setRegistrarVisitaTambien(false)
     setFormPago(FORM_PAGO_VACIO)
@@ -601,6 +612,7 @@ export default function Cobranza() {
       const resCuenta = await api.get(`/pagos/cuenta/${cuenta.id_cuenta}`)
       setCuentaDetalle(resCuenta.data)
       setHistorialPagosDetalle(resCuenta.data.pagos || [])
+      setDatosLimitadosDetalle(false)
       try {
         const resVisitas = await api.get(`/visitas/cuenta/${cuenta.id_cuenta}`)
         setHistorialVisitasDetalle(resVisitas.data)
@@ -608,7 +620,12 @@ export default function Cobranza() {
         setHistorialVisitasDetalle([])
       }
     } catch {
-      console.error('Error al cargar detalle')
+      // Sin conexión y sin caché de esta cuenta: usar los datos que ya
+      // tenemos en memoria de la lista en vez de dejar el modal vacío.
+      setCuentaDetalle(cuenta)
+      setHistorialPagosDetalle([])
+      setHistorialVisitasDetalle([])
+      setDatosLimitadosDetalle(true)
     } finally {
       setCargandoDetalle(false)
     }
@@ -617,6 +634,7 @@ export default function Cobranza() {
   const cerrarDetalle = () => {
     setModalDetalle(false)
     setCuentaDetalle(null)
+    setDatosLimitadosDetalle(false)
     setHistorialPagosDetalle([])
     setHistorialVisitasDetalle([])
     setPanelUbicDet(false)
@@ -2065,6 +2083,14 @@ export default function Cobranza() {
               </div>
             </div>
 
+            {datosLimitados && (
+              <div className="px-4 md:px-6 py-2 bg-amber-50 border-b border-amber-200">
+                <p className="text-amber-800 text-xs font-medium">
+                  📴 Sin conexión: mostrando datos guardados de la lista, sin historial de pagos reciente.
+                </p>
+              </div>
+            )}
+
             {/* Panel corrección de ubicación */}
             {panelUbicacion && (
               <div className="px-4 md:px-6 py-4 border-b bg-blue-50">
@@ -3052,6 +3078,14 @@ export default function Cobranza() {
                 <button onClick={cerrarDetalle} className="text-gray-400 hover:text-gray-600 text-xl shrink-0">✕</button>
               </div>
             </div>
+
+            {datosLimitadosDetalle && (
+              <div className="px-4 md:px-6 py-2 bg-amber-50 border-b border-amber-200">
+                <p className="text-amber-800 text-xs font-medium">
+                  📴 Sin conexión: mostrando datos guardados de la lista, sin historial de pagos reciente.
+                </p>
+              </div>
+            )}
 
             {/* Panel corrección de ubicación (detalle) */}
             {panelUbicDet && cuentaDetalle && (
