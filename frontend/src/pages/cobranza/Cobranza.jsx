@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
-import { encolarPago, encolarVisita, getQueue } from '../../utils/offlineQueue.js'
+import { encolarPago, encolarVisita, encolarCambioDia, encolarUbicacion, getQueue } from '../../utils/offlineQueue.js'
 import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
 import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
@@ -97,6 +97,7 @@ export default function Cobranza() {
 
   const [cuentas, setCuentas] = useState([])
   const [cargando, setCargando] = useState(true)
+  const [errorCarga, setErrorCarga] = useState(false)
   const [soloVencidas, setSoloVencidas] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [ordenar, setOrdenar] = useState('cumplimiento')
@@ -387,14 +388,47 @@ export default function Cobranza() {
     try {
       const res = await api.get('/pagos/todas-cuentas')
       setCuentas(res.data)
+      setErrorCarga(false)
     } catch {
       console.error('Error al cargar cuentas')
+      setErrorCarga(true)
     } finally {
       setCargando(false)
     }
   }
 
-  // El cobrador puede reacomodar su propia ruta entre días, sin depender del admin
+  // Precarga en segundo plano el detalle y las visitas de cada cuenta (aunque el
+  // cobrador no la haya abierto) para que ya estén disponibles si se queda sin
+  // señal a media ruta. Solo corre una vez por día y cuando hay conexión.
+  useEffect(() => {
+    if (!['cobrador', 'supervisor_cobranza'].includes(usuario?.rol)) return
+    if (cuentas.length === 0) return
+    if (!navigator.onLine) return
+    const hoy = new Date().toISOString().slice(0, 10)
+    const clave = `cobranza_precache_${hoy}`
+    if (localStorage.getItem(clave) === 'listo') return
+
+    let cancelado = false
+    const LOTE = 4
+    const precargar = async () => {
+      for (let i = 0; i < cuentas.length; i += LOTE) {
+        if (cancelado || !navigator.onLine) return
+        const lote = cuentas.slice(i, i + LOTE)
+        await Promise.allSettled(lote.flatMap(c => [
+          api.get(`/pagos/cuenta/${c.id_cuenta}`),
+          api.get(`/visitas/cuenta/${c.id_cuenta}`)
+        ]))
+        await new Promise(r => setTimeout(r, 150))
+      }
+      if (!cancelado) localStorage.setItem(clave, 'listo')
+    }
+    precargar()
+
+    return () => { cancelado = true }
+  }, [cuentas.length]) // eslint-disable-line
+
+  // El cobrador puede reacomodar su propia ruta entre días, sin depender del admin.
+  // Si no hay conexión (o la petición falla por red), se encola y se sincroniza después.
   const cambiarDiaCliente = async (cuenta, nuevoDia) => {
     const idCliente = cuenta.cliente?.id_cliente
     if (!idCliente) return
@@ -404,15 +438,22 @@ export default function Cobranza() {
         ? { ...c, cliente: { ...c.cliente, dia_cobranza: nuevoDia || null } }
         : c
     ))
+    const payload = { id_cliente: idCliente, dia_cobranza: nuevoDia || null }
+    if (!navigator.onLine) { encolarCambioDia(payload); return }
     try {
       await api.put(`/clientes/${idCliente}/dia-cobranza`, { dia_cobranza: nuevoDia || null })
-    } catch {
-      setCuentas(prev => prev.map(c =>
-        c.id_cuenta === cuenta.id_cuenta
-          ? { ...c, cliente: { ...c.cliente, dia_cobranza: anterior || null } }
-          : c
-      ))
-      alert('No se pudo cambiar el día (revisa tu conexión)')
+    } catch (err) {
+      if (err.response) {
+        setCuentas(prev => prev.map(c =>
+          c.id_cuenta === cuenta.id_cuenta
+            ? { ...c, cliente: { ...c.cliente, dia_cobranza: anterior || null } }
+            : c
+        ))
+        alert(err.response.data?.error || 'No se pudo cambiar el día')
+      } else {
+        // Falla de red aunque el navegador crea estar en línea: se encola igual
+        encolarCambioDia(payload)
+      }
     }
   }
 
@@ -506,8 +547,16 @@ export default function Cobranza() {
   const guardarUbicacionCliente = async () => {
     if (!ubicPendiente) return
     setGuardandoUbic(true)
+    const idCliente = cuentaSeleccionada.cliente?.id_cliente
+    const payload = { id_cliente: idCliente, latitud: ubicPendiente.lat, longitud: ubicPendiente.lng, plus_code: ubicPendiente.plus_code }
+    const guardarLocalYSalir = () => {
+      encolarUbicacion(payload)
+      cerrarCorreccionUbicacion()
+      setExito('📴 Ubicación guardada localmente — se enviará cuando haya conexión')
+      setTimeout(() => setExito(''), 4000)
+    }
+    if (!navigator.onLine) { guardarLocalYSalir(); setGuardandoUbic(false); return }
     try {
-      const idCliente = cuentaSeleccionada.cliente?.id_cliente
       await api.put(`/clientes/${idCliente}/coordenadas`, {
         latitud:   ubicPendiente.lat,
         longitud:  ubicPendiente.lng,
@@ -516,8 +565,9 @@ export default function Cobranza() {
       cerrarCorreccionUbicacion()
       setExito('Ubicación actualizada ✅')
       setTimeout(() => setExito(''), 4000)
-    } catch {
-      alert('Error al guardar la ubicación')
+    } catch (err) {
+      if (err.response) alert(err.response.data?.error || 'Error al guardar la ubicación')
+      else guardarLocalYSalir()
     } finally {
       setGuardandoUbic(false)
     }
@@ -581,8 +631,19 @@ export default function Cobranza() {
   const guardarUbicacionDetalle = async () => {
     if (!ubicPendDet) return
     setGuardandoUbicDet(true)
+    const idCliente = cuentaDetalle.cliente?.id_cliente
+    const payload = { id_cliente: idCliente, latitud: ubicPendDet.lat, longitud: ubicPendDet.lng, plus_code: ubicPendDet.plus_code }
+    const guardarLocalYSalir = () => {
+      encolarUbicacion(payload)
+      setPanelUbicDet(false)
+      setModoUbicDet(null)
+      setUbicPendDet(null)
+      setUbicInputDet('')
+      setExitoUbicDet('📴 Ubicación guardada localmente — se enviará cuando haya conexión')
+      setTimeout(() => setExitoUbicDet(''), 4000)
+    }
+    if (!navigator.onLine) { guardarLocalYSalir(); setGuardandoUbicDet(false); return }
     try {
-      const idCliente = cuentaDetalle.cliente?.id_cliente
       await api.put(`/clientes/${idCliente}/coordenadas`, {
         latitud:   ubicPendDet.lat,
         longitud:  ubicPendDet.lng,
@@ -594,8 +655,9 @@ export default function Cobranza() {
       setUbicInputDet('')
       setExitoUbicDet('Ubicación actualizada ✅')
       setTimeout(() => setExitoUbicDet(''), 4000)
-    } catch {
-      alert('Error al guardar la ubicación')
+    } catch (err) {
+      if (err.response) alert(err.response.data?.error || 'Error al guardar la ubicación')
+      else guardarLocalYSalir()
     } finally {
       setGuardandoUbicDet(false)
     }
@@ -1509,6 +1571,8 @@ export default function Cobranza() {
 
           {cargando ? (
             <p className="text-center text-gray-500 py-12">Cargando...</p>
+          ) : errorCarga ? (
+            <p className="text-center text-red-500 py-12">📴 Sin conexión y sin datos guardados. Revisa tu señal e intenta de nuevo.</p>
           ) : cuentasTarjetero.length === 0 ? (
             <p className="text-center text-gray-400 py-12">No hay cuentas que mostrar</p>
           ) : (
@@ -1552,9 +1616,11 @@ export default function Cobranza() {
       <div className="sm:hidden space-y-3">
         {cargando ? (
           <p className="text-center text-gray-500 py-12">Cargando...</p>
+        ) : errorCarga ? (
+          <p className="text-center text-red-500 py-12">📴 Sin conexión y sin datos guardados. Revisa tu señal e intenta de nuevo.</p>
         ) : cuentasFiltradas.length === 0 ? (
           <p className="text-center text-gray-400 py-12">No hay cuentas activas</p>
-        ) : (() => {
+        ) :(() => {
           const renderCard = (c, dragListeners) => {
             const esVisitado = visitados.has(c.id_cuenta)
             const pos = modoCobranza ? ordenManual.indexOf(c.id_cuenta) : -1
@@ -1727,9 +1793,11 @@ export default function Cobranza() {
       <div className="hidden sm:block bg-white rounded-2xl shadow overflow-hidden">
         {cargando ? (
           <p className="text-center text-gray-500 py-12">Cargando...</p>
+        ) : errorCarga ? (
+          <p className="text-center text-red-500 py-12">📴 Sin conexión y sin datos guardados. Revisa tu señal e intenta de nuevo.</p>
         ) : cuentasFiltradas.length === 0 ? (
           <p className="text-center text-gray-400 py-12">No hay cuentas activas</p>
-        ) : (
+        ) :(
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">

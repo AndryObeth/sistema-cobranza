@@ -53,6 +53,36 @@ export function encolarVisita(datos) {
   return operacion
 }
 
+export function encolarCambioDia(datos) {
+  const queue = getQueue()
+  const operacion = {
+    id:           crypto.randomUUID(),
+    tipo:         'PUT_DIA',
+    datos, // { id_cliente, dia_cobranza }
+    timestamp:    Date.now(),
+    sincronizado: false,
+    error:        null,
+  }
+  queue.push(operacion)
+  saveQueue(queue)
+  return operacion
+}
+
+export function encolarUbicacion(datos) {
+  const queue = getQueue()
+  const operacion = {
+    id:           crypto.randomUUID(),
+    tipo:         'PUT_UBICACION',
+    datos, // { id_cliente, latitud, longitud, plus_code }
+    timestamp:    Date.now(),
+    sincronizado: false,
+    error:        null,
+  }
+  queue.push(operacion)
+  saveQueue(queue)
+  return operacion
+}
+
 // ── Sincronizar la cola completa ──────────────────────────────────────────────
 
 export async function sincronizarCola() {
@@ -69,6 +99,12 @@ export async function sincronizarCola() {
         await api.post('/pagos', op.datos)
       } else if (op.tipo === 'POST_VISITA') {
         await api.post('/visitas', op.datos)
+      } else if (op.tipo === 'PUT_DIA') {
+        await api.put(`/clientes/${op.datos.id_cliente}/dia-cobranza`, { dia_cobranza: op.datos.dia_cobranza })
+      } else if (op.tipo === 'PUT_UBICACION') {
+        await api.put(`/clientes/${op.datos.id_cliente}/coordenadas`, {
+          latitud: op.datos.latitud, longitud: op.datos.longitud, plus_code: op.datos.plus_code
+        })
       }
       // Marcar como sincronizado
       const idx = queue.findIndex(q => q.id === op.id)

@@ -52,12 +52,15 @@ export default defineConfig({
           },
           {
             // GET /api/pagos/cuenta/:id  — detalle de cuenta individual
+            // maxEntries alto: un cobrador puede tener cientos de cuentas en su ruta;
+            // con un límite bajo, las primeras que consulta se expulsan del caché
+            // a medida que abre más y dejan de estar disponibles sin conexión.
             urlPattern: ({ url }) => url.pathname.includes('/api/pagos/cuenta/'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cuenta-detalle',
               networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 12 },
+              expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
@@ -79,7 +82,7 @@ export default defineConfig({
             options: {
               cacheName: 'api-visitas-cuenta',
               networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 12 },
+              expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

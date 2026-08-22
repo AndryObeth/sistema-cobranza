@@ -49,14 +49,14 @@ export default function Layout({ children }) {
     const sincronizarSiHayPendientes = async () => {
       const pendientesActuales = queueCount()
       if (pendientesActuales > 0) {
-        mostrarToast(`Sincronizando ${pendientesActuales} pago(s) pendiente(s)...`, 'info')
+        mostrarToast(`Sincronizando ${pendientesActuales} cambio(s) pendiente(s)...`, 'info')
         const resultado = await sincronizarCola()
         setPendientes(queueCount())
         if (resultado.sincronizados > 0) {
-          mostrarToast(`✅ ${resultado.sincronizados} pago(s) sincronizados correctamente`, 'exito')
+          mostrarToast(`✅ ${resultado.sincronizados} cambio(s) sincronizados correctamente`, 'exito')
         }
         if (resultado.errores > 0) {
-          mostrarToast(`⚠️ ${resultado.errores} pago(s) no pudieron sincronizarse`, 'error')
+          mostrarToast(`⚠️ ${resultado.errores} cambio(s) no pudieron sincronizarse`, 'error')
         }
       }
     }
@@ -199,7 +199,7 @@ export default function Layout({ children }) {
             <span>
               {enLinea
                 ? 'En línea'
-                : `Sin conexión${pendientes > 0 ? ` — ${pendientes} pago(s) pendiente(s)` : ''}`
+                : `Sin conexión${pendientes > 0 ? ` — ${pendientes} cambio(s) pendiente(s)` : ''}`
               }
             </span>
           )}
