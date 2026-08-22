@@ -2754,6 +2754,7 @@ export default function Cobranza() {
                           <div>
                             <span className="font-medium text-gray-800">{fmt(p.monto_pago)}</span>
                             <span className="text-gray-400 ml-2 text-xs">{p.tipo_pago}</span>
+                            {p.observaciones && <p className="text-gray-400 text-xs mt-0.5">{p.observaciones}</p>}
                           </div>
                           <div className="text-right">
                             <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
