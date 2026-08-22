@@ -103,6 +103,14 @@ export default function Layout({ children }) {
     navigate('/login')
   }
 
+  // Cachés de datos (cuentas, clientes, visitas...) que NO deben borrarse al
+  // actualizar — si se borran y el cobrador se queda sin señal después, se
+  // queda sin nada guardado hasta que vuelva a tener conexión.
+  const CACHES_DE_DATOS = [
+    'api-cuentas', 'api-clientes', 'api-cuenta-detalle', 'api-ventas',
+    'api-visitas-cuenta', 'api-visitas-agenda',
+  ]
+
   const handleForzarActualizacion = async () => {
     try {
       if ('serviceWorker' in navigator) {
@@ -111,7 +119,8 @@ export default function Layout({ children }) {
       }
       if ('caches' in window) {
         const keys = await caches.keys()
-        await Promise.all(keys.map(k => caches.delete(k)))
+        const aBorrar = keys.filter(k => !CACHES_DE_DATOS.includes(k))
+        await Promise.all(aBorrar.map(k => caches.delete(k)))
       }
     } finally {
       window.location.reload(true)
@@ -239,7 +248,7 @@ export default function Layout({ children }) {
               <button
                 onClick={handleForzarActualizacion}
                 className="text-left text-xs text-gray-500 hover:text-gray-300 transition mb-2 flex items-center gap-1"
-                title="Limpiar caché y recargar la app"
+                title="Actualizar el código de la app (no borra los datos guardados sin conexión)"
               >
                 🔄 Actualizar app
               </button>
