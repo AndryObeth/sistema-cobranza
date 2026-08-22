@@ -5,6 +5,9 @@ import Layout from '../../components/Layout'
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0)
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
+const fmtFechaHora = f => f
+  ? `${new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })} ${new Date(f).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })}`
+  : '—'
 
 // ─── badge estado ────────────────────────────────
 function BadgeEstado({ estado }) {
@@ -217,9 +220,10 @@ function TabCobrador({ usuario }) {
                   <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                     <tr>
                       <th className="text-left px-4 py-3">Cliente</th>
+                      <th className="text-left px-4 py-3">No. cuenta</th>
                       <th className="text-right px-4 py-3">Monto</th>
                       <th className="text-right px-4 py-3">Comisión 12%</th>
-                      <th className="text-left px-4 py-3">Fecha</th>
+                      <th className="text-left px-4 py-3">Fecha y hora</th>
                       <th className="text-left px-4 py-3">Origen</th>
                     </tr>
                   </thead>
@@ -227,9 +231,10 @@ function TabCobrador({ usuario }) {
                     {resumen.detalle.map(p => (
                       <tr key={p.id_pago} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium">{p.cliente}</td>
+                        <td className="px-4 py-3 text-blue-600 font-mono text-xs">{p.numero_cuenta || '—'}</td>
                         <td className="px-4 py-3 text-right">{fmt(p.monto)}</td>
                         <td className="px-4 py-3 text-right text-green-600">{fmt(p.comision_generada)}</td>
-                        <td className="px-4 py-3 text-gray-500">{fmtFecha(p.fecha_pago)}</td>
+                        <td className="px-4 py-3 text-gray-500">{fmtFechaHora(p.fecha_pago)}</td>
                         <td className="px-4 py-3 capitalize text-gray-500">{p.origen_pago}</td>
                       </tr>
                     ))}
@@ -237,6 +242,7 @@ function TabCobrador({ usuario }) {
                   <tfoot className="bg-gray-50 font-semibold">
                     <tr>
                       <td className="px-4 py-3">Total</td>
+                      <td className="px-4 py-3" />
                       <td className="px-4 py-3 text-right">{fmt(resumen.total_cobrado)}</td>
                       <td className="px-4 py-3 text-right text-green-600">{fmt(resumen.total_comisiones)}</td>
                       <td colSpan={2} />

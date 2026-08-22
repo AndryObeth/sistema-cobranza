@@ -35,6 +35,7 @@ router.get('/cobrador/resumen/:id_cobrador', auth, async (req, res) => {
       },
       include: {
         cliente: { select: { nombre: true } },
+        cuenta:  { select: { numero_cuenta: true, folio_cuenta: true } },
         comision_cobrador: true
       },
       orderBy: { fecha_pago: 'asc' }
@@ -48,6 +49,7 @@ router.get('/cobrador/resumen/:id_cobrador', auth, async (req, res) => {
     const detalle = pagos.map(p => ({
       id_pago: p.id_pago,
       cliente: p.cliente.nombre,
+      numero_cuenta: p.cuenta?.numero_cuenta || p.cuenta?.folio_cuenta || null,
       monto: parseFloat(p.monto_pago),
       comision_generada: parseFloat(p.comision_cobrador?.comision_generada || 0),
       fecha_pago: p.fecha_pago,
