@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../api.js'
 import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../utils/plusCode.js'
+import { encolarUbicacionNombrada } from '../utils/offlineQueue.js'
 
 const ETIQUETAS = ['Domicilio', 'Trabajo', 'Casa familiar', 'Otro']
 
@@ -67,25 +68,39 @@ export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
     if (!form.etiqueta.trim()) { setError('Ingresa una etiqueta'); return }
     setGuardando(true)
     setError('')
-    try {
-      const payload = {
-        etiqueta:        form.etiqueta.trim(),
-        nombre_contacto: form.nombre_contacto || null,
-        descripcion:     form.descripcion     || null,
-        plus_code:       form.plus_code       || null,
-        es_principal:    form.es_principal,
-      }
-      if (form.plus_code && isValidPlusCode(form.plus_code)) {
-        const coords = decodePlusCode(form.plus_code)
-        if (coords) { payload.latitud = coords.lat; payload.longitud = coords.lng }
-      }
 
+    const payload = {
+      etiqueta:        form.etiqueta.trim(),
+      nombre_contacto: form.nombre_contacto || null,
+      descripcion:     form.descripcion     || null,
+      plus_code:       form.plus_code       || null,
+      es_principal:    form.es_principal,
+    }
+    if (form.plus_code && isValidPlusCode(form.plus_code)) {
+      const coords = decodePlusCode(form.plus_code)
+      if (coords) { payload.latitud = coords.lat; payload.longitud = coords.lng }
+    }
+
+    const encolarYSalir = () => {
+      encolarUbicacionNombrada({ idCliente, editando, payload })
+      if (editando) {
+        setUbicaciones(prev => prev.map(u => u.id_ubicacion === editando ? { ...u, ...payload, _pendienteSync: true } : u))
+      } else {
+        const tmp = { id_ubicacion: `tmp-${Date.now()}`, ...payload, _pendienteSync: true }
+        setUbicaciones(prev => (payload.es_principal ? prev.map(u => ({ ...u, es_principal: false })) : prev).concat(tmp))
+      }
+      cancelar()
+    }
+
+    if (!navigator.onLine) { encolarYSalir(); setGuardando(false); return }
+
+    try {
       let res
       if (editando) {
-        res = await api.put(`/clientes/${idCliente}/ubicaciones/${editando}`, payload)
+        res = await api.put(`/clientes/${idCliente}/ubicaciones/${editando}`, payload, { timeout: 10000 })
         setUbicaciones(prev => prev.map(u => u.id_ubicacion === editando ? res.data : u))
       } else {
-        res = await api.post(`/clientes/${idCliente}/ubicaciones`, payload)
+        res = await api.post(`/clientes/${idCliente}/ubicaciones`, payload, { timeout: 10000 })
         setUbicaciones(prev => {
           const lista = form.es_principal ? prev.map(u => ({ ...u, es_principal: false })) : prev
           return [...lista, res.data]
@@ -93,7 +108,11 @@ export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
       }
       cancelar()
     } catch (e) {
-      setError(e.response?.data?.error || 'Error al guardar')
+      if (e.response) {
+        setError(e.response.data?.error || 'Error al guardar')
+      } else {
+        encolarYSalir()
+      }
     } finally {
       setGuardando(false)
     }
@@ -126,6 +145,11 @@ export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
                   {u.etiqueta}
                 </span>
                 {u.es_principal && <span className="text-xs text-blue-500">Principal</span>}
+                {u._pendienteSync && (
+                  <span className="text-xs px-2 py-0.5 bg-yellow-200 text-yellow-800 rounded-full font-medium">
+                    📴 Pendiente de sincronizar
+                  </span>
+                )}
               </div>
               {u.nombre_contacto && (
                 <p className="text-sm font-medium text-gray-800 mt-1">👤 {u.nombre_contacto}</p>
@@ -146,7 +170,7 @@ export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
                 </div>
               )}
             </div>
-            {puedeEditar && (
+            {puedeEditar && !u._pendienteSync && (
               <div className="flex gap-1 shrink-0">
                 <button onClick={() => abrirEditar(u)} className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50">Editar</button>
                 <button onClick={() => eliminar(u.id_ubicacion)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">✕</button>

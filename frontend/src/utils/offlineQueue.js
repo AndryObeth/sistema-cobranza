@@ -90,6 +90,23 @@ export function encolarUbicacion(datos) {
   return operacion
 }
 
+// Ubicación con etiqueta (Domicilio, Trabajo...) del panel de ubicaciones —
+// distinta de encolarUbicacion(), que solo corrige lat/lng del cliente.
+export function encolarUbicacionNombrada(datos) {
+  const queue = getQueue()
+  const operacion = {
+    id:           crypto.randomUUID(),
+    tipo:         'UBICACION_NOMBRADA',
+    datos, // { idCliente, editando (id_ubicacion o null), payload }
+    timestamp:    Date.now(),
+    sincronizado: false,
+    error:        null,
+  }
+  queue.push(operacion)
+  saveQueue(queue)
+  return operacion
+}
+
 // ── Sincronizar la cola completa ──────────────────────────────────────────────
 
 export async function sincronizarCola() {
@@ -112,6 +129,13 @@ export async function sincronizarCola() {
         await api.put(`/clientes/${op.datos.id_cliente}/coordenadas`, {
           latitud: op.datos.latitud, longitud: op.datos.longitud, plus_code: op.datos.plus_code
         }, { timeout: 10000 })
+      } else if (op.tipo === 'UBICACION_NOMBRADA') {
+        const { idCliente, editando, payload } = op.datos
+        if (editando) {
+          await api.put(`/clientes/${idCliente}/ubicaciones/${editando}`, payload, { timeout: 10000 })
+        } else {
+          await api.post(`/clientes/${idCliente}/ubicaciones`, payload, { timeout: 10000 })
+        }
       }
       // Marcar como sincronizado
       const idx = queue.findIndex(q => q.id === op.id)
