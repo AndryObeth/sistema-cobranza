@@ -6,6 +6,13 @@ import api from '../../api.js'
 
 const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
+// Fecha local (no UTC): toISOString() se adelanta un día a partir de las 6pm
+// hora México, porque México está en UTC-6 y ahí ya es el día siguiente en UTC.
+function fechaLocalHoy() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export default function Dashboard() {
   const { usuario } = useAuth()
   const navigate = useNavigate()
@@ -15,7 +22,7 @@ export default function Dashboard() {
 
   // Consulta de cobros por fecha
   const [verConsulta, setVerConsulta]         = useState(false)
-  const [fechaConsulta, setFechaConsulta]     = useState(new Date().toISOString().split('T')[0])
+  const [fechaConsulta, setFechaConsulta]     = useState(fechaLocalHoy())
   const [consultando, setConsultando]         = useState(false)
   const [resultadoConsulta, setResultadoConsulta] = useState(null)
   const [cobradoresExpandidos, setCobradoresExpandidos] = useState(new Set())
@@ -257,7 +264,7 @@ export default function Dashboard() {
                   type="date"
                   value={fechaConsulta}
                   onChange={e => { setFechaConsulta(e.target.value); setResultadoConsulta(null) }}
-                  max={new Date().toISOString().split('T')[0]}
+                  max={fechaLocalHoy()}
                   className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button

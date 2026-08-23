@@ -5,6 +5,12 @@ import { useAuth } from '../../context/AuthContext.jsx'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
+// Fecha local (no UTC) para el nombre del archivo exportado
+function fechaLocalHoy() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 const PLAN_LABEL = {
   un_mes: '1 mes', dos_meses: '2 meses', tres_meses: '3 meses', largo_plazo: 'Largo plazo', contado_directo: 'Contado'
 }
@@ -198,7 +204,7 @@ export default function Listado() {
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href     = url
-    a.download = `cuentas-${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `cuentas-${fechaLocalHoy()}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }

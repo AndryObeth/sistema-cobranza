@@ -3,7 +3,12 @@ import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 
-const hoyISO = () => new Date().toISOString().split('T')[0]
+// Fecha local (no UTC): toISOString() se adelanta un día a partir de las 6pm
+// hora México, porque México está en UTC-6 y ahí ya es el día siguiente en UTC.
+const hoyISO = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default function Ventas() {
   const { usuario } = useAuth()

@@ -2514,7 +2514,7 @@ export default function Cobranza() {
                             type="date"
                             value={fechaPagoHistorico}
                             onChange={e => setFechaPagoHistorico(e.target.value)}
-                            max={new Date().toISOString().split('T')[0]}
+                            max={fechaLocalHoy()}
                             required={pagoHistorico}
                             className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
                           />

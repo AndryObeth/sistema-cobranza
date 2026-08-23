@@ -7,10 +7,13 @@ const prisma  = new PrismaClient()
 // GET /api/dashboard/resumen
 router.get('/resumen', auth, async (req, res) => {
   try {
-    const hoy = new Date()
-    hoy.setHours(0, 0, 0, 0)
-    const manana = new Date(hoy)
-    manana.setDate(manana.getDate() + 1)
+    // "Hoy" en hora de México (UTC-6), no en la hora del servidor (UTC) —
+    // si no, después de las 6pm hora México el servidor ya "cree" que es el
+    // día siguiente y las tarjetas de "hoy" se muestran vacías de golpe.
+    const ahora = new Date()
+    const fechaMexicoISO = new Date(ahora.getTime() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const hoy = new Date(fechaMexicoISO + 'T00:00:00.000-06:00')
+    const fin = new Date(fechaMexicoISO + 'T23:59:59.999-06:00')
 
     const [
       total_clientes_activos,
@@ -25,12 +28,12 @@ router.get('/resumen', auth, async (req, res) => {
       prisma.cliente.count({ where: { activo: true } }),
 
       prisma.venta.findMany({
-        where: { fecha_venta: { gte: hoy, lt: manana } },
+        where: { fecha_venta: { gte: hoy, lte: fin } },
         select: { precio_final_total: true }
       }),
 
       prisma.pago.findMany({
-        where: { fecha_pago: { gte: hoy, lt: manana } },
+        where: { fecha_pago: { gte: hoy, lte: fin } },
         select: { monto_pago: true }
       }),
 
