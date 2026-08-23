@@ -1008,36 +1008,33 @@ export default function Cobranza() {
           precio_final_total:    cuentaSeleccionada.venta?.precio_final_total
         }
 
-        if (liquidada) {
-          setCuentas(prev => prev.filter(c => c.id_cuenta !== cuentaSeleccionada.id_cuenta))
-          cerrarModal()
-          try {
-            generarTicket(ticket)
-          } catch {
-            setExito('¡Cuenta liquidada! El ticket no pudo abrirse (verifica que el navegador permita ventanas emergentes).')
-          }
-        } else {
-          setDatosPago(ticket)
-          setExito(
-            `Pago registrado. Saldo restante: $${parseFloat(res.data.saldo_nuevo).toLocaleString('es-MX', { minimumFractionDigits: 2 })} · ` +
-            `Comisión: $${parseFloat(res.data.comision_cobrador).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
-          )
-          setFormPago(FORM_PAGO_VACIO)
-          setFormVisita(FORM_VISITA_VACIO)
-          setRegistrarVisitaTambien(false)
-          cargarCuentas()
-          // El pago ya se guardó; si esto falla (ej. se cortó la señal justo
-          // después), no debe mostrarse como error — el pago sigue siendo válido.
-          try {
-            const [actualizada, nuevasVisitas] = await Promise.all([
-              api.get(`/pagos/cuenta/${cuentaSeleccionada.id_cuenta}`),
-              api.get(`/visitas/cuenta/${cuentaSeleccionada.id_cuenta}`)
-            ])
-            setCuentaSeleccionada(actualizada.data)
-            setHistorialPagos(actualizada.data.pagos || [])
-            setHistorialVisitas(nuevasVisitas.data)
-          } catch {}
-        }
+        // No se cierra el modal ni se abre el ticket solo (ni siquiera al liquidar):
+        // si el navegador bloquea la ventana emergente, el aviso quedaba invisible
+        // porque el modal ya estaba cerrado. El cobrador ve "Ver comprobante" y lo
+        // abre él mismo — evita depender del bloqueador de popups del navegador.
+        if (liquidada) setCuentas(prev => prev.filter(c => c.id_cuenta !== cuentaSeleccionada.id_cuenta))
+        setDatosPago(ticket)
+        setExito(
+          liquidada
+            ? '🎉 ¡Cuenta liquidada!'
+            : `Pago registrado. Saldo restante: $${parseFloat(res.data.saldo_nuevo).toLocaleString('es-MX', { minimumFractionDigits: 2 })} · ` +
+              `Comisión: $${parseFloat(res.data.comision_cobrador).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+        )
+        setFormPago(FORM_PAGO_VACIO)
+        setFormVisita(FORM_VISITA_VACIO)
+        setRegistrarVisitaTambien(false)
+        cargarCuentas()
+        // El pago ya se guardó; si esto falla (ej. se cortó la señal justo
+        // después), no debe mostrarse como error — el pago sigue siendo válido.
+        try {
+          const [actualizada, nuevasVisitas] = await Promise.all([
+            api.get(`/pagos/cuenta/${cuentaSeleccionada.id_cuenta}`),
+            api.get(`/visitas/cuenta/${cuentaSeleccionada.id_cuenta}`)
+          ])
+          setCuentaSeleccionada(actualizada.data)
+          setHistorialPagos(actualizada.data.pagos || [])
+          setHistorialVisitas(nuevasVisitas.data)
+        } catch {}
       } else {
         // ── FLUJO 2: Solo registrar visita ──
         if (formVisita.tipo_seguimiento === 'promesa_pago' && !formVisita.fecha_programada) {
