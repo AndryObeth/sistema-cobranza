@@ -158,6 +158,70 @@ function TabCobrador({ usuario }) {
     }).catch(() => {})
   }
 
+  const exportarPDF = () => {
+    if (!resumen) return
+    const nombreCobrador = esCobrador
+      ? usuario?.nombre
+      : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || '')
+
+    const filas = resumen.detalle.map(p => `
+      <tr>
+        <td>${p.cliente}</td>
+        <td>${p.numero_cuenta || '—'}</td>
+        <td class="right">${fmt(p.monto)}</td>
+        <td class="right">${fmt(p.comision_generada)}</td>
+        <td>${fmtFechaHora(p.fecha_pago)}</td>
+        <td class="cap">${p.origen_pago}</td>
+      </tr>
+    `).join('')
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Corte ${nombreCobrador}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color:#1f2937; }
+  h1 { font-size: 18px; margin-bottom:2px; }
+  .sub { color:#6b7280; font-size:12px; margin-bottom:16px; }
+  .resumen { display:flex; gap:16px; margin-bottom:20px; }
+  .card { border:1px solid #e5e7eb; border-radius:8px; padding:12px 16px; flex:1; }
+  .card .label { font-size:11px; color:#6b7280; }
+  .card .valor { font-size:20px; font-weight:bold; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; background:#f9fafb; padding:8px; border-bottom:1px solid #e5e7eb; text-transform:uppercase; font-size:10px; color:#6b7280; }
+  td { padding:8px; border-bottom:1px solid #f3f4f6; }
+  .right { text-align:right; }
+  .cap { text-transform:capitalize; }
+  tfoot td { font-weight:bold; border-top:2px solid #e5e7eb; }
+  .btn-imprimir { margin-top:20px; padding:10px 20px; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:14px; }
+  @media print { .btn-imprimir { display:none; } }
+</style>
+</head>
+<body>
+  <h1>Corte de cobrador — ${nombreCobrador}</h1>
+  <p class="sub">Semana: ${fmtFecha(resumen.semana_inicio)} – ${fmtFecha(resumen.semana_fin)} · Novedades Cancún</p>
+  <div class="resumen">
+    <div class="card"><div class="label">Total cobrado</div><div class="valor">${fmt(resumen.total_cobrado)}</div></div>
+    <div class="card"><div class="label">Comisión (12%)</div><div class="valor" style="color:#16a34a">${fmt(resumen.total_comisiones)}</div></div>
+    <div class="card"><div class="label">Cantidad de pagos</div><div class="valor" style="color:#2563eb">${resumen.cantidad_pagos}</div></div>
+  </div>
+  <table>
+    <thead><tr><th>Cliente</th><th>No. cuenta</th><th class="right">Monto</th><th class="right">Comisión</th><th>Fecha y hora</th><th>Origen</th></tr></thead>
+    <tbody>${filas}</tbody>
+    <tfoot><tr><td>Total</td><td></td><td class="right">${fmt(resumen.total_cobrado)}</td><td class="right">${fmt(resumen.total_comisiones)}</td><td colspan="2"></td></tr></tfoot>
+  </table>
+  <button class="btn-imprimir" onclick="window.print()">Imprimir / Guardar como PDF</button>
+  <script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>`
+
+    const ventana = window.open('', '_blank', 'width=900,height=700')
+    if (!ventana) { alert('El navegador bloqueó la ventana emergente. Habilítala para exportar el PDF.'); return }
+    ventana.document.write(html)
+    ventana.document.close()
+  }
+
   return (
     <div className="space-y-6">
       {/* Selector de cobrador (solo admin) */}
@@ -203,14 +267,24 @@ function TabCobrador({ usuario }) {
           <div className="bg-white rounded-xl shadow-sm border">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="font-semibold text-gray-800">Pagos de la semana</h3>
-              {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && resumen.cantidad_pagos > 0 && (
-                <button
-                  onClick={() => setModalAbierto(true)}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-                >
-                  ✂️ Cerrar corte
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {resumen.cantidad_pagos > 0 && (
+                  <button
+                    onClick={exportarPDF}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+                  >
+                    📄 Exportar PDF
+                  </button>
+                )}
+                {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && resumen.cantidad_pagos > 0 && (
+                  <button
+                    onClick={() => setModalAbierto(true)}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                  >
+                    ✂️ Cerrar corte
+                  </button>
+                )}
+              </div>
             </div>
             {resumen.detalle.length === 0 ? (
               <p className="p-6 text-sm text-gray-400 text-center">Sin pagos esta semana</p>
