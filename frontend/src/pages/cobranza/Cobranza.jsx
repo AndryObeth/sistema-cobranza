@@ -73,6 +73,9 @@ const TIPOS_SIN_PAGO = [
 const FORM_PAGO_VACIO   = { monto_pago: '', tipo_pago: 'abono', origen_pago: 'domicilio', observaciones: '' }
 const FORM_VISITA_VACIO = { tipo_seguimiento: 'no_localizado', comentario: '', fecha_programada: '' }
 
+const TELEFONO_EMPRESA = '5646430474'
+const TELEFONO_EMPRESA_FMT = TELEFONO_EMPRESA.replace(/(\d{2})(\d{4})(\d{4})/, '$1 $2 $3')
+
 const LABEL_PLAN = {
   un_mes: '1 mes', dos_meses: '2 meses', tres_meses: '3 meses', largo_plazo: 'Largo plazo'
 }
@@ -751,6 +754,7 @@ export default function Cobranza() {
       row('Cobrador:', datos.cobrador_nombre || ''),
       sep,
       center('Conserve este comprobante'),
+      center(`Dudas: ${TELEFONO_EMPRESA_FMT}`),
       '', '', '',
     ].join('\n')
   }
@@ -856,6 +860,7 @@ export default function Cobranza() {
 
   <div class="sep-sol"></div>
   <div class="pie">Conserve este comprobante</div>
+  <div class="pie" style="margin-top:2px;">Dudas o aclaraciones: <a href="tel:${TELEFONO_EMPRESA}" style="color:#000;">${TELEFONO_EMPRESA_FMT}</a></div>
   <div class="pie" style="margin-top:3px; font-size:9px;">${folioPago}</div>
 
   <button class="btn-imprimir" onclick="window.print()">Imprimir</button>
