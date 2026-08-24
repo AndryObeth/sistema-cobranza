@@ -52,6 +52,7 @@ router.get('/cobrador/resumen/:id_cobrador', auth, async (req, res) => {
       numero_cuenta: p.cuenta?.numero_cuenta || p.cuenta?.folio_cuenta || null,
       monto: parseFloat(p.monto_pago),
       comision_generada: parseFloat(p.comision_cobrador?.comision_generada || 0),
+      saldo_nuevo: parseFloat(p.saldo_nuevo),
       fecha_pago: p.fecha_pago,
       origen_pago: p.origen_pago
     }))

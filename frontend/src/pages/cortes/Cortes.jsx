@@ -9,6 +9,16 @@ const fmtFechaHora = f => f
   ? `${new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })} ${new Date(f).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })}`
   : '—'
 
+// Ordena "98-C", "347-C", etc. por el número inicial, no alfabéticamente
+// (alfabético pondría "100-C" antes que "98-C")
+const ordenarPorNumeroCuenta = (detalle) => {
+  return [...detalle].sort((a, b) => {
+    const na = parseInt(a.numero_cuenta) || 0
+    const nb = parseInt(b.numero_cuenta) || 0
+    return na - nb
+  })
+}
+
 // ─── badge estado ────────────────────────────────
 function BadgeEstado({ estado }) {
   const colores = {
@@ -164,12 +174,12 @@ function TabCobrador({ usuario }) {
       ? usuario?.nombre
       : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || '')
 
-    const filas = resumen.detalle.map(p => `
+    const filas = ordenarPorNumeroCuenta(resumen.detalle).map(p => `
       <tr>
         <td>${p.cliente}</td>
         <td>${p.numero_cuenta || '—'}</td>
         <td class="right">${fmt(p.monto)}</td>
-        <td class="right">${fmt(p.comision_generada)}</td>
+        <td class="right">${fmt(p.saldo_nuevo)}</td>
         <td>${fmtFechaHora(p.fecha_pago)}</td>
         <td class="cap">${p.origen_pago}</td>
       </tr>
@@ -207,9 +217,9 @@ function TabCobrador({ usuario }) {
     <div class="card"><div class="label">Cantidad de pagos</div><div class="valor" style="color:#2563eb">${resumen.cantidad_pagos}</div></div>
   </div>
   <table>
-    <thead><tr><th>Cliente</th><th>No. cuenta</th><th class="right">Monto</th><th class="right">Comisión</th><th>Fecha y hora</th><th>Origen</th></tr></thead>
+    <thead><tr><th>Cliente</th><th>No. cuenta</th><th class="right">Monto</th><th class="right">Saldo actual</th><th>Fecha y hora</th><th>Origen</th></tr></thead>
     <tbody>${filas}</tbody>
-    <tfoot><tr><td>Total</td><td></td><td class="right">${fmt(resumen.total_cobrado)}</td><td class="right">${fmt(resumen.total_comisiones)}</td><td colspan="2"></td></tr></tfoot>
+    <tfoot><tr><td>Total</td><td></td><td class="right">${fmt(resumen.total_cobrado)}</td><td></td><td colspan="2"></td></tr></tfoot>
   </table>
   <button class="btn-imprimir" onclick="window.print()">Imprimir / Guardar como PDF</button>
   <script>window.onload = function(){ window.print(); }</script>
@@ -296,18 +306,18 @@ function TabCobrador({ usuario }) {
                       <th className="text-left px-4 py-3">Cliente</th>
                       <th className="text-left px-4 py-3">No. cuenta</th>
                       <th className="text-right px-4 py-3">Monto</th>
-                      <th className="text-right px-4 py-3">Comisión 12%</th>
+                      <th className="text-right px-4 py-3">Saldo actual</th>
                       <th className="text-left px-4 py-3">Fecha y hora</th>
                       <th className="text-left px-4 py-3">Origen</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {resumen.detalle.map(p => (
+                    {ordenarPorNumeroCuenta(resumen.detalle).map(p => (
                       <tr key={p.id_pago} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium">{p.cliente}</td>
                         <td className="px-4 py-3 text-blue-600 font-mono text-xs">{p.numero_cuenta || '—'}</td>
                         <td className="px-4 py-3 text-right">{fmt(p.monto)}</td>
-                        <td className="px-4 py-3 text-right text-green-600">{fmt(p.comision_generada)}</td>
+                        <td className="px-4 py-3 text-right text-gray-700">{fmt(p.saldo_nuevo)}</td>
                         <td className="px-4 py-3 text-gray-500">{fmtFechaHora(p.fecha_pago)}</td>
                         <td className="px-4 py-3 capitalize text-gray-500">{p.origen_pago}</td>
                       </tr>
@@ -318,7 +328,7 @@ function TabCobrador({ usuario }) {
                       <td className="px-4 py-3">Total</td>
                       <td className="px-4 py-3" />
                       <td className="px-4 py-3 text-right">{fmt(resumen.total_cobrado)}</td>
-                      <td className="px-4 py-3 text-right text-green-600">{fmt(resumen.total_comisiones)}</td>
+                      <td className="px-4 py-3" />
                       <td colSpan={2} />
                     </tr>
                   </tfoot>
