@@ -4,18 +4,33 @@ const auth = require('../middlewares/auth')
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
-// Helper: inicio y fin de la semana actual (lunes–domingo)
+// Helpers de fecha en zona horaria de México (UTC-6 fijo, sin horario de verano)
+function fechaMexicoISO(date = new Date()) {
+  return new Date(date.getTime() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+function sumarDiasISO(fechaISO, dias) {
+  const [y, m, d] = fechaISO.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + dias)).toISOString().slice(0, 10)
+}
+function diaSemanaISO(fechaISO) {
+  const [y, m, d] = fechaISO.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() // 0=domingo
+}
+function inicioDiaMexico(fechaISO) {
+  return new Date(fechaISO + 'T00:00:00.000-06:00')
+}
+function finDiaMexico(fechaISO) {
+  return new Date(fechaISO + 'T23:59:59.999-06:00')
+}
+
+// Helper: inicio y fin de la semana actual en México (lunes–domingo)
 function semanaActual() {
-  const hoy = new Date()
-  const dia = hoy.getDay() // 0=domingo
+  const hoyISO = fechaMexicoISO()
+  const dia = diaSemanaISO(hoyISO)
   const diffLunes = dia === 0 ? -6 : 1 - dia
-  const lunes = new Date(hoy)
-  lunes.setDate(hoy.getDate() + diffLunes)
-  lunes.setHours(0, 0, 0, 0)
-  const domingo = new Date(lunes)
-  domingo.setDate(lunes.getDate() + 6)
-  domingo.setHours(23, 59, 59, 999)
-  return { inicio: lunes, fin: domingo }
+  const lunesISO = sumarDiasISO(hoyISO, diffLunes)
+  const domingoISO = sumarDiasISO(lunesISO, 6)
+  return { inicio: inicioDiaMexico(lunesISO), fin: finDiaMexico(domingoISO) }
 }
 
 // ─────────────────────────────────────────
@@ -26,7 +41,11 @@ function semanaActual() {
 router.get('/cobrador/resumen/:id_cobrador', auth, async (req, res) => {
   try {
     const id_cobrador = parseInt(req.params.id_cobrador)
-    const { inicio, fin } = semanaActual()
+    const { fecha_inicio, fecha_fin } = req.query
+
+    const { inicio, fin } = (fecha_inicio && fecha_fin)
+      ? { inicio: inicioDiaMexico(fecha_inicio), fin: finDiaMexico(fecha_fin) }
+      : semanaActual()
 
     const pagos = await prisma.pago.findMany({
       where: {

@@ -8,6 +8,8 @@ const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'A
 const fmtFechaHora = f => f
   ? `${new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })} ${new Date(f).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })}`
   : '—'
+// YYYY-MM-DD en horario de México, para precargar los inputs de fecha
+const isoMexico = f => f ? new Date(f).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }) : ''
 
 // Ordena "98-C", "347-C", etc. por el número inicial, no alfabéticamente
 // (alfabético pondría "100-C" antes que "98-C")
@@ -129,6 +131,10 @@ function TabCobrador({ usuario }) {
   const [historial, setHistorial] = useState([])
   const [cargando, setCargando] = useState(false)
   const [modalAbierto, setModalAbierto] = useState(false)
+  const [fechaInicio, setFechaInicio] = useState('')
+  const [fechaFin, setFechaFin] = useState('')
+  const [inputInicio, setInputInicio] = useState('')
+  const [inputFin, setInputFin] = useState('')
 
   const esCobrador = ['cobrador', 'supervisor_cobranza'].includes(usuario?.rol)
 
@@ -147,25 +153,40 @@ function TabCobrador({ usuario }) {
   useEffect(() => {
     if (!idCobrador) return
     setCargando(true)
+    const params = (fechaInicio && fechaFin) ? { fecha_inicio: fechaInicio, fecha_fin: fechaFin } : {}
     Promise.all([
-      api.get(`/cortes/cobrador/resumen/${idCobrador}`),
+      api.get(`/cortes/cobrador/resumen/${idCobrador}`, { params }),
       api.get(`/cortes/cobrador/historial/${idCobrador}`)
     ]).then(([r, h]) => {
       setResumen(r.data)
       setHistorial(h.data)
+      setInputInicio(isoMexico(r.data.semana_inicio))
+      setInputFin(isoMexico(r.data.semana_fin))
     }).catch(() => {}).finally(() => setCargando(false))
-  }, [idCobrador])
+  }, [idCobrador, fechaInicio, fechaFin])
 
   const recargar = () => {
     setModalAbierto(false)
     if (!idCobrador) return
+    const params = (fechaInicio && fechaFin) ? { fecha_inicio: fechaInicio, fecha_fin: fechaFin } : {}
     Promise.all([
-      api.get(`/cortes/cobrador/resumen/${idCobrador}`),
+      api.get(`/cortes/cobrador/resumen/${idCobrador}`, { params }),
       api.get(`/cortes/cobrador/historial/${idCobrador}`)
     ]).then(([r, h]) => {
       setResumen(r.data)
       setHistorial(h.data)
     }).catch(() => {})
+  }
+
+  const aplicarRango = () => {
+    if (!inputInicio || !inputFin) return
+    setFechaInicio(inputInicio)
+    setFechaFin(inputFin)
+  }
+
+  const restablecerSemanaActual = () => {
+    setFechaInicio('')
+    setFechaFin('')
   }
 
   const exportarPDF = () => {
@@ -210,7 +231,7 @@ function TabCobrador({ usuario }) {
 </head>
 <body>
   <h1>Corte de cobrador — ${nombreCobrador}</h1>
-  <p class="sub">Semana: ${fmtFecha(resumen.semana_inicio)} – ${fmtFecha(resumen.semana_fin)} · Novedades Cancún</p>
+  <p class="sub">Periodo: ${fmtFecha(resumen.semana_inicio)} – ${fmtFecha(resumen.semana_fin)} · Novedades Cancún</p>
   <div class="resumen">
     <div class="card"><div class="label">Total cobrado</div><div class="valor">${fmt(resumen.total_cobrado)}</div></div>
     <div class="card"><div class="label">Comisión (12%)</div><div class="valor" style="color:#16a34a">${fmt(resumen.total_comisiones)}</div></div>
@@ -250,6 +271,42 @@ function TabCobrador({ usuario }) {
         </div>
       )}
 
+      {/* Selector de rango de fechas */}
+      <div className="flex flex-wrap items-end gap-3 bg-white rounded-xl p-4 shadow-sm border">
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Desde</label>
+          <input
+            type="date"
+            value={inputInicio}
+            onChange={e => setInputInicio(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Hasta</label>
+          <input
+            type="date"
+            value={inputFin}
+            onChange={e => setInputFin(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <button
+          onClick={aplicarRango}
+          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+        >
+          Aplicar
+        </button>
+        {(fechaInicio && fechaFin) && (
+          <button
+            onClick={restablecerSemanaActual}
+            className="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+          >
+            Semana actual
+          </button>
+        )}
+      </div>
+
       {cargando && <p className="text-gray-400 text-sm">Cargando…</p>}
 
       {resumen && !cargando && (
@@ -276,7 +333,7 @@ function TabCobrador({ usuario }) {
           {/* Tabla detalle */}
           <div className="bg-white rounded-xl shadow-sm border">
             <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="font-semibold text-gray-800">Pagos de la semana</h3>
+              <h3 className="font-semibold text-gray-800">Pagos del periodo</h3>
               <div className="flex items-center gap-2">
                 {resumen.cantidad_pagos > 0 && (
                   <button
@@ -297,7 +354,7 @@ function TabCobrador({ usuario }) {
               </div>
             </div>
             {resumen.detalle.length === 0 ? (
-              <p className="p-6 text-sm text-gray-400 text-center">Sin pagos esta semana</p>
+              <p className="p-6 text-sm text-gray-400 text-center">Sin pagos en este periodo</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
