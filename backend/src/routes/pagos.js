@@ -146,6 +146,80 @@ router.get('/por-fecha', auth, async (req, res) => {
   }
 })
 
+// GET /api/pagos/comentarios — pagos con observaciones del cobrador, para admin/supervisor
+router.get('/comentarios', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'No tienes permiso para ver comentarios de pagos' })
+    }
+
+    const filtroConComentario = { NOT: [{ observaciones: null }, { observaciones: '' }] }
+
+    const [no_leidos, comentarios] = await Promise.all([
+      prisma.pago.count({ where: { ...filtroConComentario, observacion_leida: false } }),
+      prisma.pago.findMany({
+        where: filtroConComentario,
+        include: {
+          cuenta: { select: { numero_cuenta: true, folio_cuenta: true } },
+          cliente: { select: { nombre: true } },
+          cobrador: { select: { nombre: true } }
+        },
+        orderBy: { fecha_pago: 'desc' },
+        take: 50
+      })
+    ])
+
+    res.json({
+      no_leidos,
+      comentarios: comentarios.map(p => ({
+        id_pago: p.id_pago,
+        id_cuenta: p.id_cuenta,
+        cliente: p.cliente.nombre,
+        numero_cuenta: p.cuenta?.numero_cuenta || p.cuenta?.folio_cuenta || null,
+        cobrador: p.cobrador?.nombre || '—',
+        monto: parseFloat(p.monto_pago),
+        observaciones: p.observaciones,
+        observacion_leida: p.observacion_leida,
+        fecha_pago: p.fecha_pago
+      }))
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener comentarios', detalle: error.message })
+  }
+})
+
+// PUT /api/pagos/comentarios/marcar-todos-leidos
+router.put('/comentarios/marcar-todos-leidos', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'No tienes permiso para esta acción' })
+    }
+    await prisma.pago.updateMany({
+      where: { NOT: [{ observaciones: null }, { observaciones: '' }], observacion_leida: false },
+      data: { observacion_leida: true }
+    })
+    res.json({ mensaje: 'Comentarios marcados como leídos' })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al marcar comentarios', detalle: error.message })
+  }
+})
+
+// PUT /api/pagos/:id/marcar-leido
+router.put('/:id/marcar-leido', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'No tienes permiso para esta acción' })
+    }
+    await prisma.pago.update({
+      where: { id_pago: parseInt(req.params.id) },
+      data: { observacion_leida: true }
+    })
+    res.json({ mensaje: 'Comentario marcado como leído' })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al marcar comentario', detalle: error.message })
+  }
+})
+
 // PUT /api/pagos/cuenta/:id/frecuencia — actualizar frecuencia y horario
 router.put('/cuenta/:id/frecuencia', auth, async (req, res) => {
   try {

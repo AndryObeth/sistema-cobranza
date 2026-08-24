@@ -318,6 +318,7 @@ model Pago {
   monto_aplicado_enganche_regado Decimal @default(0) @db.Decimal(10, 2)
   monto_aplicado_saldo         Decimal  @db.Decimal(10, 2)
   observaciones                String?
+  observacion_leida            Boolean  @default(false)
   origen_pago   OrigenPago @default(domicilio)
   created_at                   DateTime @default(now())
 

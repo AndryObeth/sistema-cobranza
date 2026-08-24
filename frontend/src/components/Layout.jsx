@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { queueCount, queueErrorCount, sincronizarCola } from '../utils/offlineQueue'
+import api from '../api'
 
 const menu = [
   { path: '/',          label: 'Dashboard',  icono: '📊', roles: ['administrador', 'supervisor_cobranza'] },
@@ -30,6 +31,7 @@ export default function Layout({ children }) {
   const [pendientes, setPendientes] = useState(queueCount())
   const [conErrores, setConErrores] = useState(queueErrorCount())
   const [toast, setToast]           = useState(null)
+  const [comentariosNoLeidos, setComentariosNoLeidos] = useState(0)
 
   const mostrarToast = (mensaje, tipo = 'info') => {
     setToast({ mensaje, tipo })
@@ -97,6 +99,26 @@ export default function Layout({ children }) {
       clearInterval(intervalo)
     }
   }, [])
+
+  // Comentarios de cobranza sin leer (badge en el menú)
+  useEffect(() => {
+    if (!['administrador', 'supervisor_cobranza'].includes(usuario?.rol)) return
+
+    const consultarComentarios = () => {
+      api.get('/pagos/comentarios').then(r => {
+        setComentariosNoLeidos(r.data.no_leidos || 0)
+      }).catch(() => {})
+    }
+
+    consultarComentarios()
+    const intervalo = setInterval(consultarComentarios, 60000)
+    window.addEventListener('comentarios-actualizados', consultarComentarios)
+
+    return () => {
+      clearInterval(intervalo)
+      window.removeEventListener('comentarios-actualizados', consultarComentarios)
+    }
+  }, [usuario?.rol])
 
   const handleLogout = () => {
     logout()
@@ -207,8 +229,24 @@ export default function Layout({ children }) {
                   : 'text-gray-300 hover:bg-gray-700',
               ].join(' ')}
             >
-              <span className="text-lg leading-none">{item.icono}</span>
-              {!colapsado && <span>{item.label}</span>}
+              <span className="relative text-lg leading-none">
+                {item.icono}
+                {item.path === '/' && comentariosNoLeidos > 0 && (
+                  <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[9px] leading-none min-w-[14px] h-[14px] rounded-full flex items-center justify-center px-0.5">
+                    {comentariosNoLeidos > 9 ? '9+' : comentariosNoLeidos}
+                  </span>
+                )}
+              </span>
+              {!colapsado && (
+                <span className="flex items-center gap-1.5">
+                  {item.label}
+                  {item.path === '/' && comentariosNoLeidos > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] leading-none min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-1">
+                      {comentariosNoLeidos > 9 ? '9+' : comentariosNoLeidos}
+                    </span>
+                  )}
+                </span>
+              )}
             </Link>
           ))}
         </nav>

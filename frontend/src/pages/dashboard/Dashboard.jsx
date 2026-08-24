@@ -5,6 +5,9 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
 
 const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+const fmtFechaHora = f => f
+  ? `${new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })} ${new Date(f).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })}`
+  : '—'
 
 // Fecha local (no UTC): toISOString() se adelanta un día a partir de las 6pm
 // hora México, porque México está en UTC-6 y ahí ya es el día siguiente en UTC.
@@ -19,6 +22,40 @@ export default function Dashboard() {
   const [resumen, setResumen] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [notifVencimientos, setNotifVencimientos] = useState(null)
+
+  // Comentarios de cobranza (observaciones dejadas al registrar pagos)
+  const [comentarios, setComentarios] = useState(null)
+  const [verComentarios, setVerComentarios] = useState(false)
+
+  const cargarComentarios = () => {
+    api.get('/pagos/comentarios').then(res => setComentarios(res.data)).catch(() => {})
+  }
+
+  const marcarComentarioLeido = async (id_pago) => {
+    setComentarios(prev => ({
+      no_leidos: Math.max(0, prev.no_leidos - 1),
+      comentarios: prev.comentarios.map(c => c.id_pago === id_pago ? { ...c, observacion_leida: true } : c)
+    }))
+    try {
+      await api.put(`/pagos/${id_pago}/marcar-leido`)
+      window.dispatchEvent(new Event('comentarios-actualizados'))
+    } catch {
+      cargarComentarios()
+    }
+  }
+
+  const marcarTodosLeidos = async () => {
+    setComentarios(prev => ({
+      no_leidos: 0,
+      comentarios: prev.comentarios.map(c => ({ ...c, observacion_leida: true }))
+    }))
+    try {
+      await api.put('/pagos/comentarios/marcar-todos-leidos')
+      window.dispatchEvent(new Event('comentarios-actualizados'))
+    } catch {
+      cargarComentarios()
+    }
+  }
 
   // Consulta de cobros por fecha
   const [verConsulta, setVerConsulta]         = useState(false)
@@ -81,6 +118,13 @@ export default function Dashboard() {
       })
       .catch(() => console.error('Error al cargar resumen'))
       .finally(() => setCargando(false))
+
+    if (esAdmin) {
+      api.get('/pagos/comentarios').then(res => {
+        setComentarios(res.data)
+        if (res.data.no_leidos > 0) setVerComentarios(true)
+      }).catch(() => {})
+    }
   }, [usuario?.rol])
 
   const fila1 = [
@@ -172,6 +216,75 @@ export default function Dashboard() {
             )}
           </div>
           <button onClick={() => setNotifVencimientos(null)} className="text-green-400 hover:text-green-600 text-lg leading-none shrink-0">×</button>
+        </div>
+      )}
+
+      {/* Comentarios de cobranza */}
+      {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && comentarios && (
+        <div className="mb-6 bg-white rounded-2xl shadow overflow-hidden">
+          <button
+            onClick={() => setVerComentarios(!verComentarios)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition"
+          >
+            <span className="font-semibold text-gray-700 text-sm flex items-center gap-2">
+              💬 Comentarios de cobranza
+              {comentarios.no_leidos > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold min-w-[20px] h-5 rounded-full flex items-center justify-center px-1.5">
+                  {comentarios.no_leidos}
+                </span>
+              )}
+            </span>
+            <span className="text-gray-400 text-xs">{verComentarios ? '▲ ocultar' : '▼ ver'}</span>
+          </button>
+
+          {verComentarios && (
+            <div className="px-5 pb-5 border-t pt-4">
+              {comentarios.comentarios.length === 0 ? (
+                <p className="text-center text-gray-400 text-sm py-2">Sin comentarios registrados</p>
+              ) : (
+                <>
+                  {comentarios.no_leidos > 0 && (
+                    <div className="flex justify-end mb-3">
+                      <button
+                        onClick={marcarTodosLeidos}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Marcar todos como leídos
+                      </button>
+                    </div>
+                  )}
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {comentarios.comentarios.map(c => (
+                      <div
+                        key={c.id_pago}
+                        className={`rounded-lg px-4 py-3 text-sm border ${c.observacion_leida ? 'bg-gray-50 border-gray-100' : 'bg-blue-50 border-blue-200'}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-800">
+                              {c.cliente} {c.numero_cuenta && <span className="text-blue-600 font-mono text-xs">· {c.numero_cuenta}</span>}
+                            </p>
+                            <p className="text-gray-600 mt-1">"{c.observaciones}"</p>
+                            <p className="text-gray-400 text-xs mt-1.5">
+                              {c.cobrador} · {fmt(c.monto)} · {fmtFechaHora(c.fecha_pago)}
+                            </p>
+                          </div>
+                          {!c.observacion_leida && (
+                            <button
+                              onClick={() => marcarComentarioLeido(c.id_pago)}
+                              className="shrink-0 text-xs bg-white border border-blue-300 text-blue-600 hover:bg-blue-100 px-2.5 py-1 rounded-lg font-medium"
+                            >
+                              ✓ Leído
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
