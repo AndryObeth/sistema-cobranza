@@ -319,6 +319,7 @@ model Pago {
   monto_aplicado_saldo         Decimal  @db.Decimal(10, 2)
   observaciones                String?
   observacion_leida            Boolean  @default(false)
+  idempotency_key               String?  @unique
   origen_pago   OrigenPago @default(domicilio)
   created_at                   DateTime @default(now())
 

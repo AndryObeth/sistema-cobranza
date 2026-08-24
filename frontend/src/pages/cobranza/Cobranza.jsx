@@ -918,7 +918,10 @@ export default function Cobranza() {
           id_cuenta: cuentaSeleccionada.id_cuenta,
           ...formPago,
           monto_pago: monto,
-          ...(pagoHistorico && fechaPagoHistorico && { fecha_pago: fechaPagoHistorico })
+          ...(pagoHistorico && fechaPagoHistorico && { fecha_pago: fechaPagoHistorico }),
+          // Misma clave en todos los reintentos (directo, cola offline, resincronización)
+          // para que una respuesta perdida por señal mala no duplique el pago en el servidor.
+          idempotency_key: crypto.randomUUID()
         }
         const datosVisitaExtra = (registrarVisitaTambien && formVisita.comentario.trim()) ? {
           id_cliente:       cuentaSeleccionada.id_cliente,

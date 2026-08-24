@@ -245,9 +245,30 @@ router.put('/cuenta/:id/frecuencia', auth, async (req, res) => {
 // POST /api/pagos — registrar pago
 router.post('/', auth, async (req, res) => {
   try {
-    const { id_cuenta, monto_pago, tipo_pago, origen_pago, observaciones, fecha_pago } = req.body
+    const { id_cuenta, monto_pago, tipo_pago, origen_pago, observaciones, fecha_pago, idempotency_key } = req.body
     const esAdmin = ['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)
     const fechaPago = esAdmin && fecha_pago ? new Date(fecha_pago + 'T12:00:00') : new Date()
+
+    // Idempotencia: con señal intermitente, el pago puede llegar y guardarse
+    // en el servidor pero la respuesta se pierde antes de llegar al cobrador;
+    // la app lo reintenta (o el usuario reintenta) creyendo que falló, y sin
+    // esto se duplica el pago. Si ya existe uno con esta misma clave, se
+    // devuelve el existente en vez de crear otro.
+    if (idempotency_key) {
+      const existente = await prisma.pago.findUnique({
+        where: { idempotency_key },
+        include: { comision_cobrador: true, cuenta: { select: { estado_cuenta: true } } }
+      })
+      if (existente) {
+        return res.status(200).json({
+          mensaje: 'Pago ya registrado',
+          pago: existente,
+          saldo_nuevo: parseFloat(existente.saldo_nuevo),
+          estado_nuevo: existente.cuenta?.estado_cuenta,
+          comision_cobrador: parseFloat(existente.comision_cobrador?.comision_generada || 0)
+        })
+      }
+    }
 
     const monto = parseFloat(monto_pago)
 
@@ -330,7 +351,8 @@ router.post('/', auth, async (req, res) => {
         aplica_a_enganche_regado,
         monto_aplicado_enganche_regado: monto_aplicado_enganche,
         monto_aplicado_saldo,
-        observaciones
+        observaciones,
+        idempotency_key: idempotency_key || null
       }
     })
 
@@ -397,6 +419,24 @@ router.post('/', auth, async (req, res) => {
       ...(esRecuperacion && { recuperacion_enganche: true })
     })
   } catch (error) {
+    // Dos intentos casi simultáneos con la misma idempotency_key (ej. reintento
+    // automático mientras el manual sigue en vuelo): el segundo choca con el
+    // índice único; se devuelve el pago que sí se creó en vez de un error 500.
+    if (error.code === 'P2002' && error.meta?.target?.includes('idempotency_key') && req.body.idempotency_key) {
+      const existente = await prisma.pago.findUnique({
+        where: { idempotency_key: req.body.idempotency_key },
+        include: { comision_cobrador: true, cuenta: { select: { estado_cuenta: true } } }
+      })
+      if (existente) {
+        return res.status(200).json({
+          mensaje: 'Pago ya registrado',
+          pago: existente,
+          saldo_nuevo: parseFloat(existente.saldo_nuevo),
+          estado_nuevo: existente.cuenta?.estado_cuenta,
+          comision_cobrador: parseFloat(existente.comision_cobrador?.comision_generada || 0)
+        })
+      }
+    }
     res.status(500).json({ error: 'Error al registrar pago', detalle: error.message })
   }
 })
