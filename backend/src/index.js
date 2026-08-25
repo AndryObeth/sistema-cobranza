@@ -3,6 +3,9 @@ const cors = require('cors')
 require('dotenv').config()
 
 const app = express()
+// Render está detrás de un proxy inverso; sin esto, Express no puede leer
+// la IP real del cliente desde X-Forwarded-For (necesario para el rate limit de login).
+app.set('trust proxy', 1)
 app.use(cors())
 app.use(express.json())
 

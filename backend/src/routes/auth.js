@@ -2,11 +2,21 @@ const express = require('express')
 const router = express.Router()
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
+const rateLimit = require('express-rate-limit')
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
+// Máximo 10 intentos de login por IP cada 15 minutos, para frenar fuerza bruta.
+const limitadorLogin = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos de inicio de sesión. Intenta de nuevo en unos minutos.' }
+})
+
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', limitadorLogin, async (req, res) => {
   try {
     const { usuario, contrasena } = req.body
 
