@@ -928,6 +928,7 @@ export default function Cobranza() {
           id_cuenta:        cuentaSeleccionada.id_cuenta,
           tipo_seguimiento: 'visita',
           comentario:       formVisita.comentario.trim(),
+          idempotency_key:  crypto.randomUUID()
         } : null
 
         const encolarPagoYSalir = () => {
@@ -1056,6 +1057,7 @@ export default function Cobranza() {
           tipo_seguimiento: formVisita.tipo_seguimiento,
           comentario:       formVisita.comentario || null,
           fecha_programada: formVisita.fecha_programada || null,
+          idempotency_key:  crypto.randomUUID()
         }
 
         const encolarVisitaYSalir = () => {

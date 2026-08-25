@@ -357,6 +357,7 @@ model SeguimientoCliente {
   fecha_programada  DateTime?
   tipo_seguimiento TipoSeguimiento
   comentario      String?
+  idempotency_key String?  @unique
 
   // Relaciones
   cliente Cliente @relation(fields: [id_cliente], references: [id_cliente])

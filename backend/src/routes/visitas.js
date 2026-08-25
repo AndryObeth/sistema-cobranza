@@ -7,7 +7,17 @@ const prisma = new PrismaClient()
 // POST /api/visitas — registrar visita/seguimiento
 router.post('/', auth, async (req, res) => {
   try {
-    const { id_cliente, id_cuenta, tipo_seguimiento, comentario, fecha_programada } = req.body
+    const { id_cliente, id_cuenta, tipo_seguimiento, comentario, fecha_programada, idempotency_key } = req.body
+
+    // Idempotencia: misma razón que en /pagos — con señal intermitente la
+    // visita puede guardarse pero la respuesta perderse, y el reintento la duplica.
+    if (idempotency_key) {
+      const existente = await prisma.seguimientoCliente.findUnique({
+        where: { idempotency_key },
+        include: { usuario: { select: { nombre: true, rol: true } }, cliente: { select: { nombre: true } } }
+      })
+      if (existente) return res.status(200).json(existente)
+    }
 
     const visita = await prisma.seguimientoCliente.create({
       data: {
@@ -16,7 +26,8 @@ router.post('/', auth, async (req, res) => {
         id_usuario: req.usuario.id,
         tipo_seguimiento,
         comentario: comentario || null,
-        fecha_programada: fecha_programada ? new Date(fecha_programada) : null
+        fecha_programada: fecha_programada ? new Date(fecha_programada) : null,
+        idempotency_key: idempotency_key || null
       },
       include: {
         usuario: { select: { nombre: true, rol: true } },
@@ -26,6 +37,13 @@ router.post('/', auth, async (req, res) => {
 
     res.status(201).json(visita)
   } catch (error) {
+    if (error.code === 'P2002' && error.meta?.target?.includes('idempotency_key') && req.body.idempotency_key) {
+      const existente = await prisma.seguimientoCliente.findUnique({
+        where: { idempotency_key: req.body.idempotency_key },
+        include: { usuario: { select: { nombre: true, rol: true } }, cliente: { select: { nombre: true } } }
+      })
+      if (existente) return res.status(200).json(existente)
+    }
     res.status(500).json({ error: 'Error al registrar visita', detalle: error.message })
   }
 })
