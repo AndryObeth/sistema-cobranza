@@ -15,7 +15,10 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401 || err.response?.status === 403) {
+    // Un 401 del propio login es "contraseña incorrecta", no "sesión expirada"
+    // (no hay sesión que expirar) — no debe redirigir y pisar ese mensaje.
+    const esLogin = err.config?.url?.includes('/auth/login')
+    if (!esLogin && (err.response?.status === 401 || err.response?.status === 403)) {
       localStorage.removeItem('token')
       localStorage.removeItem('usuario')
       window.location.href = '/login?sesion=expirada'
