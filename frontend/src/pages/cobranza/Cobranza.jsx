@@ -889,6 +889,32 @@ export default function Cobranza() {
     ventana.document.close()
   }
 
+  // Reimpresión de un ticket ya registrado — admin/supervisor, por si al
+  // cobrador se le olvidó imprimirlo o compartirlo en el momento.
+  const reimprimirTicket = (p) => {
+    try {
+      generarTicket({
+        id_pago: p.id_pago,
+        fecha_pago: p.fecha_pago,
+        monto_pago: p.monto_pago,
+        saldo_anterior: p.saldo_anterior,
+        saldo_nuevo: p.saldo_nuevo,
+        tipo_pago: p.tipo_pago,
+        origen_pago: p.origen_pago,
+        cliente_nombre: cuentaDetalle.cliente?.nombre,
+        numero_expediente: cuentaDetalle.cliente?.numero_expediente,
+        numero_cuenta: cuentaDetalle.numero_cuenta,
+        folio_cuenta: cuentaDetalle.folio_cuenta,
+        plan_actual: cuentaDetalle.plan_actual,
+        cobrador_nombre: p.cobrador?.nombre || '—',
+        precio_original_total: cuentaDetalle.venta?.precio_original_total,
+        precio_final_total: cuentaDetalle.venta?.precio_final_total,
+      })
+    } catch {
+      alert('El navegador bloqueó la ventana emergente. Habilítala para reimprimir el ticket.')
+    }
+  }
+
   const liquidarCuenta = () => {
     setFormPago(prev => ({
       ...prev,
@@ -3265,6 +3291,15 @@ export default function Cobranza() {
                             <div className="text-right">
                               <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
                               <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
+                              {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && (
+                                <button
+                                  type="button"
+                                  onClick={() => reimprimirTicket(p)}
+                                  className="text-blue-600 hover:text-blue-800 text-xs mt-1"
+                                >
+                                  🖨️ Reimprimir
+                                </button>
+                              )}
                             </div>
                           </div>
                         )
