@@ -21,6 +21,67 @@ const ordenarPorNumeroCuenta = (detalle) => {
   })
 }
 
+// PDF de un corte (vía ventana de impresión) — reutilizable tanto para el
+// periodo actual en pantalla como para cualquier corte ya cerrado del historial.
+const exportarPdfCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCobrado, totalComisiones, cantidadPagos, detalle }) => {
+  const filas = ordenarPorNumeroCuenta(detalle).map(p => `
+    <tr>
+      <td>${p.cliente}</td>
+      <td>${p.numero_cuenta || '—'}</td>
+      <td class="right">${fmt(p.monto)}</td>
+      <td class="right">${fmt(p.saldo_nuevo)}</td>
+      <td>${fmtFechaHora(p.fecha_pago)}</td>
+      <td class="cap">${p.origen_pago}</td>
+    </tr>
+  `).join('')
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Corte ${nombreCobrador}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color:#1f2937; }
+  h1 { font-size: 18px; margin-bottom:2px; }
+  .sub { color:#6b7280; font-size:12px; margin-bottom:16px; }
+  .resumen { display:flex; gap:16px; margin-bottom:20px; }
+  .card { border:1px solid #e5e7eb; border-radius:8px; padding:12px 16px; flex:1; }
+  .card .label { font-size:11px; color:#6b7280; }
+  .card .valor { font-size:20px; font-weight:bold; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; background:#f9fafb; padding:8px; border-bottom:1px solid #e5e7eb; text-transform:uppercase; font-size:10px; color:#6b7280; }
+  td { padding:8px; border-bottom:1px solid #f3f4f6; }
+  .right { text-align:right; }
+  .cap { text-transform:capitalize; }
+  tfoot td { font-weight:bold; border-top:2px solid #e5e7eb; }
+  .btn-imprimir { margin-top:20px; padding:10px 20px; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:14px; }
+  @media print { .btn-imprimir { display:none; } }
+</style>
+</head>
+<body>
+  <h1>Corte de cobrador — ${nombreCobrador}</h1>
+  <p class="sub">Periodo: ${fmtFecha(semanaInicio)} – ${fmtFecha(semanaFin)} · Novedades Cancún</p>
+  <div class="resumen">
+    <div class="card"><div class="label">Total cobrado</div><div class="valor">${fmt(totalCobrado)}</div></div>
+    <div class="card"><div class="label">Comisión (12%)</div><div class="valor" style="color:#16a34a">${fmt(totalComisiones)}</div></div>
+    <div class="card"><div class="label">Cantidad de pagos</div><div class="valor" style="color:#2563eb">${cantidadPagos}</div></div>
+  </div>
+  <table>
+    <thead><tr><th>Cliente</th><th>No. cuenta</th><th class="right">Monto</th><th class="right">Saldo actual</th><th>Fecha y hora</th><th>Origen</th></tr></thead>
+    <tbody>${filas}</tbody>
+    <tfoot><tr><td>Total</td><td></td><td class="right">${fmt(totalCobrado)}</td><td></td><td colspan="2"></td></tr></tfoot>
+  </table>
+  <button class="btn-imprimir" onclick="window.print()">Imprimir / Guardar como PDF</button>
+  <script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>`
+
+  const ventana = window.open('', '_blank', 'width=900,height=700')
+  if (!ventana) { alert('El navegador bloqueó la ventana emergente. Habilítala para exportar el PDF.'); return }
+  ventana.document.write(html)
+  ventana.document.close()
+}
+
 // ─── badge estado ────────────────────────────────
 function BadgeEstado({ estado }) {
   const colores = {
@@ -195,62 +256,42 @@ function TabCobrador({ usuario }) {
       ? usuario?.nombre
       : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || '')
 
-    const filas = ordenarPorNumeroCuenta(resumen.detalle).map(p => `
-      <tr>
-        <td>${p.cliente}</td>
-        <td>${p.numero_cuenta || '—'}</td>
-        <td class="right">${fmt(p.monto)}</td>
-        <td class="right">${fmt(p.saldo_nuevo)}</td>
-        <td>${fmtFechaHora(p.fecha_pago)}</td>
-        <td class="cap">${p.origen_pago}</td>
-      </tr>
-    `).join('')
+    exportarPdfCorte({
+      nombreCobrador,
+      semanaInicio: resumen.semana_inicio,
+      semanaFin: resumen.semana_fin,
+      totalCobrado: resumen.total_cobrado,
+      totalComisiones: resumen.total_comisiones,
+      cantidadPagos: resumen.cantidad_pagos,
+      detalle: resumen.detalle,
+    })
+  }
 
-    const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Corte ${nombreCobrador}</title>
-<style>
-  body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color:#1f2937; }
-  h1 { font-size: 18px; margin-bottom:2px; }
-  .sub { color:#6b7280; font-size:12px; margin-bottom:16px; }
-  .resumen { display:flex; gap:16px; margin-bottom:20px; }
-  .card { border:1px solid #e5e7eb; border-radius:8px; padding:12px 16px; flex:1; }
-  .card .label { font-size:11px; color:#6b7280; }
-  .card .valor { font-size:20px; font-weight:bold; }
-  table { width:100%; border-collapse:collapse; font-size:12px; }
-  th { text-align:left; background:#f9fafb; padding:8px; border-bottom:1px solid #e5e7eb; text-transform:uppercase; font-size:10px; color:#6b7280; }
-  td { padding:8px; border-bottom:1px solid #f3f4f6; }
-  .right { text-align:right; }
-  .cap { text-transform:capitalize; }
-  tfoot td { font-weight:bold; border-top:2px solid #e5e7eb; }
-  .btn-imprimir { margin-top:20px; padding:10px 20px; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:14px; }
-  @media print { .btn-imprimir { display:none; } }
-</style>
-</head>
-<body>
-  <h1>Corte de cobrador — ${nombreCobrador}</h1>
-  <p class="sub">Periodo: ${fmtFecha(resumen.semana_inicio)} – ${fmtFecha(resumen.semana_fin)} · Novedades Cancún</p>
-  <div class="resumen">
-    <div class="card"><div class="label">Total cobrado</div><div class="valor">${fmt(resumen.total_cobrado)}</div></div>
-    <div class="card"><div class="label">Comisión (12%)</div><div class="valor" style="color:#16a34a">${fmt(resumen.total_comisiones)}</div></div>
-    <div class="card"><div class="label">Cantidad de pagos</div><div class="valor" style="color:#2563eb">${resumen.cantidad_pagos}</div></div>
-  </div>
-  <table>
-    <thead><tr><th>Cliente</th><th>No. cuenta</th><th class="right">Monto</th><th class="right">Saldo actual</th><th>Fecha y hora</th><th>Origen</th></tr></thead>
-    <tbody>${filas}</tbody>
-    <tfoot><tr><td>Total</td><td></td><td class="right">${fmt(resumen.total_cobrado)}</td><td></td><td colspan="2"></td></tr></tfoot>
-  </table>
-  <button class="btn-imprimir" onclick="window.print()">Imprimir / Guardar como PDF</button>
-  <script>window.onload = function(){ window.print(); }</script>
-</body>
-</html>`
+  const descargarCorteHistorial = (corte) => {
+    const nombreCobrador = esCobrador
+      ? usuario?.nombre
+      : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || corte.cobrador?.nombre || '')
 
-    const ventana = window.open('', '_blank', 'width=900,height=700')
-    if (!ventana) { alert('El navegador bloqueó la ventana emergente. Habilítala para exportar el PDF.'); return }
-    ventana.document.write(html)
-    ventana.document.close()
+    const detalle = corte.detalles.map(d => ({
+      id_pago: d.id_pago,
+      cliente: d.pago?.cliente?.nombre || '—',
+      numero_cuenta: d.pago?.cuenta?.numero_cuenta || d.pago?.cuenta?.folio_cuenta || null,
+      monto: parseFloat(d.monto_pago),
+      saldo_nuevo: parseFloat(d.pago?.saldo_nuevo || 0),
+      fecha_pago: d.pago?.fecha_pago,
+      origen_pago: d.pago?.origen_pago || '—',
+    }))
+    const totalComisiones = corte.detalles.reduce((s, d) => s + parseFloat(d.comision_generada), 0)
+
+    exportarPdfCorte({
+      nombreCobrador,
+      semanaInicio: corte.fecha_inicio,
+      semanaFin: corte.fecha_fin,
+      totalCobrado: corte.total_cobrado,
+      totalComisiones,
+      cantidadPagos: corte.detalles.length,
+      detalle,
+    })
   }
 
   return (
@@ -408,6 +449,7 @@ function TabCobrador({ usuario }) {
                       <th className="text-right px-4 py-3">Diferencia</th>
                       <th className="text-right px-4 py-3">Comisión</th>
                       <th className="text-left px-4 py-3">Estado</th>
+                      <th className="text-left px-4 py-3"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -423,6 +465,16 @@ function TabCobrador({ usuario }) {
                         </td>
                         <td className="px-4 py-3 text-right text-green-600">{fmt(c.comision_total)}</td>
                         <td className="px-4 py-3"><BadgeEstado estado={c.estado_corte} /></td>
+                        <td className="px-4 py-3">
+                          {c.detalles?.length > 0 && (
+                            <button
+                              onClick={() => descargarCorteHistorial(c)}
+                              className="text-blue-600 hover:text-blue-800 text-xs whitespace-nowrap"
+                            >
+                              📄 Descargar
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

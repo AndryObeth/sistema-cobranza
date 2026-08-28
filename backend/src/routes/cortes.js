@@ -50,7 +50,8 @@ router.get('/cobrador/resumen/:id_cobrador', auth, async (req, res) => {
     const pagos = await prisma.pago.findMany({
       where: {
         id_cobrador,
-        fecha_pago: { gte: inicio, lte: fin }
+        fecha_pago: { gte: inicio, lte: fin },
+        detalles_corte: { none: {} } // ya incluido en un corte cerrado: no se vuelve a mostrar
       },
       include: {
         cliente: { select: { nombre: true } },
@@ -100,10 +101,15 @@ router.post('/cobrador/cerrar', auth, async (req, res) => {
         fecha_pago: {
           gte: new Date(fecha_inicio),
           lte: new Date(fecha_fin)
-        }
+        },
+        detalles_corte: { none: {} } // no volver a cerrar pagos ya incluidos en otro corte
       },
       include: { comision_cobrador: true }
     })
+
+    if (pagos.length === 0) {
+      return res.status(400).json({ error: 'No hay pagos nuevos para cerrar en este periodo (ya fueron incluidos en otro corte, o no hay pagos registrados).' })
+    }
 
     const total_cobrado = pagos.reduce((sum, p) => sum + parseFloat(p.monto_pago), 0)
     const comision_total = pagos.reduce(
@@ -147,7 +153,18 @@ router.get('/cobrador/historial/:id_cobrador', auth, async (req, res) => {
     const cortes = await prisma.corteCobrador.findMany({
       where: { id_cobrador },
       include: {
-        cobrador: { select: { nombre: true } }
+        cobrador: { select: { nombre: true } },
+        detalles: {
+          include: {
+            pago: {
+              select: {
+                fecha_pago: true, origen_pago: true, saldo_nuevo: true,
+                cliente: { select: { nombre: true } },
+                cuenta: { select: { numero_cuenta: true, folio_cuenta: true } }
+              }
+            }
+          }
+        }
       },
       orderBy: { created_at: 'desc' }
     })
