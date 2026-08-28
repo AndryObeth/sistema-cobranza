@@ -1793,7 +1793,13 @@ export default function Cobranza() {
                               >#{pos + 1}</button>
                             )
                           )}
-                          {c.cliente?.nombre}
+                          <button
+                            type="button"
+                            onClick={() => abrirDetalle(c)}
+                            className="hover:underline text-left"
+                          >
+                            {c.cliente?.nombre}
+                          </button>
                           {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500 ml-1 font-normal">⚠️</span>}
                         </p>
                         {c.numero_cuenta
@@ -1874,20 +1880,20 @@ export default function Cobranza() {
                       {esVisitado ? '✓ Visitado' : 'Marcar visitado'}
                     </button>
                   )}
-                  <button
-                    onClick={() => abrirDetalle(c)}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-sm font-semibold transition"
-                  >
-                    Ver detalle
-                  </button>
                   {!modoCobranza && (
                     <button
-                      onClick={() => abrirModal(c)}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition"
+                      onClick={() => abrirDetalle(c)}
+                      className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl text-sm font-semibold transition"
                     >
-                      Registrar pago
+                      Ver detalle
                     </button>
                   )}
+                  <button
+                    onClick={() => abrirModal(c)}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition"
+                  >
+                    Registrar pago
+                  </button>
                 </div>
               </div>
             )
@@ -1987,7 +1993,11 @@ export default function Cobranza() {
                       )
                     })()}
                     <td className="px-6 py-4">
-                      <p className={`font-medium ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>{c.cliente?.nombre}</p>
+                      <p className={`font-medium ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>
+                        <button type="button" onClick={() => abrirDetalle(c)} className="hover:underline text-left">
+                          {c.cliente?.nombre}
+                        </button>
+                      </p>
                       {c.cliente?.colonia && <p className="text-xs text-gray-400">{c.cliente.colonia}</p>}
                       {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500">⚠️ Sin ubicación</span>}
                       {estadoSemanas(c.semanas_atraso)}
@@ -2055,20 +2065,20 @@ export default function Cobranza() {
                             )}
                           </>
                         )}
-                        <button
-                          onClick={() => abrirDetalle(c)}
-                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition"
-                        >
-                          Ver detalle
-                        </button>
                         {!modoCobranza && (
                           <button
-                            onClick={() => abrirModal(c)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                            onClick={() => abrirDetalle(c)}
+                            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition"
                           >
-                            Registrar pago
+                            Ver detalle
                           </button>
                         )}
+                        <button
+                          onClick={() => abrirModal(c)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                        >
+                          Registrar pago
+                        </button>
                       </div>
                     </td>
                   </tr>
