@@ -1793,13 +1793,14 @@ export default function Cobranza() {
                               >#{pos + 1}</button>
                             )
                           )}
-                          <button
-                            type="button"
+                          <span
+                            role="button"
+                            tabIndex={0}
                             onClick={() => abrirDetalle(c)}
-                            className="hover:underline text-left"
+                            className="hover:underline cursor-pointer"
                           >
                             {c.cliente?.nombre}
-                          </button>
+                          </span>
                           {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500 ml-1 font-normal">⚠️</span>}
                         </p>
                         {c.numero_cuenta
@@ -1994,9 +1995,9 @@ export default function Cobranza() {
                     })()}
                     <td className="px-6 py-4">
                       <p className={`font-medium ${esVisitado ? 'text-green-800' : 'text-gray-800'}`}>
-                        <button type="button" onClick={() => abrirDetalle(c)} className="hover:underline text-left">
+                        <span role="button" tabIndex={0} onClick={() => abrirDetalle(c)} className="hover:underline cursor-pointer">
                           {c.cliente?.nombre}
-                        </button>
+                        </span>
                       </p>
                       {c.cliente?.colonia && <p className="text-xs text-gray-400">{c.cliente.colonia}</p>}
                       {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500">⚠️ Sin ubicación</span>}
