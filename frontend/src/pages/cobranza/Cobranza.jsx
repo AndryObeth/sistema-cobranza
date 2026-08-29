@@ -2283,7 +2283,7 @@ export default function Cobranza() {
                       Plan actual: {LABEL_PLAN[cuentaSeleccionada.plan_actual]}
                     </p>
                   </div>
-                  {usuario?.rol === 'administrador' && (
+                  {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && (
                     <button type="button" onClick={abrirCambiarPlan}
                       className="shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition min-h-[44px]">
                       Cambiar plan
@@ -2312,7 +2312,7 @@ export default function Cobranza() {
               {/* Acciones admin: Fusionar y Cancelar */}
               {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && (
                 <div className="mt-3 flex justify-end gap-2">
-                  {usuario?.rol === 'administrador' && (
+                  {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && (
                     <button
                       type="button"
                       onClick={abrirFusion}
@@ -2571,8 +2571,8 @@ export default function Cobranza() {
                     </div>
                   </div>
 
-                  {/* Pago histórico — solo administrador */}
-                  {usuario?.rol === 'administrador' && (
+                  {/* Pago histórico — admin/supervisor */}
+                  {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && (
                     <div className="border border-amber-200 rounded-xl overflow-hidden bg-amber-50">
                       <label className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-amber-100 transition">
                         <input

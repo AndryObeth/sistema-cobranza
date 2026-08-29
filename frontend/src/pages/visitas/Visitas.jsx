@@ -73,7 +73,7 @@ const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFract
 
 export default function Visitas() {
   const { usuario } = useAuth()
-  const esAdmin = usuario?.rol === 'administrador'
+  const esAdmin = ['administrador', 'supervisor_cobranza'].includes(usuario?.rol)
 
   const [tab, setTab] = useState('calendario')
   const [visitas, setVisitas] = useState([])

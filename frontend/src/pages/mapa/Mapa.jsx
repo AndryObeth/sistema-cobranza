@@ -195,7 +195,7 @@ export default function Mapa() {
     mostrarToast('Foto actualizada correctamente')
   }
 
-  const puedeEditar = usuario?.rol === 'administrador' || usuario?.rol === 'jefe_camioneta'
+  const puedeEditar = ['administrador', 'supervisor_cobranza', 'jefe_camioneta'].includes(usuario?.rol)
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_API_KEY,

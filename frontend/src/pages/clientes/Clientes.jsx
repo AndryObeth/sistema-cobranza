@@ -86,7 +86,7 @@ function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
   const [tab, setTab] = useState('datos')
   const [subiendoFoto, setSubiendoFoto] = useState(false)
 
-  const puedeEditar = usuario?.rol === 'administrador' || usuario?.rol === 'jefe_camioneta'
+  const puedeEditar = ['administrador', 'supervisor_cobranza', 'jefe_camioneta'].includes(usuario?.rol)
 
   const handleFotoUpload = async (e) => {
     const file = e.target.files[0]
@@ -340,7 +340,7 @@ const FORM_VACIO = {
 // ─── Página principal ────────────────────────────
 export default function Clientes() {
   const { usuario } = useAuth()
-  const esAdmin = usuario?.rol === 'administrador'
+  const esAdmin = ['administrador', 'supervisor_cobranza'].includes(usuario?.rol)
 
   const [clientes, setClientes]             = useState([])
   const [filtroExp, setFiltroExp]           = useState('')

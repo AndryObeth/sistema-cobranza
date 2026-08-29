@@ -15,6 +15,9 @@ export default function Ventas() {
   const esAdmin = usuario?.rol === 'administrador'
   const esSecretaria = usuario?.rol === 'secretaria'
   const puedeAsignar = esAdmin || esSecretaria
+  // Editar venta: el backend (PUT /ventas/:id) ya permite admin y supervisor_cobranza;
+  // el override de precio más abajo sigue siendo exclusivo de administrador.
+  const puedeEditarVenta = ['administrador', 'supervisor_cobranza'].includes(usuario?.rol)
 
   const [ventas, setVentas] = useState([])
   const [clientes, setClientes] = useState([])
@@ -403,7 +406,7 @@ export default function Ventas() {
                 <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Precio</th>
                 <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Fecha</th>
                 <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Estatus</th>
-                {esAdmin && <th className="px-4 md:px-6 py-3"></th>}
+                {puedeEditarVenta && <th className="px-4 md:px-6 py-3"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -438,7 +441,7 @@ export default function Ventas() {
                         'bg-red-100 text-red-700'
                       }`}>{v.estatus_venta}</span>
                     </td>
-                    {esAdmin && (
+                    {puedeEditarVenta && (
                       <td className="px-4 md:px-6 py-4 text-right">
                         <button onClick={e => abrirEdicion(e, v)}
                           className="text-xs px-3 min-h-[44px] md:min-h-0 md:py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition font-medium">
