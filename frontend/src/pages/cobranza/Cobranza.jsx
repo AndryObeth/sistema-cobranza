@@ -121,10 +121,10 @@ export default function Cobranza() {
     try { return JSON.parse(localStorage.getItem(`cobranza_orden_manual_${claveOrdenDia}`)) ?? [] } catch { return [] }
   })
   const [editandoPosicion, setEditandoPosicion] = useState(null) // id_cuenta en edición
-  const [filtroEstado, setFiltroEstado] = useState('')
-  const [filtroRuta, setFiltroRuta] = useState('')
-  const [filtroMunicipio, setFiltroMunicipio] = useState('')
-  const [filtroColonia, setFiltroColonia] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState(() => localStorage.getItem('cobranza_filtro_estado') ?? '')
+  const [filtroRuta, setFiltroRuta] = useState(() => localStorage.getItem('cobranza_filtro_ruta') ?? '')
+  const [filtroMunicipio, setFiltroMunicipio] = useState(() => localStorage.getItem('cobranza_filtro_municipio') ?? '')
+  const [filtroColonia, setFiltroColonia] = useState(() => localStorage.getItem('cobranza_filtro_colonia') ?? '')
   // Modo cobranza — checklist (persistido en localStorage)
   const [modoCobranza, setModoCobranza] = useState(() => {
     try { return JSON.parse(localStorage.getItem('cobranza_modo')) ?? false } catch { return false }
@@ -135,7 +135,9 @@ export default function Cobranza() {
   const [soloPendientes, setSoloPendientes] = useState(() => {
     try { return JSON.parse(localStorage.getItem('cobranza_solo_pendientes')) ?? false } catch { return false }
   })
-  const [ocultosRuta, setOcultosRuta] = useState(new Set())
+  const [ocultosRuta, setOcultosRuta] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('cobranza_ocultos')) ?? []) } catch { return new Set() }
+  })
   // Organizar tarjetero — asignar día a cada cuenta manualmente
   const [modoTarjetero, setModoTarjetero] = useState(false)
   const [soloSinDia, setSoloSinDia] = useState(false)
@@ -144,6 +146,11 @@ export default function Cobranza() {
   useEffect(() => { localStorage.setItem('cobranza_visitados', JSON.stringify([...visitados])) }, [visitados])
   useEffect(() => { localStorage.setItem('cobranza_solo_pendientes', JSON.stringify(soloPendientes)) }, [soloPendientes])
   useEffect(() => { localStorage.setItem('cobranza_filtro_dia', JSON.stringify(filtroDia)) }, [filtroDia])
+  useEffect(() => { localStorage.setItem('cobranza_ocultos', JSON.stringify([...ocultosRuta])) }, [ocultosRuta])
+  useEffect(() => { localStorage.setItem('cobranza_filtro_estado', filtroEstado) }, [filtroEstado])
+  useEffect(() => { localStorage.setItem('cobranza_filtro_ruta', filtroRuta) }, [filtroRuta])
+  useEffect(() => { localStorage.setItem('cobranza_filtro_municipio', filtroMunicipio) }, [filtroMunicipio])
+  useEffect(() => { localStorage.setItem('cobranza_filtro_colonia', filtroColonia) }, [filtroColonia])
 
   const toggleVisitado = (id) => {
     setVisitados(prev => {
