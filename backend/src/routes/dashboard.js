@@ -33,7 +33,9 @@ router.get('/resumen', auth, async (req, res) => {
       }),
 
       prisma.pago.findMany({
-        where: { fecha_pago: { gte: hoy, lte: fin } },
+        // Ajustes administrativos (fusión/anexo de cuentas, enganche inicial
+        // al vender) no son cobranza real — no deben inflar "Cobrado hoy".
+        where: { fecha_pago: { gte: hoy, lte: fin }, tipo_pago: { notIn: ['pago_extra', 'enganche_inicial'] } },
         select: { monto_pago: true }
       }),
 

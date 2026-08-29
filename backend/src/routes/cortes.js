@@ -23,6 +23,11 @@ function finDiaMexico(fechaISO) {
   return new Date(fechaISO + 'T23:59:59.999-06:00')
 }
 
+// Ajustes administrativos que mueven saldo (fusión/anexo de cuentas, enganche
+// inicial registrado al vender) no son cobranza real de un cobrador en ruta —
+// no deben contar en sus totales de "cobrado" ni pagarle comisión.
+const TIPOS_PAGO_NO_COBRANZA = ['pago_extra', 'enganche_inicial']
+
 // Helper: inicio y fin de la semana actual en México (lunes–domingo)
 function semanaActual() {
   const hoyISO = fechaMexicoISO()
@@ -51,7 +56,8 @@ router.get('/cobrador/resumen/:id_cobrador', auth, async (req, res) => {
       where: {
         id_cobrador,
         fecha_pago: { gte: inicio, lte: fin },
-        detalles_corte: { none: {} } // ya incluido en un corte cerrado: no se vuelve a mostrar
+        detalles_corte: { none: {} }, // ya incluido en un corte cerrado: no se vuelve a mostrar
+        tipo_pago: { notIn: TIPOS_PAGO_NO_COBRANZA }
       },
       include: {
         cliente: { select: { nombre: true } },
@@ -102,7 +108,8 @@ router.post('/cobrador/cerrar', auth, async (req, res) => {
           gte: new Date(fecha_inicio),
           lte: new Date(fecha_fin)
         },
-        detalles_corte: { none: {} } // no volver a cerrar pagos ya incluidos en otro corte
+        detalles_corte: { none: {} }, // no volver a cerrar pagos ya incluidos en otro corte
+        tipo_pago: { notIn: TIPOS_PAGO_NO_COBRANZA }
       },
       include: { comision_cobrador: true }
     })

@@ -101,7 +101,9 @@ router.get('/por-fecha', auth, async (req, res) => {
     const inicio = new Date(fecha + 'T00:00:00.000-06:00')
     const fin    = new Date(fecha + 'T23:59:59.999-06:00')
 
-    const where = { fecha_pago: { gte: inicio, lte: fin } }
+    // Ajustes administrativos (fusión/anexo de cuentas, enganche inicial al
+    // vender) no son cobranza real — no deben aparecer en cobros por fecha.
+    const where = { fecha_pago: { gte: inicio, lte: fin }, tipo_pago: { notIn: ['pago_extra', 'enganche_inicial'] } }
     if (req.usuario.rol === 'cobrador') where.id_cobrador = req.usuario.id
 
     const pagos = await prisma.pago.findMany({

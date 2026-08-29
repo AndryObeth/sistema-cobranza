@@ -160,7 +160,7 @@ router.post('/', auth, async (req, res) => {
             monto_pago:           parseFloat(enganche_recibido_total),
             saldo_anterior:       parseFloat(precio_final_usado),
             saldo_nuevo:          saldoInicial,
-            tipo_pago:            'abono',
+            tipo_pago:            'enganche_inicial',
             monto_aplicado_saldo: parseFloat(enganche_recibido_total),
             observaciones:        'Enganche inicial',
             origen_pago:          'oficina',
