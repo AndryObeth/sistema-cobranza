@@ -368,6 +368,10 @@ export default function Cobranza() {
   const [buscandoGPSDet, setBuscandoGPSDet]           = useState(false)
   const [guardandoUbicDet, setGuardandoUbicDet]       = useState(false)
   const [exitoUbicDet, setExitoUbicDet]               = useState('')
+  const [mostrarDescuento, setMostrarDescuento]       = useState(false)
+  const [montoDescuento, setMontoDescuento]           = useState('')
+  const [motivoDescuento, setMotivoDescuento]         = useState('')
+  const [guardandoDescuento, setGuardandoDescuento]   = useState(false)
 
   const saveTimerRef = useRef(null)
 
@@ -652,6 +656,32 @@ export default function Cobranza() {
     setUbicPendDet(null)
     setUbicInputDet('')
     setExitoUbicDet('')
+    setMostrarDescuento(false)
+    setMontoDescuento('')
+    setMotivoDescuento('')
+  }
+
+  const aplicarDescuento = async () => {
+    const monto = parseFloat(montoDescuento)
+    if (!montoDescuento || monto <= 0) { alert('Ingresa un monto válido'); return }
+    if (!motivoDescuento.trim()) { alert('Indica el motivo del descuento'); return }
+    setGuardandoDescuento(true)
+    try {
+      await api.post(`/cuentas/${cuentaDetalle.id_cuenta}/descuento`, {
+        monto,
+        motivo: motivoDescuento.trim()
+      }, { timeout: 10000 })
+      const resCuenta = await api.get(`/pagos/cuenta/${cuentaDetalle.id_cuenta}`)
+      setCuentaDetalle(resCuenta.data)
+      setHistorialPagosDetalle(resCuenta.data.pagos || [])
+      setMostrarDescuento(false)
+      setMontoDescuento('')
+      setMotivoDescuento('')
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo aplicar el descuento')
+    } finally {
+      setGuardandoDescuento(false)
+    }
   }
 
   const usarGPSDetalle = () => {
@@ -3245,6 +3275,58 @@ export default function Cobranza() {
                     <span className="text-xs text-gray-500">Pago requerido: <span className="font-bold text-indigo-600">{fmt(calcPagoPeriodico(cuentaDetalle).monto)}{calcPagoPeriodico(cuentaDetalle).label}</span></span>
                     {badgeCumplimiento(cuentaDetalle)}
                   </div>
+
+                  {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && !['liquidada', 'cancelada'].includes(cuentaDetalle.estado_cuenta) && (
+                    <div className="mt-3">
+                      {!mostrarDescuento ? (
+                        <button
+                          type="button"
+                          onClick={() => setMostrarDescuento(true)}
+                          className="text-xs text-amber-700 border border-amber-300 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg font-medium"
+                        >
+                          💲 Aplicar descuento
+                        </button>
+                      ) : (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                          <p className="text-xs font-semibold text-amber-800">Aplicar descuento al saldo</p>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max={cuentaDetalle.saldo_actual}
+                            placeholder="Monto a descontar"
+                            value={montoDescuento}
+                            onChange={e => setMontoDescuento(e.target.value)}
+                            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Motivo (obligatorio)"
+                            value={motivoDescuento}
+                            onChange={e => setMotivoDescuento(e.target.value)}
+                            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => { setMostrarDescuento(false); setMontoDescuento(''); setMotivoDescuento('') }}
+                              className="flex-1 border border-gray-300 text-gray-600 py-1.5 rounded-lg text-xs"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={aplicarDescuento}
+                              disabled={guardandoDescuento}
+                              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
+                            >
+                              {guardandoDescuento ? 'Aplicando…' : 'Confirmar descuento'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Vendedor, jefe de grupo y atraso */}
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">

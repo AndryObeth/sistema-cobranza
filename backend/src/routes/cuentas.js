@@ -660,6 +660,86 @@ router.post('/:id/anexar', auth, async (req, res) => {
   }
 })
 
+// ── 7b. POST /api/cuentas/:id/descuento ──────────────────────────────────────
+// Condona parte del saldo (ej. descuento por promoción, buena voluntad) sin
+// que cuente como dinero cobrado — antes esto se hacía registrando un abono
+// "de mentiras" y explicando el descuento en observaciones.
+
+router.post('/:id/descuento', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'Solo el administrador puede aplicar descuentos' })
+    }
+
+    const id_cuenta = parseInt(req.params.id)
+    const { monto, motivo } = req.body
+    const montoDescuento = parseFloat(monto)
+
+    if (!montoDescuento || isNaN(montoDescuento) || montoDescuento <= 0) {
+      return res.status(400).json({ error: 'El monto debe ser mayor a cero' })
+    }
+    if (!motivo || !motivo.trim()) {
+      return res.status(400).json({ error: 'Se requiere el motivo del descuento' })
+    }
+
+    const cuenta = await prisma.cuenta.findUnique({ where: { id_cuenta } })
+    if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
+    if (['liquidada', 'cancelada'].includes(cuenta.estado_cuenta)) {
+      return res.status(400).json({ error: `Esta cuenta ya está ${cuenta.estado_cuenta}` })
+    }
+
+    const saldo_anterior = parseFloat(cuenta.saldo_actual)
+    if (montoDescuento > saldo_anterior) {
+      return res.status(400).json({
+        error: `El descuento ($${montoDescuento.toFixed(2)}) no puede ser mayor al saldo actual ($${saldo_anterior.toFixed(2)})`
+      })
+    }
+
+    const saldo_nuevo = parseFloat((saldo_anterior - montoDescuento).toFixed(2))
+    const nuevo_estado = saldo_nuevo === 0 ? 'liquidada' : cuenta.estado_cuenta
+
+    await prisma.$transaction(async (tx) => {
+      await tx.pago.create({
+        data: {
+          id_cuenta,
+          id_cliente:            cuenta.id_cliente,
+          id_cobrador:           req.usuario.id,
+          fecha_pago:            new Date(),
+          monto_pago:            montoDescuento,
+          saldo_anterior,
+          saldo_nuevo,
+          tipo_pago:             'descuento',
+          monto_aplicado_saldo:  montoDescuento,
+          observaciones:         motivo.trim(),
+          origen_pago:           'oficina',
+        }
+      })
+
+      await tx.cuenta.update({
+        where: { id_cuenta },
+        data: { saldo_actual: saldo_nuevo, estado_cuenta: nuevo_estado }
+      })
+
+      if (nuevo_estado === 'liquidada') {
+        await tx.venta.update({
+          where: { id_venta: cuenta.id_venta },
+          data: { estatus_venta: 'liquidada' }
+        })
+      }
+    })
+
+    res.json({
+      mensaje:        'Descuento aplicado correctamente',
+      saldo_anterior,
+      monto_descuento: montoDescuento,
+      saldo_nuevo,
+      estado_nuevo:   nuevo_estado,
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al aplicar descuento', detalle: error.message })
+  }
+})
+
 // ── 8. POST /api/cuentas/:id/cancelar ────────────────────────────────────────
 
 const MOTIVOS_CANCELACION = [

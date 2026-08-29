@@ -26,7 +26,7 @@ function finDiaMexico(fechaISO) {
 // Ajustes administrativos que mueven saldo (fusión/anexo de cuentas, enganche
 // inicial registrado al vender) no son cobranza real de un cobrador en ruta —
 // no deben contar en sus totales de "cobrado" ni pagarle comisión.
-const TIPOS_PAGO_NO_COBRANZA = ['pago_extra', 'enganche_inicial']
+const TIPOS_PAGO_NO_COBRANZA = ['pago_extra', 'enganche_inicial', 'descuento']
 
 // Helper: inicio y fin de la semana actual en México (lunes–domingo)
 function semanaActual() {

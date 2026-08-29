@@ -340,6 +340,7 @@ enum TipoPago {
   recuperacion_enganche
   pago_extra
   enganche_inicial
+  descuento
 }
 enum OrigenPago {
   domicilio

@@ -103,7 +103,7 @@ router.get('/por-fecha', auth, async (req, res) => {
 
     // Ajustes administrativos (fusión/anexo de cuentas, enganche inicial al
     // vender) no son cobranza real — no deben aparecer en cobros por fecha.
-    const where = { fecha_pago: { gte: inicio, lte: fin }, tipo_pago: { notIn: ['pago_extra', 'enganche_inicial'] } }
+    const where = { fecha_pago: { gte: inicio, lte: fin }, tipo_pago: { notIn: ['pago_extra', 'enganche_inicial', 'descuento'] } }
     if (req.usuario.rol === 'cobrador') where.id_cobrador = req.usuario.id
 
     const pagos = await prisma.pago.findMany({
