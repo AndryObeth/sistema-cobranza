@@ -155,7 +155,13 @@ router.get('/comentarios', auth, async (req, res) => {
       return res.status(403).json({ error: 'No tienes permiso para ver comentarios de pagos' })
     }
 
-    const filtroConComentario = { NOT: [{ observaciones: null }, { observaciones: '' }] }
+    // Ajustes administrativos (enganche inicial, fusión/anexo, descuento)
+    // siempre traen una observación automática — no son comentarios reales
+    // del cobrador en campo, solo generan ruido en este panel.
+    const filtroConComentario = {
+      NOT: [{ observaciones: null }, { observaciones: '' }],
+      tipo_pago: { notIn: ['enganche_inicial', 'pago_extra', 'descuento'] }
+    }
 
     const [no_leidos, comentarios] = await Promise.all([
       prisma.pago.count({ where: { ...filtroConComentario, observacion_leida: false } }),
