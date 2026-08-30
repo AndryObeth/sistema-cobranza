@@ -116,6 +116,13 @@ export async function sincronizarCola() {
 
   let sincronizados = 0
   let errores = 0
+  // Resultado de cada operación por id — NO se toca `queue`/localStorage
+  // directamente aquí, porque el usuario puede seguir encolando pagos
+  // nuevos (encolarPago, etc.) mientras este ciclo sigue en curso (cada
+  // envío puede tardar hasta 10s con señal mala). Guardar solo los
+  // resultados y fusionarlos al final contra la cola MÁS RECIENTE evita
+  // que un `saveQueue` con una foto vieja borre esas operaciones nuevas.
+  const resultados = {}
 
   for (const op of pendientes) {
     try {
@@ -137,29 +144,27 @@ export async function sincronizarCola() {
           await api.post(`/clientes/${idCliente}/ubicaciones`, payload, { timeout: 10000 })
         }
       }
-      // Marcar como sincronizado
-      const idx = queue.findIndex(q => q.id === op.id)
-      if (idx !== -1) {
-        queue[idx].sincronizado = true
-        queue[idx].error = null
-        queue[idx].errorEsDeRed = false
-      }
+      resultados[op.id] = { sincronizado: true, error: null, errorEsDeRed: false }
       sincronizados++
     } catch (err) {
-      const idx = queue.findIndex(q => q.id === op.id)
-      if (idx !== -1) {
-        // Sin err.response = fallo de red/tiempo agotado (se reintentará solo).
-        // Con err.response = el servidor lo rechazó de verdad (necesita revisión).
-        queue[idx].error = err.response?.data?.error || 'Error de red'
-        queue[idx].errorEsDeRed = !err.response
+      // Sin err.response = fallo de red/tiempo agotado (se reintentará solo).
+      // Con err.response = el servidor lo rechazó de verdad (necesita revisión).
+      resultados[op.id] = {
+        sincronizado: false,
+        error: err.response?.data?.error || 'Error de red',
+        errorEsDeRed: !err.response,
       }
       errores++
     }
   }
 
-  // Eliminar los ya sincronizados (mantener solo los con error para reintentar)
-  const nueva = queue.filter(op => !op.sincronizado)
-  saveQueue(nueva)
+  // Fusionar los resultados contra la cola actual (releída), no contra la
+  // foto de cuando empezó este ciclo — así no se pierde nada agregado mientras.
+  const actual = getQueue()
+  const actualizada = actual
+    .map(op => resultados[op.id] ? { ...op, ...resultados[op.id] } : op)
+    .filter(op => !op.sincronizado)
+  saveQueue(actualizada)
 
   return { sincronizados, errores }
 }
