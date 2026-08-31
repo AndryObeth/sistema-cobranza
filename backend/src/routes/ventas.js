@@ -188,7 +188,19 @@ router.post('/', auth, async (req, res) => {
         }
       }
 
-      return ventaCreada
+      // Releer con las mismas relaciones que GET /ventas, para que el
+      // frontend pueda insertarla directo en la lista sin tener que
+      // recargar todo (evita que "no aparezca hasta refrescar").
+      return tx.venta.findUnique({
+        where: { id_venta: ventaCreada.id_venta },
+        include: {
+          cliente: true,
+          vendedor: { select: { nombre: true } },
+          jefe_camioneta: { select: { nombre: true } },
+          detalles: true,
+          cuenta: { select: { numero_cuenta: true, folio_cuenta: true, id_cuenta: true, frecuencia_pago: true, estado_cuenta: true, observaciones: true } }
+        }
+      })
     })
 
     res.status(201).json({ mensaje: 'Venta registrada', venta })

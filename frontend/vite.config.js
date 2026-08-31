@@ -34,7 +34,10 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cuentas',
-              networkTimeoutSeconds: 5,
+              // Más margen que el resto: esta es la lista principal que se
+              // carga al entrar a Cobranza — con señal lenta (no mala) 5s no
+              // alcanzaba y mostraba la versión vieja hasta refrescar.
+              networkTimeoutSeconds: 10,
               expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 }, // 24h
               cacheableResponse: { statuses: [0, 200] },
             },
@@ -45,7 +48,7 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-clientes',
-              networkTimeoutSeconds: 5,
+              networkTimeoutSeconds: 10,
               expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 },
               cacheableResponse: { statuses: [0, 200] },
             },
@@ -70,7 +73,7 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-ventas',
-              networkTimeoutSeconds: 5,
+              networkTimeoutSeconds: 10,
               expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 },
               cacheableResponse: { statuses: [0, 200] },
             },

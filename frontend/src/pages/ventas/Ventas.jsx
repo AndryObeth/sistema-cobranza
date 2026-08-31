@@ -255,7 +255,10 @@ export default function Ventas() {
         }
       }
 
-      await api.post('/ventas', payload, { timeout: 15000 })
+      const res = await api.post('/ventas', payload, { timeout: 15000 })
+      // Mostrarla ya, sin esperar una nueva consulta que puede tardar/quedar
+      // en caché con señal lenta y hacer que "no aparezca hasta refrescar".
+      setVentas(prev => [res.data.venta, ...prev])
       cerrarModal()
       cargarDatos()
     } catch {
