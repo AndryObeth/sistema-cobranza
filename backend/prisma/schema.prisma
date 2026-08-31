@@ -189,6 +189,7 @@ model Venta {
   utilidad_vendedor_contado   Decimal  @default(0) @db.Decimal(10, 2)
   observaciones               String?
   estatus_venta               EstatusVenta @default(activa)
+  idempotency_key              String?  @unique
   created_at                  DateTime @default(now())
   updated_at                  DateTime @updatedAt
 

@@ -56,8 +56,23 @@ router.post('/', auth, async (req, res) => {
       numero_cuenta,
       saldo_inicial_override,
       detalles,
-      id_vendedor: id_vendedor_body
+      id_vendedor: id_vendedor_body,
+      idempotency_key
     } = req.body
+
+    // Idempotencia: con señal intermitente la venta puede llegar a guardarse
+    // pero la respuesta se pierde antes de confirmarle a quien la registró;
+    // reintenta creyendo que fallo y se triplica la venta. Misma proteccion
+    // que ya tiene /pagos y /visitas.
+    if (idempotency_key) {
+      const existente = await prisma.venta.findUnique({
+        where: { idempotency_key },
+        include: { detalles: true, cuenta: true }
+      })
+      if (existente) {
+        return res.status(200).json({ mensaje: 'Venta ya registrada', venta: existente })
+      }
+    }
 
     const esAdmin = ['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)
     const esSecretaria = req.usuario.rol === 'secretaria'
@@ -87,90 +102,108 @@ router.post('/', auth, async (req, res) => {
 
     const folio_venta = 'VTA-' + Date.now()
 
-    const venta = await prisma.venta.create({
-      data: {
-        folio_venta,
-        id_cliente,
-        id_vendedor: id_vendedor_final,
-        id_cobrador,
-        id_jefe_camioneta: id_jefe_camioneta ? parseInt(id_jefe_camioneta) : null,
-        ruta,
-        tipo_venta,
-        plan_venta,
-        fecha_venta: fecha_venta ? new Date(fecha_venta + 'T12:00:00') : new Date(),
-        precio_original_total,
-        precio_final_total: precio_final_usado,
-        enganche_recibido_total: enganche_recibido_total || 0,
-        enganche_objetivo_vendedor: enganche_objetivo,
-        enganche_para_vendedor,
-        enganche_regado,
-        sobreenganche,
-        monto_reportado_negocio: monto_reportado,
-        utilidad_vendedor_contado,
-        observaciones: observaciones_final,
-        estatus_venta: tipo_venta === 'contado' ? 'liquidada' : 'activa',
-        detalles: {
-          create: detalles
-        }
-      },
-      include: { detalles: true }
-    })
-
-    // Si es a plazos, crear la cuenta automáticamente
-    if (tipo_venta === 'plazo') {
-      const semanas = plan_venta === 'un_mes' ? 4
-        : plan_venta === 'dos_meses' ? 8
-        : plan_venta === 'tres_meses' ? 12
-        : 52
-
-      const saldoInicial = esAdmin && saldo_inicial_override != null
-        ? parseFloat(saldo_inicial_override)
-        : precio_final_usado - (enganche_recibido_total || 0)
-
-      const cuentaCreada = await prisma.cuenta.create({
+    // Venta + cuenta + pago de enganche en una sola transaccion: si la señal
+    // se corta a medias, no debe quedar una venta huerfana sin su cuenta.
+    const venta = await prisma.$transaction(async (tx) => {
+      const ventaCreada = await tx.venta.create({
         data: {
-          folio_cuenta: 'CTA-' + Date.now(),
-          numero_cuenta: numero_cuenta || null,
-          id_venta: venta.id_venta,
+          folio_venta,
           id_cliente,
-          plan_inicial: plan_venta,
-          plan_actual: plan_venta,
+          id_vendedor: id_vendedor_final,
+          id_cobrador,
+          id_jefe_camioneta: id_jefe_camioneta ? parseInt(id_jefe_camioneta) : null,
+          ruta,
+          tipo_venta,
+          plan_venta,
+          fecha_venta: fecha_venta ? new Date(fecha_venta + 'T12:00:00') : new Date(),
           precio_original_total,
-          precio_plan_actual: precio_final_usado,
-          abono_inicial: enganche_recibido_total || 0,
-          saldo_inicial: saldoInicial,
-          saldo_actual:  saldoInicial,
-          semanas_plazo: semanas,
-          fecha_limite: new Date(Date.now() + semanas * 7 * 24 * 60 * 60 * 1000),
-          frecuencia_pago:    frecuencia_pago    || 'semanal',
-          fecha_primer_cobro: fecha_primer_cobro ? new Date(fecha_primer_cobro + 'T12:00:00') : null,
-          horario_preferido:  horario_preferido  || null,
-          abono_semanal:      abono_semanal != null ? parseFloat(abono_semanal) : null
-        }
+          precio_final_total: precio_final_usado,
+          enganche_recibido_total: enganche_recibido_total || 0,
+          enganche_objetivo_vendedor: enganche_objetivo,
+          enganche_para_vendedor,
+          enganche_regado,
+          sobreenganche,
+          monto_reportado_negocio: monto_reportado,
+          utilidad_vendedor_contado,
+          observaciones: observaciones_final,
+          estatus_venta: tipo_venta === 'contado' ? 'liquidada' : 'activa',
+          idempotency_key: idempotency_key || null,
+          detalles: {
+            create: detalles
+          }
+        },
+        include: { detalles: true }
       })
 
-      // Registrar el enganche como primer pago visible en el historial
-      if ((enganche_recibido_total || 0) > 0) {
-        await prisma.pago.create({
+      // Si es a plazos, crear la cuenta automáticamente
+      if (tipo_venta === 'plazo') {
+        const semanas = plan_venta === 'un_mes' ? 4
+          : plan_venta === 'dos_meses' ? 8
+          : plan_venta === 'tres_meses' ? 12
+          : 52
+
+        const saldoInicial = esAdmin && saldo_inicial_override != null
+          ? parseFloat(saldo_inicial_override)
+          : precio_final_usado - (enganche_recibido_total || 0)
+
+        const cuentaCreada = await tx.cuenta.create({
           data: {
-            id_cuenta:            cuentaCreada.id_cuenta,
+            folio_cuenta: 'CTA-' + Date.now(),
+            numero_cuenta: numero_cuenta || null,
+            id_venta: ventaCreada.id_venta,
             id_cliente,
-            id_cobrador:          req.usuario.id,
-            fecha_pago:           fecha_venta ? new Date(fecha_venta + 'T12:00:00') : new Date(),
-            monto_pago:           parseFloat(enganche_recibido_total),
-            saldo_anterior:       parseFloat(precio_final_usado),
-            saldo_nuevo:          saldoInicial,
-            tipo_pago:            'enganche_inicial',
-            monto_aplicado_saldo: parseFloat(enganche_recibido_total),
-            observaciones:        'Enganche inicial',
-            origen_pago:          'oficina',
+            plan_inicial: plan_venta,
+            plan_actual: plan_venta,
+            precio_original_total,
+            precio_plan_actual: precio_final_usado,
+            abono_inicial: enganche_recibido_total || 0,
+            saldo_inicial: saldoInicial,
+            saldo_actual:  saldoInicial,
+            semanas_plazo: semanas,
+            fecha_limite: new Date(Date.now() + semanas * 7 * 24 * 60 * 60 * 1000),
+            frecuencia_pago:    frecuencia_pago    || 'semanal',
+            fecha_primer_cobro: fecha_primer_cobro ? new Date(fecha_primer_cobro + 'T12:00:00') : null,
+            horario_preferido:  horario_preferido  || null,
+            abono_semanal:      abono_semanal != null ? parseFloat(abono_semanal) : null
           }
         })
+
+        // Registrar el enganche como primer pago visible en el historial
+        if ((enganche_recibido_total || 0) > 0) {
+          await tx.pago.create({
+            data: {
+              id_cuenta:            cuentaCreada.id_cuenta,
+              id_cliente,
+              id_cobrador:          req.usuario.id,
+              fecha_pago:           fecha_venta ? new Date(fecha_venta + 'T12:00:00') : new Date(),
+              monto_pago:           parseFloat(enganche_recibido_total),
+              saldo_anterior:       parseFloat(precio_final_usado),
+              saldo_nuevo:          saldoInicial,
+              tipo_pago:            'enganche_inicial',
+              monto_aplicado_saldo: parseFloat(enganche_recibido_total),
+              observaciones:        'Enganche inicial',
+              origen_pago:          'oficina',
+            }
+          })
+        }
       }
-    }
+
+      return ventaCreada
+    })
 
     res.status(201).json({ mensaje: 'Venta registrada', venta })
   } catch (error) {
+    // Dos reintentos casi simultaneos con la misma idempotency_key chocan
+    // contra el indice unico; se devuelve la venta que si se creo.
+    if (error.code === 'P2002' && error.meta?.target?.includes('idempotency_key') && req.body.idempotency_key) {
+      const existente = await prisma.venta.findUnique({
+        where: { idempotency_key: req.body.idempotency_key },
+        include: { detalles: true, cuenta: true }
+      })
+      if (existente) {
+        return res.status(200).json({ mensaje: 'Venta ya registrada', venta: existente })
+      }
+    }
     res.status(500).json({ error: 'Error al registrar venta', detalle: error.message })
   }
 })

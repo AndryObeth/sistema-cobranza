@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -25,6 +25,9 @@ export default function Ventas() {
   const [modalAbierto, setModalAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  // Misma clave en todos los reintentos manuales de un mismo formulario
+  // abierto, para que una respuesta perdida por señal mala no triplique la venta.
+  const idempotencyKeyVentaRef = useRef(null)
   const [mostrarLiquidadas, setMostrarLiquidadas] = useState(false)
   const [busqueda, setBusqueda] = useState('')
 
@@ -196,6 +199,7 @@ export default function Ventas() {
     setSaldoInicialOverride('')
     setError('')
     setErrorModal('')
+    idempotencyKeyVentaRef.current = null
   }
 
   const handleGuardar = async (e) => {
@@ -216,6 +220,8 @@ export default function Ventas() {
         subtotal_final: parseFloat(p.precio_original) * p.cantidad,
       }))
 
+      if (!idempotencyKeyVentaRef.current) idempotencyKeyVentaRef.current = crypto.randomUUID()
+
       const payload = {
         id_cliente: parseInt(form.id_cliente),
         tipo_venta: form.tipo_venta,
@@ -225,7 +231,8 @@ export default function Ventas() {
         enganche_recibido_total: parseFloat(form.enganche_recibido_total) || 0,
         observaciones: form.observaciones,
         fecha_venta: form.fecha_venta,
-        detalles
+        detalles,
+        idempotency_key: idempotencyKeyVentaRef.current
       }
 
       // Asignación de vendedor (solo admin/secretaria pueden sobreescribir)
