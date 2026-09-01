@@ -43,6 +43,21 @@ export default defineConfig({
             },
           },
           {
+            // GET /api/clientes/:id/ubicaciones — debe ir ANTES que la regla
+            // general de /api/clientes (workbox usa la primera que haga match).
+            // Antes compartía caché con la lista completa (maxEntries:1) y se
+            // borraban entre sí — un cliente nuevo evictaba al anterior, así
+            // que con mala señal "no cargaba" si no era el último visitado.
+            urlPattern: ({ url }) => /\/api\/clientes\/\d+\/ubicaciones/.test(url.pathname),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-ubicaciones-cliente',
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
             // GET /api/clientes
             urlPattern: ({ url }) => url.pathname.includes('/api/clientes') && !url.pathname.includes('/importar'),
             handler: 'NetworkFirst',

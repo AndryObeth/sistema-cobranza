@@ -358,9 +358,18 @@ router.get('/:id/ubicaciones', auth, async (req, res) => {
 // POST /api/clientes/:id/ubicaciones
 router.post('/:id/ubicaciones', auth, async (req, res) => {
   try {
-    const { etiqueta, nombre_contacto, descripcion, latitud, longitud, plus_code, es_principal } = req.body
+    const { etiqueta, nombre_contacto, descripcion, latitud, longitud, plus_code, es_principal, idempotency_key } = req.body
     if (!etiqueta?.trim()) return res.status(400).json({ error: 'La etiqueta es requerida' })
     const idCliente = parseInt(req.params.id)
+
+    // Idempotencia: misma razón que pagos/visitas/ventas — con señal
+    // intermitente la ubicación puede guardarse pero la confirmación se
+    // pierde, y el reintento la duplicaba.
+    if (idempotency_key) {
+      const existente = await prisma.ubicacionCliente.findUnique({ where: { idempotency_key } })
+      if (existente) return res.status(200).json(existente)
+    }
+
     if (es_principal) {
       await prisma.ubicacionCliente.updateMany({
         where: { id_cliente: idCliente, es_principal: true },
@@ -369,7 +378,7 @@ router.post('/:id/ubicaciones', auth, async (req, res) => {
     }
     const data = { id_cliente: idCliente, etiqueta: etiqueta.trim(),
       nombre_contacto: nombre_contacto || null, descripcion: descripcion || null,
-      es_principal: !!es_principal }
+      es_principal: !!es_principal, idempotency_key: idempotency_key || null }
     if (latitud  != null) data.latitud   = parseFloat(latitud)
     if (longitud != null) data.longitud  = parseFloat(longitud)
     if (plus_code)        data.plus_code = plus_code
@@ -384,6 +393,10 @@ router.post('/:id/ubicaciones', auth, async (req, res) => {
     }
     res.status(201).json(ubicacion)
   } catch (error) {
+    if (error.code === 'P2002' && error.meta?.target?.includes('idempotency_key') && req.body.idempotency_key) {
+      const existente = await prisma.ubicacionCliente.findUnique({ where: { idempotency_key: req.body.idempotency_key } })
+      if (existente) return res.status(200).json(existente)
+    }
     res.status(500).json({ error: 'Error al crear ubicación', detalle: error.message })
   }
 })

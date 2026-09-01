@@ -18,13 +18,15 @@ export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
   const [buscandoGPS, setBuscandoGPS]   = useState(false)
   const [guardando, setGuardando]       = useState(false)
   const [error, setError]               = useState('')
+  const [errorCarga, setErrorCarga]     = useState(false)
 
   useEffect(() => {
     if (!idCliente) return
     setCargando(true)
+    setErrorCarga(false)
     api.get(`/clientes/${idCliente}/ubicaciones`)
       .then(r => setUbicaciones(r.data))
-      .catch(() => {})
+      .catch(() => setErrorCarga(true))
       .finally(() => setCargando(false))
   }, [idCliente])
 
@@ -75,6 +77,9 @@ export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
       descripcion:     form.descripcion     || null,
       plus_code:       form.plus_code       || null,
       es_principal:    form.es_principal,
+      // Solo al crear: un reintento de la misma ubicación nueva por señal
+      // mala no debe duplicarla. Editar ya es idempotente de por sí.
+      ...(!editando && { idempotency_key: crypto.randomUUID() }),
     }
     if (form.plus_code && isValidPlusCode(form.plus_code)) {
       const coords = decodePlusCode(form.plus_code)
@@ -132,7 +137,10 @@ export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
     <div className="space-y-3">
 
       {/* Lista */}
-      {ubicaciones.length === 0 && !formAbierto && (
+      {errorCarga && ubicaciones.length === 0 && (
+        <p className="text-sm text-amber-600 py-2">📴 Sin conexión: no se pudieron cargar las ubicaciones guardadas.</p>
+      )}
+      {!errorCarga && ubicaciones.length === 0 && !formAbierto && (
         <p className="text-sm text-gray-400 italic py-2">Sin ubicaciones registradas</p>
       )}
 

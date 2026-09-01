@@ -130,7 +130,7 @@ export default function Layout({ children }) {
   // queda sin nada guardado hasta que vuelva a tener conexión.
   const CACHES_DE_DATOS = [
     'api-cuentas', 'api-clientes', 'api-cuenta-detalle', 'api-ventas',
-    'api-visitas-cuenta', 'api-visitas-agenda',
+    'api-visitas-cuenta', 'api-visitas-agenda', 'api-ubicaciones-cliente',
   ]
 
   const handleForzarActualizacion = async () => {

@@ -98,6 +98,7 @@ model UbicacionCliente {
   plus_code       String?
   es_principal    Boolean  @default(false)
   activo          Boolean  @default(true)
+  idempotency_key String?  @unique
 
   cliente         Cliente  @relation(fields: [id_cliente], references: [id_cliente])
 
