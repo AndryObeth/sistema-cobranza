@@ -26,9 +26,18 @@ const colorHexPorEstado = {
   sin_ubicacion: '#6b7280',
 }
 
-// Dos capturas de ubicación a <= esta distancia se tratan como "el mismo punto"
-// (el cobrador tomó el GPS parado en el mismo lugar para varias casas pegadas).
-const UMBRAL_GRUPO_M = 12
+// Tamaño de celda de agrupación en pixeles de pantalla: marcadores que caen
+// en la misma celda se juntan en un cluster. Al acercar el zoom las celdas
+// abarcan menos metros y los clusters se van separando solos.
+const CELDA_CLUSTER_PX = 64
+// Tocar un cluster lo acerca; si ya no se puede separar más (varias casas en
+// el mismo punto) o se llegó a este zoom, se abre en abanico.
+const ZOOM_MAX = 20
+
+// Metros que mide un pixel de pantalla a cierto zoom y latitud.
+function metrosPorPixel(lat, zoom) {
+  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
+}
 
 // Distancia en km entre dos puntos (fórmula de Haversine)
 function distanciaKm(a, b) {
@@ -80,36 +89,47 @@ function repartirEnCirculo(centro, n, radioM) {
   })
 }
 
-// Agrupa marcadores cuyas coordenadas caen dentro de UMBRAL_GRUPO_M unos de otros.
-// Agrupación por semilla (no encadena) para no fusionar cuadras enteras en zonas densas.
-function agruparMarcadores(marcadores) {
-  const grupos = []
-  const usado = new Array(marcadores.length).fill(false)
-  for (let i = 0; i < marcadores.length; i++) {
-    if (usado[i]) continue
-    const semilla = marcadores[i]
-    const miembros = [semilla]
-    usado[i] = true
-    for (let j = i + 1; j < marcadores.length; j++) {
-      if (usado[j]) continue
-      const d =
-        distanciaKm(
-          { lat: semilla.latitud, lng: semilla.longitud },
-          { lat: marcadores[j].latitud, lng: marcadores[j].longitud }
-        ) * 1000
-      if (d <= UMBRAL_GRUPO_M) {
-        miembros.push(marcadores[j])
-        usado[j] = true
-      }
+// Agrupa marcadores por celda de rejilla (O(n)). El tamaño de celda se deriva
+// del zoom, así que al acercar los clusters se parten solos. Solo agrupa los
+// que están dentro de `bounds` (con margen) para no dibujar cientos de pines.
+function agruparEnCeldas(marcadores, zoom, bounds) {
+  const latRef = bounds ? (bounds.n + bounds.s) / 2 : 18.09
+  const celdaM = CELDA_CLUSTER_PX * metrosPorPixel(latRef, zoom)
+  const celdaLat = celdaM / 111320
+  const celdaLng = celdaM / (111320 * Math.cos((latRef * Math.PI) / 180))
+
+  // Margen de medio viewport para que los pines no "aparezcan" al arrastrar
+  const mLat = bounds ? (bounds.n - bounds.s) * 0.5 : Infinity
+  const mLng = bounds ? (bounds.e - bounds.w) * 0.5 : Infinity
+
+  const celdas = new Map()
+  for (const m of marcadores) {
+    if (bounds) {
+      if (m.latitud > bounds.n + mLat || m.latitud < bounds.s - mLat) continue
+      if (m.longitud > bounds.e + mLng || m.longitud < bounds.w - mLng) continue
     }
-    const key = Math.min(...miembros.map((m) => m.cuenta.id_cuenta))
-    const centro = {
+    const key = `${Math.round(m.latitud / celdaLat)},${Math.round(m.longitud / celdaLng)}`
+    const arr = celdas.get(key)
+    if (arr) arr.push(m)
+    else celdas.set(key, [m])
+  }
+
+  return [...celdas.values()].map((miembros) => ({
+    key: Math.min(...miembros.map((m) => m.cuenta.id_cuenta)),
+    miembros,
+    centro: {
       lat: miembros.reduce((s, m) => s + m.latitud, 0) / miembros.length,
       lng: miembros.reduce((s, m) => s + m.longitud, 0) / miembros.length,
-    }
-    grupos.push({ key, miembros, centro })
-  }
-  return grupos
+    },
+  }))
+}
+
+// ¿Los miembros del grupo están tan juntos que ya no tiene caso acercar más?
+function grupoIndivisible(miembros) {
+  const c = miembros[0]
+  return miembros.every(
+    (m) => distanciaKm({ lat: c.latitud, lng: c.longitud }, { lat: m.latitud, lng: m.longitud }) * 1000 < 25
+  )
 }
 
 const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
@@ -136,8 +156,9 @@ export default function Mapa() {
   useEffect(() => { localStorage.setItem('mapa_filtro_dia', filtroDia) }, [filtroDia])
 
   const mapRef = useRef(null)
-  const [zoomActual, setZoomActual] = useState(13)
-  const [grupoExpandido, setGrupoExpandido] = useState(null) // key del grupo 4+ desplegado
+  // Zoom + límites visibles del mapa; se actualiza al terminar cada movimiento.
+  const [vista, setVista] = useState({ zoom: 13, bounds: null })
+  const [grupoExpandido, setGrupoExpandido] = useState(null) // key del cluster abierto en abanico
   const [miUbicacion, setMiUbicacion] = useState(null)
   const [buscandoUbicacion, setBuscandoUbicacion] = useState(false)
   const [modoEdicion, setModoEdicion] = useState(false)
@@ -387,17 +408,31 @@ export default function Mapa() {
     return true
   }), [marcadores, filtroSinUbicacion, filtroRuta, filtroDia])
 
-  // Agrupa los pines que caen prácticamente en el mismo punto (ver UMBRAL_GRUPO_M)
-  const grupos = useMemo(() => agruparMarcadores(marcadoresFiltrados), [marcadoresFiltrados])
+  // Clusters visibles: solo los marcadores dentro del área a la vista, agrupados
+  // por celda según el zoom. Recalcula al mover el mapa o cambiar el filtro.
+  const grupos = useMemo(
+    () => agruparEnCeldas(marcadoresFiltrados, vista.zoom, vista.bounds),
+    [marcadoresFiltrados, vista]
+  )
 
-  // Metros por pixel a la latitud de Tuxtepec, para que la separación de pines
-  // se vea pareja en pantalla a cualquier zoom.
-  const metrosPorPixel =
-    (156543.03392 * Math.cos((CENTRO_TUXTEPEC.lat * Math.PI) / 180)) / Math.pow(2, zoomActual)
+  // Radio (en metros) para abrir un grupo en abanico, parejo en pantalla al zoom actual.
   const radioSpread = (n) => {
-    const objetivoPx = n <= 3 ? 22 : 34
-    const m = objetivoPx * metrosPorPixel
-    return Math.min(Math.max(m, 6), n <= 3 ? 18 : 40)
+    const latRef = vista.bounds ? (vista.bounds.n + vista.bounds.s) / 2 : CENTRO_TUXTEPEC.lat
+    const m = (n <= 3 ? 22 : 34) * metrosPorPixel(latRef, vista.zoom)
+    return Math.min(Math.max(m, 6), n <= 3 ? 18 : 44)
+  }
+
+  const registrarVista = () => {
+    const map = mapRef.current
+    if (!map) return
+    const b = map.getBounds()
+    const z = map.getZoom()
+    if (!b || z == null) return
+    const ne = b.getNorthEast()
+    const sw = b.getSouthWest()
+    const nuevaZoom = Math.round(z)
+    if (nuevaZoom !== vista.zoom) setGrupoExpandido(null) // al cambiar zoom, recoge abanicos
+    setVista({ zoom: nuevaZoom, bounds: { n: ne.lat(), e: ne.lng(), s: sw.lat(), w: sw.lng() } })
   }
 
   const handleOptimizar = () => {
@@ -505,7 +540,7 @@ export default function Mapa() {
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-400 inline-block" />En atraso</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" />Moroso</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-gray-400 inline-block" />Sin ubicación precisa</span>
-        <span className="flex items-center gap-1"><span className="w-3.5 h-3.5 rounded-full bg-blue-600 text-white text-[8px] font-bold flex items-center justify-center">3</span>Varias casas juntas (toca para separar)</span>
+        <span className="flex items-center gap-1"><span className="w-3.5 h-3.5 rounded-full bg-blue-600 text-white text-[8px] font-bold flex items-center justify-center">N</span>Grupo de clientes (toca para acercar / separar)</span>
         {filtroSinUbicacion && (
           <button onClick={() => navigate('/mapa')} className="ml-2 text-blue-600 underline">Ver todos</button>
         )}
@@ -543,46 +578,52 @@ export default function Mapa() {
             mapContainerStyle={{ width: '100%', height: '100%' }}
             center={CENTRO_TUXTEPEC}
             zoom={13}
-            onLoad={map => { mapRef.current = map }}
+            onLoad={map => { mapRef.current = map; registrarVista() }}
             onClick={handleMapBackgroundClick}
-            onZoomChanged={() => {
-              const z = mapRef.current?.getZoom()
-              if (z && Math.round(z) !== zoomActual) setZoomActual(Math.round(z))
-            }}
+            onIdle={registrarVista}
             options={{
               streetViewControl: false,
               mapTypeControl: false,
               fullscreenControl: true,
+              maxZoom: ZOOM_MAX,
               draggableCursor: modoEdicion ? 'crosshair' : undefined,
             }}
           >
             {grupos.map((g) => {
               const n = g.miembros.length
-              const colapsado = n >= 4 && grupoExpandido !== g.key
+              const expandido = grupoExpandido === g.key
 
-              // Grupo de 4+ sin desplegar: un solo pin azul con el conteo
-              if (colapsado) {
+              // Cluster (2+): un círculo azul con el conteo, mientras no esté en abanico
+              if (n >= 2 && !expandido) {
+                const escala = n < 10 ? 13 : n < 50 ? 17 : 21
                 return (
                   <Marker
                     key={`cluster-${g.key}`}
                     position={g.centro}
                     icon={{
                       path: window.google.maps.SymbolPath.CIRCLE,
-                      scale: 15,
+                      scale: escala,
                       fillColor: '#2563eb',
-                      fillOpacity: 0.95,
+                      fillOpacity: 0.9,
                       strokeColor: 'white',
                       strokeWeight: 2,
                     }}
-                    label={{ text: String(n), color: 'white', fontSize: '12px', fontWeight: 'bold' }}
-                    title={`${n} clientes en este punto — toca para separarlos`}
-                    onClick={() => { setSeleccionado(null); setGrupoExpandido(g.key) }}
+                    label={{ text: String(n), color: 'white', fontSize: n < 100 ? '12px' : '10px', fontWeight: 'bold' }}
+                    title={`${n} clientes — toca para ${grupoIndivisible(g.miembros) || vista.zoom >= ZOOM_MAX ? 'separarlos' : 'acercar'}`}
+                    onClick={() => {
+                      setSeleccionado(null)
+                      if (grupoIndivisible(g.miembros) || vista.zoom >= ZOOM_MAX) {
+                        setGrupoExpandido(g.key)
+                      } else {
+                        mapRef.current?.panTo(g.centro)
+                        mapRef.current?.setZoom(Math.min(vista.zoom + 2, ZOOM_MAX))
+                      }
+                    }}
                     zIndex={500}
                   />
                 )
               }
 
-              const expandido = n >= 4 && grupoExpandido === g.key
               const posiciones =
                 n === 1
                   ? [{ lat: g.miembros[0].latitud, lng: g.miembros[0].longitud }]
@@ -590,7 +631,7 @@ export default function Mapa() {
 
               return (
                 <Fragment key={`grp-${g.key}`}>
-                  {expandido && g.miembros.map((m, i) => (
+                  {expandido && n >= 2 && g.miembros.map((m, i) => (
                     <Polyline
                       key={`line-${g.key}-${i}`}
                       path={[g.centro, posiciones[i]]}
