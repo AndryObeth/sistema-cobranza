@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
@@ -102,6 +102,7 @@ function fechaLocalHoy() {
 export default function Cobranza() {
   const { usuario } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
 
   const [cuentas, setCuentas] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -552,6 +553,20 @@ export default function Cobranza() {
     setUbicPendiente(null)
     setUbicInput('')
   }
+
+  // Si se llegó aquí desde el Mapa ("Registrar pago" en una parada de la ruta
+  // optimizada o en el globo de un cliente), abrir directo el modal de esa
+  // cuenta en cuanto la lista esté cargada.
+  const abrirCuentaSolicitada = location.state?.abrirCuenta
+  const yaAbriDesdeMapa = useRef(false)
+  useEffect(() => {
+    if (yaAbriDesdeMapa.current || !abrirCuentaSolicitada || cuentas.length === 0) return
+    const cuenta = cuentas.find(c => c.id_cuenta === abrirCuentaSolicitada)
+    yaAbriDesdeMapa.current = true
+    // Limpiar el state para que no se reabra al refrescar o volver atrás
+    navigate(location.pathname, { replace: true, state: {} })
+    if (cuenta) abrirModal(cuenta)
+  }, [abrirCuentaSolicitada, cuentas]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const abrirCorreccionUbicacion = () => {
     setPanelUbicacion(true)

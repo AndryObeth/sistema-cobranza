@@ -761,7 +761,7 @@ export default function Mapa() {
                   )}
 
                   <button
-                    onClick={() => navigate('/cobranza')}
+                    onClick={() => navigate('/cobranza', { state: { abrirCuenta: seleccionado.cuenta.id_cuenta } })}
                     style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', width: '100%', fontWeight: 600, fontSize: 12, marginBottom: 6 }}
                   >
                     Registrar pago →
@@ -888,14 +888,22 @@ export default function Mapa() {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-800 truncate">{m.cuenta.cliente?.nombre}</p>
                   <p className="text-xs text-gray-400 truncate">{m.cuenta.cliente?.direccion || '—'}</p>
-                  <a
-                    href={`https://maps.google.com/?q=${m.latitud},${m.longitud}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 text-xs hover:underline"
-                  >
-                    📍 Abrir en Maps
-                  </a>
+                  <div className="flex items-center gap-3 mt-1">
+                    <a
+                      href={`https://maps.google.com/?q=${m.latitud},${m.longitud}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 text-xs hover:underline"
+                    >
+                      📍 Abrir en Maps
+                    </a>
+                    <button
+                      onClick={() => navigate('/cobranza', { state: { abrirCuenta: m.cuenta.id_cuenta } })}
+                      className="text-green-700 text-xs font-semibold hover:underline"
+                    >
+                      💵 Registrar pago
+                    </button>
+                  </div>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="font-bold text-gray-700">{fmt(m.cuenta.saldo_actual)}</p>
