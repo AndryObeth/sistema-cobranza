@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api'
+import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Polyline } from '@react-google-maps/api'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
@@ -22,6 +22,10 @@ const colorPorEstado = {
   moroso:  'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
   sin_ubicacion: 'http://maps.google.com/mapfiles/ms/icons/grey-dot.png',
 }
+
+// Dos capturas de ubicación a <= esta distancia se tratan como "el mismo punto"
+// (el cobrador tomó el GPS parado en el mismo lugar para varias casas pegadas).
+const UMBRAL_GRUPO_M = 12
 
 // Distancia en km entre dos puntos (fórmula de Haversine)
 function distanciaKm(a, b) {
@@ -57,6 +61,54 @@ function optimizarRuta(puntos, origen) {
   return ruta
 }
 
+// Reparte n puntos en un círculo alrededor de un centro, para despegar pines encimados.
+// radioM en metros; devuelve [{lat,lng}] en el mismo orden que los miembros.
+function repartirEnCirculo(centro, n, radioM) {
+  if (n === 1) return [centro]
+  const latRad = (centro.lat * Math.PI) / 180
+  return Array.from({ length: n }, (_, i) => {
+    const ang = -Math.PI / 2 + (2 * Math.PI * i) / n
+    const dNorte = radioM * Math.sin(ang)
+    const dEste = radioM * Math.cos(ang)
+    return {
+      lat: centro.lat + dNorte / 111320,
+      lng: centro.lng + dEste / (111320 * Math.cos(latRad)),
+    }
+  })
+}
+
+// Agrupa marcadores cuyas coordenadas caen dentro de UMBRAL_GRUPO_M unos de otros.
+// Agrupación por semilla (no encadena) para no fusionar cuadras enteras en zonas densas.
+function agruparMarcadores(marcadores) {
+  const grupos = []
+  const usado = new Array(marcadores.length).fill(false)
+  for (let i = 0; i < marcadores.length; i++) {
+    if (usado[i]) continue
+    const semilla = marcadores[i]
+    const miembros = [semilla]
+    usado[i] = true
+    for (let j = i + 1; j < marcadores.length; j++) {
+      if (usado[j]) continue
+      const d =
+        distanciaKm(
+          { lat: semilla.latitud, lng: semilla.longitud },
+          { lat: marcadores[j].latitud, lng: marcadores[j].longitud }
+        ) * 1000
+      if (d <= UMBRAL_GRUPO_M) {
+        miembros.push(marcadores[j])
+        usado[j] = true
+      }
+    }
+    const key = Math.min(...miembros.map((m) => m.cuenta.id_cuenta))
+    const centro = {
+      lat: miembros.reduce((s, m) => s + m.latitud, 0) / miembros.length,
+      lng: miembros.reduce((s, m) => s + m.longitud, 0) / miembros.length,
+    }
+    grupos.push({ key, miembros, centro })
+  }
+  return grupos
+}
+
 const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
 export default function Mapa() {
@@ -81,6 +133,8 @@ export default function Mapa() {
   useEffect(() => { localStorage.setItem('mapa_filtro_dia', filtroDia) }, [filtroDia])
 
   const mapRef = useRef(null)
+  const [zoomActual, setZoomActual] = useState(13)
+  const [grupoExpandido, setGrupoExpandido] = useState(null) // key del grupo 4+ desplegado
   const [miUbicacion, setMiUbicacion] = useState(null)
   const [buscandoUbicacion, setBuscandoUbicacion] = useState(false)
   const [modoEdicion, setModoEdicion] = useState(false)
@@ -185,6 +239,12 @@ export default function Mapa() {
       mostrarToast('Error al actualizar la ubicación')
       cancelarEdicion()
     }
+  }
+
+  // Clic en el fondo del mapa: en edición ubica al cliente; si no, recoge un grupo desplegado.
+  const handleMapBackgroundClick = (e) => {
+    if (modoEdicion) { handleMapClick(e); return }
+    if (grupoExpandido) setGrupoExpandido(null)
   }
 
   const handleFotoUpload = async (file, idCliente) => {
@@ -317,12 +377,25 @@ export default function Mapa() {
   const rutasDisponibles = [...new Set(cuentas.map(c => c.cliente?.ruta).filter(Boolean))].sort()
 
   // Marcadores que respetan ruta/día elegidos, además del filtro "sin ubicación" que ya venía del Dashboard
-  const marcadoresFiltrados = marcadores.filter(m => {
+  const marcadoresFiltrados = useMemo(() => marcadores.filter(m => {
     if (filtroSinUbicacion && !m.sinPlusCode) return false
     if (filtroRuta && m.cuenta.cliente?.ruta !== filtroRuta) return false
     if (filtroDia && m.cuenta.cliente?.dia_cobranza !== filtroDia) return false
     return true
-  })
+  }), [marcadores, filtroSinUbicacion, filtroRuta, filtroDia])
+
+  // Agrupa los pines que caen prácticamente en el mismo punto (ver UMBRAL_GRUPO_M)
+  const grupos = useMemo(() => agruparMarcadores(marcadoresFiltrados), [marcadoresFiltrados])
+
+  // Metros por pixel a la latitud de Tuxtepec, para que la separación de pines
+  // se vea pareja en pantalla a cualquier zoom.
+  const metrosPorPixel =
+    (156543.03392 * Math.cos((CENTRO_TUXTEPEC.lat * Math.PI) / 180)) / Math.pow(2, zoomActual)
+  const radioSpread = (n) => {
+    const objetivoPx = n <= 3 ? 22 : 34
+    const m = objetivoPx * metrosPorPixel
+    return Math.min(Math.max(m, 6), n <= 3 ? 18 : 40)
+  }
 
   const handleOptimizar = () => {
     // Solo incluir marcadores con ubicación precisa (con plus_code); los grises tienen coords aproximadas
@@ -429,6 +502,7 @@ export default function Mapa() {
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-400 inline-block" />En atraso</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" />Moroso</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-gray-400 inline-block" />Sin ubicación precisa</span>
+        <span className="flex items-center gap-1"><span className="w-3.5 h-3.5 rounded-full bg-blue-600 text-white text-[8px] font-bold flex items-center justify-center">3</span>Varias casas juntas (toca para separar)</span>
         {filtroSinUbicacion && (
           <button onClick={() => navigate('/mapa')} className="ml-2 text-blue-600 underline">Ver todos</button>
         )}
@@ -467,7 +541,11 @@ export default function Mapa() {
             center={CENTRO_TUXTEPEC}
             zoom={13}
             onLoad={map => { mapRef.current = map }}
-            onClick={modoEdicion ? handleMapClick : undefined}
+            onClick={handleMapBackgroundClick}
+            onZoomChanged={() => {
+              const z = mapRef.current?.getZoom()
+              if (z && Math.round(z) !== zoomActual) setZoomActual(Math.round(z))
+            }}
             options={{
               streetViewControl: false,
               mapTypeControl: false,
@@ -475,23 +553,70 @@ export default function Mapa() {
               draggableCursor: modoEdicion ? 'crosshair' : undefined,
             }}
           >
-            {marcadoresFiltrados
-              .map((m) => {
-                const idxRuta = rutaOrdenada ? rutaOptimizada.findIndex(r => r.cuenta.id_cuenta === m.cuenta.id_cuenta) : -1
-                const icon = m.sinPlusCode
-                  ? colorPorEstado.sin_ubicacion
-                  : (colorPorEstado[m.cuenta.estado_cuenta] || colorPorEstado.activa)
+            {grupos.map((g) => {
+              const n = g.miembros.length
+              const colapsado = n >= 4 && grupoExpandido !== g.key
+
+              // Grupo de 4+ sin desplegar: un solo pin azul con el conteo
+              if (colapsado) {
                 return (
                   <Marker
-                    key={m.cuenta.id_cuenta}
-                    position={{ lat: m.latitud, lng: m.longitud }}
-                    icon={icon}
-                    title={m.sinPlusCode ? 'Sin ubicación precisa — toca para corregir' : undefined}
-                    label={idxRuta >= 0 ? { text: String(idxRuta + 1), color: 'white', fontSize: '11px', fontWeight: 'bold' } : undefined}
-                    onClick={() => m.sinPlusCode ? abrirModalCorreccion(m.cuenta) : setSeleccionado(m)}
+                    key={`cluster-${g.key}`}
+                    position={g.centro}
+                    icon={{
+                      path: window.google.maps.SymbolPath.CIRCLE,
+                      scale: 15,
+                      fillColor: '#2563eb',
+                      fillOpacity: 0.95,
+                      strokeColor: 'white',
+                      strokeWeight: 2,
+                    }}
+                    label={{ text: String(n), color: 'white', fontSize: '12px', fontWeight: 'bold' }}
+                    title={`${n} clientes en este punto — toca para separarlos`}
+                    onClick={() => { setSeleccionado(null); setGrupoExpandido(g.key) }}
+                    zIndex={500}
                   />
                 )
-              })}
+              }
+
+              const expandido = n >= 4 && grupoExpandido === g.key
+              const posiciones =
+                n === 1
+                  ? [{ lat: g.miembros[0].latitud, lng: g.miembros[0].longitud }]
+                  : repartirEnCirculo(g.centro, n, radioSpread(n))
+
+              return (
+                <Fragment key={`grp-${g.key}`}>
+                  {expandido && g.miembros.map((m, i) => (
+                    <Polyline
+                      key={`line-${g.key}-${i}`}
+                      path={[g.centro, posiciones[i]]}
+                      options={{ strokeColor: '#2563eb', strokeOpacity: 0.4, strokeWeight: 1.5 }}
+                    />
+                  ))}
+                  {g.miembros.map((m, i) => {
+                    const pos = posiciones[i]
+                    const idxRuta = rutaOrdenada ? rutaOptimizada.findIndex(r => r.cuenta.id_cuenta === m.cuenta.id_cuenta) : -1
+                    const icon = m.sinPlusCode
+                      ? colorPorEstado.sin_ubicacion
+                      : (colorPorEstado[m.cuenta.estado_cuenta] || colorPorEstado.activa)
+                    return (
+                      <Marker
+                        key={m.cuenta.id_cuenta}
+                        position={pos}
+                        icon={icon}
+                        title={m.sinPlusCode ? 'Sin ubicación precisa — toca para corregir' : undefined}
+                        label={idxRuta >= 0 ? { text: String(idxRuta + 1), color: 'white', fontSize: '11px', fontWeight: 'bold' } : undefined}
+                        onClick={() => m.sinPlusCode
+                          ? abrirModalCorreccion(m.cuenta)
+                          : setSeleccionado({ ...m, displayLat: pos.lat, displayLng: pos.lng })}
+                        zIndex={expandido ? 600 : undefined}
+                      />
+                    )
+                  })}
+                </Fragment>
+              )
+            })}
 
             {miUbicacion && (
               <Marker
@@ -507,7 +632,10 @@ export default function Mapa() {
 
             {seleccionado && (
               <InfoWindow
-                position={{ lat: seleccionado.latitud, lng: seleccionado.longitud }}
+                position={{
+                  lat: seleccionado.displayLat ?? seleccionado.latitud,
+                  lng: seleccionado.displayLng ?? seleccionado.longitud,
+                }}
                 onCloseClick={() => setSeleccionado(null)}
               >
                 <div style={{ minWidth: 210, maxWidth: 240 }}>
