@@ -10,6 +10,12 @@ const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY
 const CENTRO_TUXTEPEC = { lat: 18.0886, lng: -96.1342 }
 const LIBRARIES = ['places']
 
+const DIAS_COBRANZA = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
+const LABEL_DIA_COBRANZA = {
+  lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves',
+  viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo'
+}
+
 const colorPorEstado = {
   activa:  'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
   atraso:  'http://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
@@ -68,6 +74,11 @@ export default function Mapa() {
   const [geocodificando, setGeocodificando] = useState(false)
   const [progreso, setProgreso] = useState({ total: 0, hecho: 0 })
   const [cargando, setCargando] = useState(true)
+  const [filtroRuta, setFiltroRuta] = useState(() => localStorage.getItem('mapa_filtro_ruta') || '')
+  const [filtroDia, setFiltroDia]   = useState(() => localStorage.getItem('mapa_filtro_dia') || '')
+
+  useEffect(() => { localStorage.setItem('mapa_filtro_ruta', filtroRuta) }, [filtroRuta])
+  useEffect(() => { localStorage.setItem('mapa_filtro_dia', filtroDia) }, [filtroDia])
 
   const mapRef = useRef(null)
   const [miUbicacion, setMiUbicacion] = useState(null)
@@ -197,7 +208,7 @@ export default function Mapa() {
 
   const puedeEditar = ['administrador', 'supervisor_cobranza', 'jefe_camioneta'].includes(usuario?.rol)
 
-  const { isLoaded } = useJsApiLoader({
+  const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_API_KEY,
     libraries: LIBRARIES,
   })
@@ -302,10 +313,22 @@ export default function Mapa() {
     )
   }
 
+  // Rutas disponibles para el filtro, tomadas de las cuentas ya cargadas
+  const rutasDisponibles = [...new Set(cuentas.map(c => c.cliente?.ruta).filter(Boolean))].sort()
+
+  // Marcadores que respetan ruta/día elegidos, además del filtro "sin ubicación" que ya venía del Dashboard
+  const marcadoresFiltrados = marcadores.filter(m => {
+    if (filtroSinUbicacion && !m.sinPlusCode) return false
+    if (filtroRuta && m.cuenta.cliente?.ruta !== filtroRuta) return false
+    if (filtroDia && m.cuenta.cliente?.dia_cobranza !== filtroDia) return false
+    return true
+  })
+
   const handleOptimizar = () => {
     // Solo incluir marcadores con ubicación precisa (con plus_code); los grises tienen coords aproximadas
-    const conUbicacion = marcadores.filter(m => !m.sinPlusCode && m.latitud && m.longitud)
-    if (conUbicacion.length === 0) { alert('No hay clientes con ubicación precisa para optimizar. Agrega Plus Codes primero.'); return }
+    // y respetando los filtros de ruta/día activos.
+    const conUbicacion = marcadoresFiltrados.filter(m => !m.sinPlusCode && m.latitud && m.longitud)
+    if (conUbicacion.length === 0) { alert('No hay clientes con ubicación precisa para optimizar con los filtros actuales.'); return }
     const origen = miUbicacion || CENTRO_TUXTEPEC
     const ordenados = optimizarRuta(conUbicacion, origen)
     setRutaOptimizada(ordenados)   // no toca marcadores — todos siguen visibles en el mapa
@@ -333,13 +356,37 @@ export default function Mapa() {
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Mapa de Ruta</h2>
           <p className="text-gray-500 text-sm mt-1">
-            {marcadores.length} clientes con ubicación
+            {marcadoresFiltrados.length} de {marcadores.length} clientes con ubicación
             {sinCoordenadas > 0 && (
               <span className="ml-2 text-orange-600 font-medium">{sinCoordenadas} sin geocodificar</span>
             )}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <select
+            value={filtroRuta}
+            onChange={e => setFiltroRuta(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Ruta: Todas</option>
+            {rutasDisponibles.map(r => <option key={r} value={r}>Ruta {r}</option>)}
+          </select>
+          <select
+            value={filtroDia}
+            onChange={e => setFiltroDia(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Día: Todos</option>
+            {DIAS_COBRANZA.map(d => <option key={d} value={d}>{LABEL_DIA_COBRANZA[d]}</option>)}
+          </select>
+          {(filtroRuta || filtroDia) && (
+            <button
+              onClick={() => { setFiltroRuta(''); setFiltroDia('') }}
+              className="text-xs px-3 py-2 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-100 transition"
+            >
+              ✕ Limpiar filtros
+            </button>
+          )}
           <button
             onClick={obtenerMiUbicacion}
             disabled={buscandoUbicacion}
@@ -360,7 +407,7 @@ export default function Mapa() {
           )}
           <button
             onClick={handleOptimizar}
-            disabled={marcadores.length === 0}
+            disabled={marcadoresFiltrados.length === 0}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
           >
             🗺️ Optimizar ruta del día
@@ -404,7 +451,13 @@ export default function Mapa() {
             >Cancelar</button>
           </div>
         )}
-        {!isLoaded || cargando ? (
+        {loadError ? (
+          <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center gap-2 px-6 text-center">
+            <p className="text-2xl">📴</p>
+            <p className="text-gray-600 font-medium text-sm">No se pudo cargar el mapa — parece que no hay señal</p>
+            <p className="text-gray-400 text-xs">La lista de la ruta optimizada de abajo sigue funcionando sin conexión.</p>
+          </div>
+        ) : !isLoaded || cargando ? (
           <div className="w-full h-full bg-gray-100 flex items-center justify-center">
             <p className="text-gray-400">Cargando mapa…</p>
           </div>
@@ -422,8 +475,7 @@ export default function Mapa() {
               draggableCursor: modoEdicion ? 'crosshair' : undefined,
             }}
           >
-            {marcadores
-              .filter(m => !filtroSinUbicacion || m.sinPlusCode)
+            {marcadoresFiltrados
               .map((m) => {
                 const idxRuta = rutaOrdenada ? rutaOptimizada.findIndex(r => r.cuenta.id_cuenta === m.cuenta.id_cuenta) : -1
                 const icon = m.sinPlusCode
@@ -651,6 +703,14 @@ export default function Mapa() {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-800 truncate">{m.cuenta.cliente?.nombre}</p>
                   <p className="text-xs text-gray-400 truncate">{m.cuenta.cliente?.direccion || '—'}</p>
+                  <a
+                    href={`https://maps.google.com/?q=${m.latitud},${m.longitud}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 text-xs hover:underline"
+                  >
+                    📍 Abrir en Maps
+                  </a>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="font-bold text-gray-700">{fmt(m.cuenta.saldo_actual)}</p>
