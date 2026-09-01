@@ -143,6 +143,19 @@ export default function Cobranza() {
   const [modoTarjetero, setModoTarjetero] = useState(false)
   const [soloSinDia, setSoloSinDia] = useState(false)
 
+  // Ruta importada del Mapa — modo "parada actual / siguiente".
+  // Vive aparte del orden del día; no se recalcula por GPS.
+  const [modoRuta, setModoRuta] = useState(false)
+  const [rutaImportada, setRutaImportada] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cobranza_orden_manual_ruta_importada')) ?? [] } catch { return [] }
+  })
+  const [rutaMeta, setRutaMeta] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cobranza_ruta_importada_meta')) } catch { return null }
+  })
+  const [pasoRuta, setPasoRuta] = useState(0)
+  const [paradasRuta, setParadasRuta] = useState({}) // { [id_cuenta]: 'pagado' | 'no_pago' }
+  const [verRutaCompleta, setVerRutaCompleta] = useState(false)
+
   useEffect(() => { localStorage.setItem('cobranza_modo', JSON.stringify(modoCobranza)) }, [modoCobranza])
   useEffect(() => { localStorage.setItem('cobranza_visitados', JSON.stringify([...visitados])) }, [visitados])
   useEffect(() => { localStorage.setItem('cobranza_solo_pendientes', JSON.stringify(soloPendientes)) }, [soloPendientes])
@@ -168,6 +181,44 @@ export default function Cobranza() {
       return next
     })
   }
+
+  // Progreso del modo ruta: se guarda ligado a la fecha en que se generó la
+  // ruta, así una ruta nueva empieza limpia y una recarga de la app la conserva.
+  useEffect(() => {
+    try {
+      const p = JSON.parse(localStorage.getItem('cobranza_ruta_importada_progreso'))
+      if (p && rutaMeta && p.generada === rutaMeta.generada) {
+        setPasoRuta(p.paso ?? 0)
+        setParadasRuta(p.paradas ?? {})
+      }
+    } catch {}
+  }, []) // eslint-disable-line
+
+  useEffect(() => {
+    if (!rutaMeta) return
+    localStorage.setItem('cobranza_ruta_importada_progreso', JSON.stringify({
+      generada: rutaMeta.generada, paso: pasoRuta, paradas: paradasRuta,
+    }))
+  }, [pasoRuta, paradasRuta, rutaMeta])
+
+  const marcarParada = useCallback((id, estado) => {
+    setParadasRuta(prev => ({ ...prev, [id]: estado }))
+  }, [])
+
+  const activarModoRuta = async () => {
+    setModoCobranza(false)
+    setModoTarjetero(false)
+    setModoRuta(true)
+    try {
+      const res = await api.get('/usuarios/mi-orden', { params: { dia: 'ruta_importada' }, timeout: 10000 })
+      if (Array.isArray(res.data.orden) && res.data.orden.length > 0) {
+        setRutaImportada(res.data.orden)
+        localStorage.setItem('cobranza_orden_manual_ruta_importada', JSON.stringify(res.data.orden))
+      }
+    } catch {}
+  }
+
+  const salirModoRuta = () => setModoRuta(false)
 
   const calcularRutaCobranza = (origen, cuentasData) => {
     const datos = cuentasData ?? cuentas
@@ -227,6 +278,7 @@ export default function Cobranza() {
   const activarModoCobranza = () => {
     setModoCobranza(true)
     setModoTarjetero(false)
+    setModoRuta(false)
     setVisitados(new Set())
     setSoloPendientes(false)
   }
@@ -242,6 +294,7 @@ export default function Cobranza() {
   const toggleModoTarjetero = () => {
     setModoTarjetero(prev => !prev)
     setModoCobranza(false)
+    setModoRuta(false)
     setSoloSinDia(false)
   }
 
@@ -557,6 +610,26 @@ export default function Cobranza() {
   // Si se llegó aquí desde el Mapa ("Registrar pago" en una parada de la ruta
   // optimizada o en el globo de un cliente), abrir directo el modal de esa
   // cuenta en cuanto la lista esté cargada.
+  // Se llegó desde el Mapa con "Usar en Cobranza": activar el modo ruta.
+  const pidieronModoRuta = location.state?.modoRuta
+  const yaActiveModoRuta = useRef(false)
+  useEffect(() => {
+    if (yaActiveModoRuta.current || !pidieronModoRuta) return
+    yaActiveModoRuta.current = true
+    // localStorage ya trae la ruta recién guardada por el Mapa; refrescar meta
+    try { setRutaMeta(JSON.parse(localStorage.getItem('cobranza_ruta_importada_meta'))) } catch {}
+    try {
+      const ids = JSON.parse(localStorage.getItem('cobranza_orden_manual_ruta_importada')) ?? []
+      if (ids.length > 0) setRutaImportada(ids)
+    } catch {}
+    setPasoRuta(0)
+    setParadasRuta({})
+    setModoCobranza(false)
+    setModoTarjetero(false)
+    setModoRuta(true)
+    navigate(location.pathname, { replace: true, state: {} })
+  }, [pidieronModoRuta]) // eslint-disable-line
+
   const abrirCuentaSolicitada = location.state?.abrirCuenta
   const yaAbriDesdeMapa = useRef(false)
   useEffect(() => {
@@ -1110,6 +1183,7 @@ export default function Cobranza() {
         setFormPago(FORM_PAGO_VACIO)
         setFormVisita(FORM_VISITA_VACIO)
         setRegistrarVisitaTambien(false)
+        if (modoRuta) marcarParada(cuentaSeleccionada.id_cuenta, 'pagado')
         cargarCuentas()
         // El pago ya se guardó; si esto falla (ej. se cortó la señal justo
         // después), no debe mostrarse como error — el pago sigue siendo válido.
@@ -1520,7 +1594,7 @@ export default function Cobranza() {
               {soloVencidas ? '⚠️ Mostrando vencidas' : '⚠️ Ver vencidas'}
             </button>
           )}
-          {!modoCobranza && (
+          {!modoCobranza && !modoRuta && (
             <button
               onClick={toggleModoTarjetero}
               className={`text-sm px-3 py-1.5 rounded-lg font-medium transition border ${
@@ -1532,7 +1606,7 @@ export default function Cobranza() {
               {modoTarjetero ? '✓ Salir de organizar tarjetero' : '🗂️ Organizar mi tarjetero'}
             </button>
           )}
-          {!modoTarjetero && (
+          {!modoTarjetero && !modoRuta && (
             <button
               onClick={modoCobranza ? salirModoCobranza : activarModoCobranza}
               className={`text-sm px-3 py-1.5 rounded-lg font-medium transition border ${
@@ -1542,6 +1616,18 @@ export default function Cobranza() {
               }`}
             >
               {modoCobranza ? '✓ Salir modo cobranza' : '☑ Modo cobranza'}
+            </button>
+          )}
+          {!modoCobranza && !modoTarjetero && rutaImportada.length > 0 && (
+            <button
+              onClick={modoRuta ? salirModoRuta : activarModoRuta}
+              className={`text-sm px-3 py-1.5 rounded-lg font-medium transition border ${
+                modoRuta
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+              }`}
+            >
+              {modoRuta ? '✓ Salir de ruta del mapa' : '🧭 Ruta del mapa'}
             </button>
           )}
         </div>
@@ -1621,6 +1707,7 @@ export default function Cobranza() {
         </div>
       )}
 
+      {!modoRuta && (
       <div className="mb-4 space-y-2">
         <input
           type="text"
@@ -1729,8 +1816,24 @@ export default function Cobranza() {
           </span>
         </div>
       </div>
+      )}
 
-      {modoTarjetero ? (
+      {modoRuta ? (
+        <PanelRutaMapa
+          paradas={rutaImportada.map(id => cuentas.find(c => c.id_cuenta === id)).filter(Boolean)}
+          paso={pasoRuta}
+          setPaso={setPasoRuta}
+          estados={paradasRuta}
+          meta={rutaMeta}
+          fmt={fmt}
+          enlaceMapaCliente={enlaceMapaCliente}
+          onRegistrarPago={abrirModal}
+          onMarcar={marcarParada}
+          verCompleta={verRutaCompleta}
+          setVerCompleta={setVerRutaCompleta}
+          onSalir={salirModoRuta}
+        />
+      ) : modoTarjetero ? (
         <div className="space-y-3">
           {/* Contador por día */}
           <div className="bg-purple-50 border border-purple-200 rounded-2xl px-4 py-3 flex flex-wrap gap-x-4 gap-y-1">
@@ -3506,5 +3609,179 @@ export default function Cobranza() {
       )}
 
     </Layout>
+  )
+}
+
+// ──────────────── MODO RUTA DEL MAPA ────────────────
+// Vista "parada actual / siguiente" para ejecutar la ruta optimizada que se
+// generó en el Mapa. No reordena ni recalcula: sigue el orden importado tal cual.
+function PanelRutaMapa({
+  paradas, paso, setPaso, estados, meta, fmt, enlaceMapaCliente,
+  onRegistrarPago, onMarcar, verCompleta, setVerCompleta, onSalir,
+}) {
+  const total = paradas.length
+  const resueltas = paradas.filter(c => estados[c.id_cuenta]).length
+  const pagadas = paradas.filter(c => estados[c.id_cuenta] === 'pagado').length
+  const pct = total > 0 ? Math.round((resueltas / total) * 100) : 0
+  const idxActual = Math.min(paso, Math.max(total - 1, 0))
+
+  const dir = (c) => [c.cliente?.colonia, c.cliente?.municipio].filter(Boolean).join(', ') || c.cliente?.direccion || '—'
+  const fechaGen = meta?.generada
+    ? new Date(meta.generada).toLocaleString('es-MX', {
+        timeZone: 'America/Mexico_City', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+      })
+    : null
+
+  if (total === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow p-8 text-center space-y-3">
+        <p className="text-gray-500">La ruta importada no coincide con ninguna de tus cuentas actuales.</p>
+        <p className="text-xs text-gray-400">Genera una ruta nueva desde el Mapa y toca «📋 Usar en Cobranza».</p>
+        <button onClick={onSalir} className="text-sm text-blue-600 underline">Salir del modo ruta</button>
+      </div>
+    )
+  }
+
+  const actual = paradas[idxActual]
+  const eActual = estados[actual.id_cuenta]
+  const maps = enlaceMapaCliente(actual)
+  const tel = actual.cliente?.telefono
+
+  const marcarYAvanzar = (id, estado) => {
+    onMarcar(id, estado)
+    setPaso(Math.min(idxActual + 1, total - 1))
+  }
+
+  const chipAtendida = (c) => {
+    const e = estados[c.id_cuenta]
+    if (e === 'pagado') return <span className="text-xs font-semibold text-green-700">✓ Pagó</span>
+    if (e === 'no_pago') return <span className="text-xs font-semibold text-gray-400">✗ No pagó</span>
+    return null
+  }
+  const chipEstadoCuenta = (c) => {
+    const s = c.estado_cuenta
+    const cls = s === 'activa' ? 'bg-green-100 text-green-700'
+      : s === 'atraso' ? 'bg-yellow-100 text-yellow-700'
+      : 'bg-red-100 text-red-700'
+    return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{s}</span>
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Barra superior */}
+      <div className="bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold text-blue-800">🧭 Ruta del mapa</p>
+            <p className="text-xs text-blue-600 mt-0.5">
+              {total} paradas{fechaGen ? ` · generada ${fechaGen}` : ''}
+              {meta?.ruta ? ` · Ruta ${meta.ruta}` : ''}
+              {meta?.dia ? ` · ${LABEL_DIA_COBRANZA[meta.dia] || meta.dia}` : ''}
+            </p>
+          </div>
+          <button onClick={onSalir} className="text-xs text-blue-700 hover:text-blue-900 underline shrink-0">Salir</button>
+        </div>
+        <div className="mt-2">
+          <div className="flex justify-between text-xs text-blue-700 mb-1">
+            <span>{resueltas} de {total} atendidas</span>
+            <span>{pagadas} pagaron</span>
+          </div>
+          <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-600 transition-all" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      </div>
+
+      {resueltas === total && (
+        <div className="bg-green-50 border border-green-200 rounded-2xl p-5 text-center">
+          <p className="text-base font-bold text-green-800">🎉 Ruta terminada — {pagadas} pagaron · {total - pagadas} no</p>
+          <p className="text-xs text-green-700 mt-1">Puedes seguir navegando las paradas para corregir o registrar un pago tardío.</p>
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl shadow-lg border-2 border-blue-500 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold text-blue-600 uppercase tracking-wide">Parada {idxActual + 1} de {total}</span>
+            {chipAtendida(actual)}
+          </div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-lg font-bold text-gray-800">{actual.cliente?.nombre}</p>
+              {actual.numero_cuenta && <p className="text-sm text-blue-600 font-mono">Cta. {actual.numero_cuenta}</p>}
+              <p className="text-sm text-gray-500 mt-0.5">{dir(actual)}</p>
+              <div className="mt-1">{chipEstadoCuenta(actual)}</div>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs text-gray-400">Saldo</p>
+              <p className="text-xl font-bold text-gray-800">{fmt(actual.saldo_actual)}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mt-4">
+            {maps ? (
+              <a href={maps} target="_blank" rel="noopener noreferrer" className="text-center bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium transition">📍 Ir con Maps</a>
+            ) : (
+              <span className="text-center bg-gray-50 text-gray-300 py-2.5 rounded-xl text-sm">Sin ubicación</span>
+            )}
+            {tel ? (
+              <a href={`tel:${tel}`} className="text-center bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium transition">📞 Llamar</a>
+            ) : (
+              <span className="text-center bg-gray-50 text-gray-300 py-2.5 rounded-xl text-sm">Sin teléfono</span>
+            )}
+          </div>
+
+          <button onClick={() => onRegistrarPago(actual)} className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition">💵 Registrar pago</button>
+
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <button onClick={() => marcarYAvanzar(actual.id_cuenta, 'pagado')} className="bg-green-100 hover:bg-green-200 text-green-800 py-2.5 rounded-xl text-sm font-medium transition">✓ Pagó</button>
+            <button onClick={() => marcarYAvanzar(actual.id_cuenta, 'no_pago')} className="bg-gray-100 hover:bg-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-medium transition">✗ No pagó / no estaba</button>
+          </div>
+
+          <div className="flex items-center justify-between mt-4 text-sm">
+            <button onClick={() => setPaso(Math.max(idxActual - 1, 0))} disabled={idxActual === 0} className="text-gray-500 hover:text-gray-700 disabled:opacity-30">◀ Anterior</button>
+            {eActual && <span className="text-xs text-gray-400">ya atendida</span>}
+            <button onClick={() => setPaso(Math.min(idxActual + 1, total - 1))} disabled={idxActual === total - 1} className="text-blue-600 font-semibold hover:text-blue-800 disabled:opacity-30">Siguiente ▶</button>
+          </div>
+      </div>
+
+      {/* Lista de paradas */}
+      <div className="bg-white rounded-2xl shadow overflow-hidden">
+        <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            {verCompleta ? 'Todas las paradas' : 'Próximas paradas'}
+          </p>
+          <button onClick={() => setVerCompleta(!verCompleta)} className="text-xs text-blue-600 hover:underline">
+            {verCompleta ? 'Ver menos' : 'Ver todas'}
+          </button>
+        </div>
+        <div className="divide-y divide-gray-50 max-h-96 overflow-y-auto">
+          {paradas.map((c, i) => {
+            if (!verCompleta && (i < idxActual || i > idxActual + 5)) return null
+            const e = estados[c.id_cuenta]
+            return (
+              <button
+                key={c.id_cuenta}
+                onClick={() => setPaso(i)}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 transition ${i === idxActual ? 'bg-blue-50' : ''}`}
+              >
+                <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold shrink-0 ${
+                  e === 'pagado' ? 'bg-green-600 text-white'
+                    : e === 'no_pago' ? 'bg-gray-300 text-white'
+                    : i === idxActual ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {e === 'pagado' ? '✓' : e === 'no_pago' ? '✗' : i + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-gray-800 truncate">{c.cliente?.nombre}</span>
+                  <span className="block text-xs text-gray-400 truncate">{dir(c)}</span>
+                </span>
+                <span className="text-sm font-semibold text-gray-600 shrink-0">{fmt(c.saldo_actual)}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
   )
 }

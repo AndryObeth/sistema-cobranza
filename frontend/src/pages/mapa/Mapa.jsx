@@ -451,6 +451,24 @@ export default function Mapa() {
     }
   }
 
+  // Manda la ruta optimizada al apartado de Cobranza como un "modo ruta"
+  // (parada actual / siguiente). Se guarda bajo la llave 'ruta_importada' —
+  // aparte del orden del día del tarjetero/modo cobranza, que no se toca.
+  const enviarACobranza = () => {
+    const ids = rutaOptimizada.map(m => m.cuenta.id_cuenta)
+    if (ids.length === 0) return
+    const meta = {
+      generada: new Date().toISOString(),
+      total: ids.length,
+      dia: filtroDia || null,
+      ruta: filtroRuta || null,
+    }
+    localStorage.setItem('cobranza_orden_manual_ruta_importada', JSON.stringify(ids))
+    localStorage.setItem('cobranza_ruta_importada_meta', JSON.stringify(meta))
+    api.put('/usuarios/mi-orden', { orden: ids, dia: 'ruta_importada' }, { timeout: 10000 }).catch(() => {})
+    navigate('/cobranza', { state: { modoRuta: true } })
+  }
+
   const sinCoordenadas = cuentas.filter(c => !c.cliente?.latitud || !c.cliente?.longitud).length
 
   return (
@@ -876,8 +894,14 @@ export default function Mapa() {
       {/* Lista de ruta optimizada */}
       {rutaOrdenada && rutaOptimizada.length > 0 && (
         <div className="mt-4 bg-white rounded-2xl shadow overflow-hidden">
-          <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
+          <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-blue-800">Orden de visitas optimizado ({rutaOptimizada.length} paradas)</p>
+            <button
+              onClick={enviarACobranza}
+              className="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shrink-0"
+            >
+              📋 Usar en Cobranza
+            </button>
           </div>
           <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
             {rutaOptimizada.map((m, idx) => (
