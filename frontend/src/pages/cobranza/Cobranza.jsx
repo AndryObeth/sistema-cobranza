@@ -1400,6 +1400,17 @@ export default function Cobranza() {
     const u = c.cliente?.ubicaciones?.[0]
     return !!(u?.latitud || c.cliente?.latitud)
   }
+  // Enlace directo a Maps con la ubicación guardada, para verla de
+  // referencia en modo cobranza sin tener que abrir "Ver detalle".
+  const enlaceMapaCliente = (c) => {
+    const u = c.cliente?.ubicaciones?.[0]
+    const plusCode = u?.plus_code || c.cliente?.plus_code
+    if (plusCode) return `https://maps.google.com/?q=${encodeURIComponent(plusCode)}`
+    const lat = u?.latitud ?? c.cliente?.latitud
+    const lng = u?.longitud ?? c.cliente?.longitud
+    if (lat && lng) return `https://maps.google.com/?q=${lat},${lng}`
+    return null
+  }
   const sinUbicacionCount = modoCobranza ? cuentasDelDiaFiltro.filter(c => !tieneUbicacion(c)).length : 0
 
   const cuentasFiltradas = cuentas
@@ -1845,6 +1856,17 @@ export default function Cobranza() {
                           : <p className="text-gray-400 text-xs font-mono">{c.folio_cuenta}</p>
                         }
                         {c.cliente?.colonia && <p className="text-gray-400 text-xs">{c.cliente.colonia}</p>}
+                        {modoCobranza && tieneUbicacion(c) && (
+                          <a
+                            href={enlaceMapaCliente(c)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="text-blue-500 text-xs inline-flex items-center gap-0.5 hover:underline"
+                          >
+                            📍 Ver ubicación
+                          </a>
+                        )}
                         {estadoSemanas(c.semanas_atraso)}
                       </div>
                     </div>
@@ -2038,6 +2060,17 @@ export default function Cobranza() {
                       </p>
                       {c.cliente?.colonia && <p className="text-xs text-gray-400">{c.cliente.colonia}</p>}
                       {modoCobranza && !tieneUbicacion(c) && <span className="text-xs text-amber-500">⚠️ Sin ubicación</span>}
+                      {modoCobranza && tieneUbicacion(c) && (
+                        <a
+                          href={enlaceMapaCliente(c)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="text-blue-500 text-xs block hover:underline"
+                        >
+                          📍 Ver ubicación
+                        </a>
+                      )}
                       {estadoSemanas(c.semanas_atraso)}
                       {esVisitado && <span className="text-xs text-green-600 font-medium">✓ Visitado</span>}
                     </td>
