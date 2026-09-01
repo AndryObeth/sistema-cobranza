@@ -16,11 +16,14 @@ const LABEL_DIA_COBRANZA = {
   viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo'
 }
 
-const colorPorEstado = {
-  activa:  'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
-  atraso:  'http://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
-  moroso:  'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
-  sin_ubicacion: 'http://maps.google.com/mapfiles/ms/icons/grey-dot.png',
+// Color sólido por estado (los pines son círculos vectoriales, siempre se
+// renderizan — a diferencia de los íconos PNG de maps.google.com que el
+// navegador puede bloquear por contenido mixto).
+const colorHexPorEstado = {
+  activa: '#16a34a',
+  atraso: '#ca8a04',
+  moroso: '#dc2626',
+  sin_ubicacion: '#6b7280',
 }
 
 // Dos capturas de ubicación a <= esta distancia se tratan como "el mismo punto"
@@ -597,16 +600,25 @@ export default function Mapa() {
                   {g.miembros.map((m, i) => {
                     const pos = posiciones[i]
                     const idxRuta = rutaOrdenada ? rutaOptimizada.findIndex(r => r.cuenta.id_cuenta === m.cuenta.id_cuenta) : -1
-                    const icon = m.sinPlusCode
-                      ? colorPorEstado.sin_ubicacion
-                      : (colorPorEstado[m.cuenta.estado_cuenta] || colorPorEstado.activa)
+                    const colorHex = m.sinPlusCode
+                      ? colorHexPorEstado.sin_ubicacion
+                      : (colorHexPorEstado[m.cuenta.estado_cuenta] || colorHexPorEstado.activa)
                     return (
                       <Marker
                         key={m.cuenta.id_cuenta}
                         position={pos}
-                        icon={icon}
-                        title={m.sinPlusCode ? 'Sin ubicación precisa — toca para corregir' : undefined}
-                        label={idxRuta >= 0 ? { text: String(idxRuta + 1), color: 'white', fontSize: '11px', fontWeight: 'bold' } : undefined}
+                        icon={{
+                          path: window.google.maps.SymbolPath.CIRCLE,
+                          scale: idxRuta >= 0 ? 12 : 9,
+                          fillColor: colorHex,
+                          fillOpacity: 1,
+                          strokeColor: 'white',
+                          strokeWeight: 2,
+                        }}
+                        title={m.sinPlusCode
+                          ? `${m.cuenta.cliente?.nombre} — sin ubicación precisa`
+                          : m.cuenta.cliente?.nombre}
+                        label={idxRuta >= 0 ? { text: String(idxRuta + 1), color: 'white', fontSize: '10px', fontWeight: 'bold' } : undefined}
                         onClick={() => m.sinPlusCode
                           ? abrirModalCorreccion(m.cuenta)
                           : setSeleccionado({ ...m, displayLat: pos.lat, displayLng: pos.lng })}
@@ -622,8 +634,12 @@ export default function Mapa() {
               <Marker
                 position={miUbicacion}
                 icon={{
-                  url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
-                  scaledSize: new window.google.maps.Size(40, 40),
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  scale: 8,
+                  fillColor: '#2563eb',
+                  fillOpacity: 1,
+                  strokeColor: 'white',
+                  strokeWeight: 3,
                 }}
                 title="Mi ubicación actual"
                 zIndex={999}
