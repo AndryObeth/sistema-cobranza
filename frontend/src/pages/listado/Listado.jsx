@@ -157,6 +157,7 @@ export default function Listado() {
   const [cargando, setCargando]           = useState(true)
   const [busqueda, setBusqueda]           = useState('')
   const [filtroEstado, setFiltroEstado]   = useState('')
+  const [filtroRuta, setFiltroRuta]       = useState('')
   const [orden, setOrden]                 = useState('numero_cuenta')
   const [cuentaAnexar, setCuentaAnexar]   = useState(null)
   const [mensajeExito, setMensajeExito]   = useState('')
@@ -175,6 +176,9 @@ export default function Listado() {
     }
   }
 
+  const rutasDisponibles = [...new Set(cuentas.map(c => c.ruta).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }))
+
   const filtradas = cuentas.filter(c => {
     const txt = busqueda.trim().toLowerCase()
     const coincide =
@@ -182,15 +186,17 @@ export default function Listado() {
       c.nombre_cliente?.toLowerCase().includes(txt) ||
       c.numero_expediente?.toLowerCase().includes(txt)
     const estado = filtroEstado ? c.estado_cuenta === filtroEstado : true
-    return coincide && estado
+    const ruta = filtroRuta ? c.ruta === filtroRuta : true
+    return coincide && estado && ruta
   })
 
   const exportarCSV = () => {
-    const encabezado = ['No. Cuenta', 'Nombre Cliente', 'No. Expediente', 'Saldo Actual', 'Plan', 'Estado', 'Último pago']
+    const encabezado = ['No. Cuenta', 'Nombre Cliente', 'No. Expediente', 'Ruta', 'Saldo Actual', 'Plan', 'Estado', 'Último pago']
     const filas = filtradas.map(c => [
       c.numero_cuenta,
       c.nombre_cliente,
       c.numero_expediente,
+      c.ruta || '',
       parseFloat(c.saldo_actual).toFixed(2),
       PLAN_LABEL[c.plan_actual] || c.plan_actual,
       c.estado_cuenta,
@@ -263,6 +269,18 @@ export default function Listado() {
             <option value="atraso">En atraso</option>
             <option value="moroso">Moroso</option>
           </select>
+          {rutasDisponibles.length > 0 && (
+            <select
+              value={filtroRuta}
+              onChange={e => setFiltroRuta(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todas las rutas</option>
+              {rutasDisponibles.map(r => (
+                <option key={r} value={r}>Ruta {r}</option>
+              ))}
+            </select>
+          )}
           <select
             value={orden}
             onChange={e => setOrden(e.target.value)}
@@ -289,6 +307,7 @@ export default function Listado() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">No. Cuenta</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Cliente</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Expediente</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ruta</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Plan</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Último pago</th>
@@ -303,6 +322,7 @@ export default function Listado() {
                       <td className="px-4 py-3 font-mono font-semibold text-blue-600">{c.numero_cuenta}</td>
                       <td className="px-4 py-3 text-gray-800 font-medium">{c.nombre_cliente}</td>
                       <td className="px-4 py-3 text-gray-500">{c.numero_expediente}</td>
+                      <td className="px-4 py-3 text-gray-600">{c.ruta || '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{PLAN_LABEL[c.plan_actual] || c.plan_actual}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_COLOR[c.estado_cuenta] || 'bg-gray-100 text-gray-600'}`}>
@@ -329,7 +349,7 @@ export default function Listado() {
                 </tbody>
                 <tfoot className="bg-gray-50 border-t">
                   <tr>
-                    <td colSpan={esAdmin ? 8 : 7} className="px-4 py-3 text-sm font-semibold text-gray-600">Total</td>
+                    <td colSpan={esAdmin ? 9 : 8} className="px-4 py-3 text-sm font-semibold text-gray-600">Total</td>
                     <td className="px-4 py-3 text-right font-bold text-gray-800">{fmt(totalSaldo)}</td>
                   </tr>
                 </tfoot>

@@ -533,7 +533,7 @@ router.get('/listado-simple', auth, async (req, res) => {
         estado_cuenta:    true,
         fecha_ultimo_pago: true,
         cliente: {
-          select: { nombre: true, numero_expediente: true }
+          select: { nombre: true, numero_expediente: true, ruta: true }
         }
       },
       orderBy: Object.keys(dbOrderBy).length ? dbOrderBy : undefined
@@ -544,6 +544,7 @@ router.get('/listado-simple', auth, async (req, res) => {
       numero_cuenta:      c.numero_cuenta || c.folio_cuenta,
       nombre_cliente:     c.cliente?.nombre || '',
       numero_expediente:  c.cliente?.numero_expediente || '',
+      ruta:              c.cliente?.ruta || '',
       saldo_actual:       parseFloat(c.saldo_actual),
       plan_actual:        c.plan_actual,
       estado_cuenta:      c.estado_cuenta,
