@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
+import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
 import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
@@ -574,11 +574,12 @@ export default function Clientes() {
     if (!form.plus_code?.trim()) return
     setVerificandoPC(true)
     try {
-      const code = form.plus_code.trim().toUpperCase()
-      if (!isValidPlusCode(code)) {
+      const code = normalizePlusCode(form.plus_code)
+      if (!code) {
         alert('Plus Code no válido. Debe tener formato como: 76C97H6P+QF')
         return
       }
+      if (code !== form.plus_code.trim().toUpperCase()) setForm(f => ({ ...f, plus_code: code }))
       const { lat, lng } = decodePlusCode(code)
       setPreviewPC({ lat, lng })
     } catch { alert('Error al verificar Plus Code') }

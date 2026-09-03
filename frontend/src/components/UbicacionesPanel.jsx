@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../api.js'
-import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../utils/plusCode.js'
+import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../utils/plusCode.js'
 import { encolarUbicacionNombrada } from '../utils/offlineQueue.js'
 
 const ETIQUETAS = ['Domicilio', 'Trabajo', 'Casa familiar', 'Otro']
@@ -75,14 +75,15 @@ export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
       etiqueta:        form.etiqueta.trim(),
       nombre_contacto: form.nombre_contacto || null,
       descripcion:     form.descripcion     || null,
-      plus_code:       form.plus_code       || null,
+      plus_code:       normalizePlusCode(form.plus_code) || form.plus_code || null,
       es_principal:    form.es_principal,
       // Solo al crear: un reintento de la misma ubicación nueva por señal
       // mala no debe duplicarla. Editar ya es idempotente de por sí.
       ...(!editando && { idempotency_key: crypto.randomUUID() }),
     }
-    if (form.plus_code && isValidPlusCode(form.plus_code)) {
-      const coords = decodePlusCode(form.plus_code)
+    const pcNorm = normalizePlusCode(form.plus_code)
+    if (pcNorm) {
+      const coords = decodePlusCode(pcNorm)
       if (coords) { payload.latitud = coords.lat; payload.longitud = coords.lng }
     }
 

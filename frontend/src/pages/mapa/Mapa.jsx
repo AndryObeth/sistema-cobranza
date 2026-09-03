@@ -4,7 +4,7 @@ import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Polyline } from '@react-
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
-import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
+import { encodePlusCode, decodePlusCode, isValidPlusCode, normalizePlusCode } from '../../utils/plusCode.js'
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY
 const CENTRO_TUXTEPEC = { lat: 18.0886, lng: -96.1342 }
@@ -214,8 +214,12 @@ export default function Mapa() {
   }
 
   const usarPlusCodeMapa = () => {
-    const code = ubicInputMapa.trim().toUpperCase()
-    if (!isValidPlusCode(code)) { mostrarToast('Plus Code no válido'); return }
+    const cli = modalCorreccion?.cliente
+    const ref = cli?.latitud && cli?.longitud
+      ? { lat: parseFloat(cli.latitud), lng: parseFloat(cli.longitud) }
+      : (miUbicacion || null)
+    const code = normalizePlusCode(ubicInputMapa, ref)
+    if (!code) { mostrarToast('Plus Code no válido'); return }
     const { lat, lng } = decodePlusCode(code)
     setUbicPendienteMapa({ lat, lng, plus_code: code })
     setModoCorrecMapa('confirmar')

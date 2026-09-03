@@ -4,7 +4,7 @@ import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
 import { encolarPago, encolarVisita, encolarCambioDia, encolarUbicacion, getQueue } from '../../utils/offlineQueue.js'
-import { encodePlusCode, decodePlusCode, isValidPlusCode } from '../../utils/plusCode.js'
+import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
 import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
@@ -670,9 +670,16 @@ export default function Cobranza() {
     )
   }
 
+  const refCliente = (cli) => {
+    const u = cli?.ubicaciones?.[0]
+    const lat = parseFloat(u?.latitud ?? cli?.latitud)
+    const lng = parseFloat(u?.longitud ?? cli?.longitud)
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null
+  }
+
   const usarPlusCodeManualUbicacion = () => {
-    const code = ubicInput.trim().toUpperCase()
-    if (!isValidPlusCode(code)) { alert('Plus Code no válido. Ej: 76C97H6P+QF'); return }
+    const code = normalizePlusCode(ubicInput, refCliente(cuentaSeleccionada?.cliente))
+    if (!code) { alert('Plus Code no válido. Ej: 76C97H6P+QF'); return }
     const { lat, lng } = decodePlusCode(code)
     setUbicPendiente({ lat, lng, plus_code: code })
     setModoUbicacion('confirmar')
@@ -788,8 +795,8 @@ export default function Cobranza() {
   }
 
   const usarPlusCodeManualDetalle = () => {
-    const code = ubicInputDet.trim().toUpperCase()
-    if (!isValidPlusCode(code)) { alert('Plus Code no válido. Ej: 76C97H6P+QF'); return }
+    const code = normalizePlusCode(ubicInputDet, refCliente(cuentaDetalle?.cliente))
+    if (!code) { alert('Plus Code no válido. Ej: 76C97H6P+QF'); return }
     const { lat, lng } = decodePlusCode(code)
     setUbicPendDet({ lat, lng, plus_code: code })
     setModoUbicDet('confirmar')
