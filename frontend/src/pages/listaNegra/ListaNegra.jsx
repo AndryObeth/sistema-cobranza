@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
+import { incluyeTexto } from '../../utils/texto.js'
 
 const FORM_VACIO = {
   nombre: '', alias: '', telefono: '', municipio: '', colonia: '', motivo: '', observaciones: ''
@@ -25,10 +26,10 @@ export default function ListaNegra() {
     cargar()
   }, [])
 
-  const cargar = async (q = '') => {
+  const cargar = async () => {
     setCargando(true)
     try {
-      const res = await api.get('/lista-negra', { params: q ? { q } : {} })
+      const res = await api.get('/lista-negra')
       setRegistros(res.data)
     } catch {
       setRegistros([])
@@ -37,11 +38,16 @@ export default function ListaNegra() {
     }
   }
 
-  // Buscar al escribir (debounce simple)
-  useEffect(() => {
-    const t = setTimeout(() => cargar(busqueda), 350)
-    return () => clearTimeout(t)
-  }, [busqueda])
+  // Filtro local (ignora acentos y mayúsculas)
+  const registrosFiltrados = busqueda.trim()
+    ? registros.filter(r =>
+        incluyeTexto(r.nombre, busqueda) ||
+        incluyeTexto(r.alias, busqueda) ||
+        incluyeTexto(r.telefono, busqueda) ||
+        incluyeTexto(r.municipio, busqueda) ||
+        incluyeTexto(r.colonia, busqueda)
+      )
+    : registros
 
   const abrirNuevo = () => {
     setEditando(null)
@@ -84,7 +90,7 @@ export default function ListaNegra() {
         await api.post('/lista-negra', form)
       }
       cerrarModal()
-      cargar(busqueda)
+      cargar()
     } catch (err) {
       setError(err.response?.data?.error || 'Error al guardar')
     } finally {
@@ -96,7 +102,7 @@ export default function ListaNegra() {
     try {
       await api.delete(`/lista-negra/${id}`)
       setConfirmEliminar(null)
-      cargar(busqueda)
+      cargar()
     } catch {
       alert('Error al eliminar el registro')
     }
@@ -180,7 +186,7 @@ export default function ListaNegra() {
       {/* Resultados */}
       {cargando ? (
         <p className="text-center text-gray-500 py-16">Cargando...</p>
-      ) : registros.length === 0 ? (
+      ) : registrosFiltrados.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-4xl mb-3">✅</p>
           <p className="text-gray-500 font-medium">
@@ -193,13 +199,13 @@ export default function ListaNegra() {
       ) : (
         <>
           <p className="text-sm text-gray-500 mb-3">
-            {registros.length} registro{registros.length !== 1 ? 's' : ''}
+            {registrosFiltrados.length} registro{registrosFiltrados.length !== 1 ? 's' : ''}
             {busqueda && <span className="text-red-600 font-medium ml-1">— ⚠️ Cliente(s) encontrado(s) en lista negra</span>}
           </p>
 
           {/* Grid de tarjetas */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {registros.map(r => (
+            {registrosFiltrados.map(r => (
               <div key={r.id_lista_negra} className="bg-white rounded-2xl shadow border-l-4 border-red-500 p-4">
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="min-w-0">

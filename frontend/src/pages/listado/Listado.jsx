@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { incluyeTexto, empiezaCon } from '../../utils/texto.js'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
@@ -36,11 +37,11 @@ function ModalAnexar({ cuentaOrigen, todasLasCuentas, onCerrar, onExito }) {
 
   const candidatas = todasLasCuentas.filter(c => {
     if (c.id_cuenta === cuentaOrigen.id_cuenta) return false
-    const txt = busquedaDest.trim().toLowerCase()
+    const txt = busquedaDest.trim()
     return (
-      c.numero_cuenta?.toLowerCase().startsWith(txt) ||
-      c.nombre_cliente?.toLowerCase().includes(txt) ||
-      c.numero_expediente?.toLowerCase().includes(txt)
+      empiezaCon(c.numero_cuenta, txt) ||
+      incluyeTexto(c.nombre_cliente, txt) ||
+      incluyeTexto(c.numero_expediente, txt)
     )
   })
 
@@ -180,11 +181,11 @@ export default function Listado() {
     .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }))
 
   const filtradas = cuentas.filter(c => {
-    const txt = busqueda.trim().toLowerCase()
+    const txt = busqueda.trim()
     const coincide =
-      c.numero_cuenta?.toLowerCase().startsWith(txt) ||
-      c.nombre_cliente?.toLowerCase().includes(txt) ||
-      c.numero_expediente?.toLowerCase().includes(txt)
+      empiezaCon(c.numero_cuenta, txt) ||
+      incluyeTexto(c.nombre_cliente, txt) ||
+      incluyeTexto(c.numero_expediente, txt)
     const estado = filtroEstado ? c.estado_cuenta === filtroEstado : true
     const ruta = filtroRuta ? c.ruta === filtroRuta : true
     return coincide && estado && ruta

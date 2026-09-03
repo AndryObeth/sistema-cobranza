@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
+import { incluyeTexto } from '../../utils/texto.js'
 
 const visitaColor = {
   promesa_pago:        'bg-green-100 text-green-700 border-green-200',
@@ -144,8 +145,7 @@ export default function Visitas() {
   const visitasFiltradas = useMemo(() => visitas.filter(v => {
     if (filtroCobrador !== 'todos' && String(v.usuario?.id_usuario) !== String(filtroCobrador)) return false
     if (busqueda) {
-      const txt = busqueda.toLowerCase()
-      return v.cliente?.nombre?.toLowerCase().includes(txt) || v.usuario?.nombre?.toLowerCase().includes(txt)
+      return incluyeTexto(v.cliente?.nombre, busqueda) || incluyeTexto(v.usuario?.nombre, busqueda)
     }
     return true
   }), [visitas, filtroCobrador, busqueda])

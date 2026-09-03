@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
+import { incluyeTexto } from '../../utils/texto.js'
 
 export default function Productos() {
   const [productos, setProductos] = useState([])
@@ -31,9 +32,9 @@ export default function Productos() {
   }
 
   const productosFiltrados = productos.filter(p =>
-    p.nombre_comercial.toLowerCase().includes(busqueda.toLowerCase()) ||
-    p.codigo_producto.toLowerCase().includes(busqueda.toLowerCase()) ||
-    (p.categoria && p.categoria.toLowerCase().includes(busqueda.toLowerCase()))
+    incluyeTexto(p.nombre_comercial, busqueda) ||
+    incluyeTexto(p.codigo_producto, busqueda) ||
+    incluyeTexto(p.categoria, busqueda)
   )
 
   const handleGuardar = async (e) => {

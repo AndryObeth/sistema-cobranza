@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { incluyeTexto, empiezaCon } from '../../utils/texto.js'
 
 // Fecha local (no UTC): toISOString() se adelanta un día a partir de las 6pm
 // hora México, porque México está en UTC-6 y ahí ya es el día siguiente en UTC.
@@ -334,11 +335,11 @@ export default function Ventas() {
     // Ocultar ventas cuya cuenta fue cancelada por fusión
     if (v.cuenta?.estado_cuenta === 'cancelada' && v.cuenta?.observaciones?.startsWith('Fusionada con')) return false
     if (!mostrarLiquidadas && v.estatus_venta === 'liquidada') return false
-    const q = busqueda.trim().toLowerCase()
+    const q = busqueda.trim()
     if (q && !(
-      v.cliente?.nombre?.toLowerCase().includes(q) ||
-      v.cuenta?.numero_cuenta?.toLowerCase().startsWith(q) ||
-      v.cuenta?.folio_cuenta?.toLowerCase().includes(q)
+      incluyeTexto(v.cliente?.nombre, q) ||
+      empiezaCon(v.cuenta?.numero_cuenta, q) ||
+      incluyeTexto(v.cuenta?.folio_cuenta, q)
     )) return false
     return true
   })
@@ -621,8 +622,8 @@ export default function Ventas() {
                     <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
                       {clientes
                         .filter(c => c.activo !== false && (
-                          c.nombre.toLowerCase().includes(busquedaCliente.toLowerCase()) ||
-                          c.numero_expediente?.toLowerCase().includes(busquedaCliente.toLowerCase())
+                          incluyeTexto(c.nombre, busquedaCliente) ||
+                          incluyeTexto(c.numero_expediente, busquedaCliente)
                         ))
                         .slice(0, 20)
                         .map(c => (
@@ -641,8 +642,8 @@ export default function Ventas() {
                           </button>
                         ))}
                       {clientes.filter(c => c.activo !== false && (
-                        c.nombre.toLowerCase().includes(busquedaCliente.toLowerCase()) ||
-                        c.numero_expediente?.toLowerCase().includes(busquedaCliente.toLowerCase())
+                        incluyeTexto(c.nombre, busquedaCliente) ||
+                        incluyeTexto(c.numero_expediente, busquedaCliente)
                       )).length === 0 && (
                         <p className="px-3 py-2 text-sm text-gray-400">Sin resultados</p>
                       )}
@@ -730,7 +731,7 @@ export default function Ventas() {
                   {productoDropdown && (
                     <ul className="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                       {productos
-                        .filter(p => p.nombre_comercial.toLowerCase().includes(busquedaProducto.toLowerCase()))
+                        .filter(p => incluyeTexto(p.nombre_comercial, busquedaProducto))
                         .map(p => (
                           <li key={p.id_producto}
                             onMouseDown={() => agregarProducto(p)}
@@ -740,7 +741,7 @@ export default function Ventas() {
                           </li>
                         ))
                       }
-                      {productos.filter(p => p.nombre_comercial.toLowerCase().includes(busquedaProducto.toLowerCase())).length === 0 && (
+                      {productos.filter(p => incluyeTexto(p.nombre_comercial, busquedaProducto)).length === 0 && (
                         <li className="px-3 py-2 text-gray-400 text-sm">Sin resultados</li>
                       )}
                     </ul>

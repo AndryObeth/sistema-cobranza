@@ -512,8 +512,8 @@ export default function Clientes() {
   }
 
   const clientesFiltrados = clientes.filter(c => {
-    if (filtroExp    && !c.numero_expediente.toLowerCase().includes(filtroExp.toLowerCase())) return false
-    if (filtroNombre && !c.nombre.toLowerCase().includes(filtroNombre.toLowerCase())) return false
+    if (filtroExp    && !normalizarTexto(c.numero_expediente).includes(normalizarTexto(filtroExp))) return false
+    if (filtroNombre && !normalizarTexto(c.nombre).includes(normalizarTexto(filtroNombre))) return false
     if (filtroRuta   && c.ruta !== filtroRuta) return false
     return true
   })

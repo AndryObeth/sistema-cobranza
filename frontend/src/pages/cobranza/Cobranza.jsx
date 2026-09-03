@@ -1517,15 +1517,15 @@ export default function Cobranza() {
       if (filtroMunicipio && normalizar(c.cliente?.municipio) !== filtroMunicipio) return false
       if (filtroColonia  && normalizar(c.cliente?.colonia)  !== filtroColonia)  return false
       if (filtroDia && c.cliente?.dia_cobranza !== filtroDia) return false
-      const q = busqueda.trim().toLowerCase()
+      const q = normalizar(busqueda)
       if (q) return (
-        c.cliente?.nombre.toLowerCase().includes(q) ||
-        c.folio_cuenta.toLowerCase().includes(q) ||
+        normalizar(c.cliente?.nombre).includes(q) ||
+        normalizar(c.folio_cuenta).includes(q) ||
         // Prefijo, no "contiene": si no, buscar "1-C" también encontraría "11-C", "21-C", "101-C"...
-        c.numero_cuenta?.toLowerCase().startsWith(q) ||
-        c.cliente?.numero_expediente?.toLowerCase().includes(q) ||
-        c.cliente?.municipio?.toLowerCase().includes(q) ||
-        c.cliente?.colonia?.toLowerCase().includes(q)
+        normalizar(c.numero_cuenta).startsWith(q) ||
+        normalizar(c.cliente?.numero_expediente).includes(q) ||
+        normalizar(c.cliente?.municipio).includes(q) ||
+        normalizar(c.cliente?.colonia).includes(q)
       )
       return true
     })

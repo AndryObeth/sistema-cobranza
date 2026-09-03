@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
+import { incluyeTexto } from '../../utils/texto.js'
 
 const ROLES = [
   { value: 'administrador',  label: 'Administrador' },
@@ -145,9 +146,9 @@ export default function Usuarios() {
   }
 
   const usuariosFiltrados = usuarios.filter(u =>
-    u.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-    u.usuario.toLowerCase().includes(busqueda.toLowerCase()) ||
-    u.rol.toLowerCase().includes(busqueda.toLowerCase())
+    incluyeTexto(u.nombre, busqueda) ||
+    incluyeTexto(u.usuario, busqueda) ||
+    incluyeTexto(u.rol, busqueda)
   )
 
   return (
