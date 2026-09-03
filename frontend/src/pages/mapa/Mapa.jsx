@@ -436,12 +436,24 @@ export default function Mapa() {
   }
 
   const handleOptimizar = () => {
-    // Solo incluir marcadores con ubicación precisa (con plus_code); los grises tienen coords aproximadas
-    // y respetando los filtros de ruta/día activos.
-    const conUbicacion = marcadoresFiltrados.filter(m => !m.sinPlusCode && m.latitud && m.longitud)
-    if (conUbicacion.length === 0) { alert('No hay clientes con ubicación precisa para optimizar con los filtros actuales.'); return }
+    // Respeta los filtros de ruta/día activos. Se optimizan primero los clientes
+    // con ubicación precisa (con plus_code) y al final se agregan los de ubicación
+    // aproximada (pin gris) — también enrutados entre sí, pero marcados aparte
+    // para que el cobrador sepa que ese punto no es exacto.
+    const conFiltro = marcadoresFiltrados.filter(m => m.latitud && m.longitud)
+    const precisos     = conFiltro.filter(m => !m.sinPlusCode)
+    const aproximados  = conFiltro.filter(m => m.sinPlusCode)
+    if (precisos.length === 0 && aproximados.length === 0) {
+      alert('No hay clientes con ubicación para optimizar con los filtros actuales.')
+      return
+    }
     const origen = miUbicacion || CENTRO_TUXTEPEC
-    const ordenados = optimizarRuta(conUbicacion, origen)
+    const ordenPrecisos = optimizarRuta(precisos, origen)
+    const ultimoPunto = ordenPrecisos.length > 0
+      ? { lat: ordenPrecisos[ordenPrecisos.length - 1].latitud, lng: ordenPrecisos[ordenPrecisos.length - 1].longitud }
+      : origen
+    const ordenAproximados = optimizarRuta(aproximados, ultimoPunto)
+    const ordenados = [...ordenPrecisos, ...ordenAproximados]
     setRutaOptimizada(ordenados)   // no toca marcadores — todos siguen visibles en el mapa
     setRutaOrdenada(true)
     if (mapRef.current && window.google) {
@@ -895,7 +907,14 @@ export default function Mapa() {
       {rutaOrdenada && rutaOptimizada.length > 0 && (
         <div className="mt-4 bg-white rounded-2xl shadow overflow-hidden">
           <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-blue-800">Orden de visitas optimizado ({rutaOptimizada.length} paradas)</p>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-blue-800">Orden de visitas optimizado ({rutaOptimizada.length} paradas)</p>
+              {rutaOptimizada.some(m => m.sinPlusCode) && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {rutaOptimizada.filter(m => !m.sinPlusCode).length} con ubicación precisa · {rutaOptimizada.filter(m => m.sinPlusCode).length} aproximada (al final)
+                </p>
+              )}
+            </div>
             <button
               onClick={enviarACobranza}
               className="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shrink-0"
@@ -906,12 +925,15 @@ export default function Mapa() {
           <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
             {rutaOptimizada.map((m, idx) => (
               <div key={m.cuenta.id_cuenta} className="flex items-center gap-3 px-4 py-3">
-                <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold shrink-0">
+                <span className={`w-6 h-6 rounded-full text-white text-xs flex items-center justify-center font-bold shrink-0 ${m.sinPlusCode ? 'bg-gray-400' : 'bg-blue-600'}`}>
                   {idx + 1}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-800 truncate">{m.cuenta.cliente?.nombre}</p>
                   <p className="text-xs text-gray-400 truncate">{m.cuenta.cliente?.direccion || '—'}</p>
+                  {m.sinPlusCode && (
+                    <p className="text-xs text-amber-600 font-medium">⚠️ Ubicación aproximada</p>
+                  )}
                   <div className="flex items-center gap-3 mt-1">
                     <a
                       href={`https://maps.google.com/?q=${m.latitud},${m.longitud}`}

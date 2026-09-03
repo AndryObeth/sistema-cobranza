@@ -3647,6 +3647,14 @@ function PanelRutaMapa({
   const maps = enlaceMapaCliente(actual)
   const tel = actual.cliente?.telefono
 
+  // Ubicación aproximada: tiene coords pero sin Plus Code (pin gris en el Mapa).
+  const esAproximada = (c) => {
+    const u = c.cliente?.ubicaciones?.[0]
+    const tieneCoords = !!(u?.latitud || c.cliente?.latitud)
+    const tienePlusCode = !!(u?.plus_code || c.cliente?.plus_code)
+    return tieneCoords && !tienePlusCode
+  }
+
   const marcarYAvanzar = (id, estado) => {
     onMarcar(id, estado)
     setPaso(Math.min(idxActual + 1, total - 1))
@@ -3709,6 +3717,9 @@ function PanelRutaMapa({
               <p className="text-lg font-bold text-gray-800">{actual.cliente?.nombre}</p>
               {actual.numero_cuenta && <p className="text-sm text-blue-600 font-mono">Cta. {actual.numero_cuenta}</p>}
               <p className="text-sm text-gray-500 mt-0.5">{dir(actual)}</p>
+              {esAproximada(actual) && (
+                <p className="text-xs text-amber-600 font-medium mt-0.5">⚠️ Ubicación aproximada</p>
+              )}
               <div className="mt-1">{chipEstadoCuenta(actual)}</div>
             </div>
             <div className="text-right shrink-0">
@@ -3773,7 +3784,10 @@ function PanelRutaMapa({
                   {e === 'pagado' ? '✓' : e === 'no_pago' ? '✗' : i + 1}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-gray-800 truncate">{c.cliente?.nombre}</span>
+                  <span className="block text-sm font-medium text-gray-800 truncate">
+                    {c.cliente?.nombre}
+                    {esAproximada(c) && <span className="text-amber-600" title="Ubicación aproximada"> ⚠️</span>}
+                  </span>
                   <span className="block text-xs text-gray-400 truncate">{dir(c)}</span>
                 </span>
                 <span className="text-sm font-semibold text-gray-600 shrink-0">{fmt(c.saldo_actual)}</span>
