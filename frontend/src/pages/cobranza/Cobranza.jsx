@@ -407,6 +407,9 @@ export default function Cobranza() {
   const [ubicInput, setUbicInput]             = useState('')
   const [buscandoGPS, setBuscandoGPS]         = useState(false)
   const [guardandoUbic, setGuardandoUbic]     = useState(false)
+  // Corrección de ubicación desde el modo "Ruta del mapa" (modal aparte, sin abrir el pago)
+  const [ubicRutaCuenta, setUbicRutaCuenta]   = useState(null)
+  const [avisoRuta, setAvisoRuta]             = useState('')
 
   // Modal detalle
   const [modalDetalle, setModalDetalle]               = useState(false)
@@ -655,6 +658,23 @@ export default function Cobranza() {
     setUbicInput('')
   }
 
+  // Corregir ubicación de una parada del modo "Ruta del mapa", sin abrir el pago
+  const abrirCorreccionUbicacionRuta = (cuenta) => {
+    setUbicRutaCuenta(cuenta)
+    setModoUbicacion('opciones')
+    setUbicPendiente(null)
+    setUbicInput('')
+  }
+  const cerrarCorreccionUbicacionRuta = () => {
+    setUbicRutaCuenta(null)
+    setModoUbicacion(null)
+    setUbicPendiente(null)
+    setUbicInput('')
+  }
+
+  // Cliente objetivo de la corrección de ubicación en curso (pago o ruta)
+  const clienteUbicActivo = () => ubicRutaCuenta?.cliente || cuentaSeleccionada?.cliente
+
   const usarGPSUbicacion = () => {
     if (!navigator.geolocation) { alert('Tu dispositivo no soporta GPS'); return }
     setBuscandoGPS(true)
@@ -678,7 +698,7 @@ export default function Cobranza() {
   }
 
   const usarPlusCodeManualUbicacion = () => {
-    const code = normalizePlusCode(ubicInput, refCliente(cuentaSeleccionada?.cliente))
+    const code = normalizePlusCode(ubicInput, refCliente(clienteUbicActivo()))
     if (!code) { alert('Plus Code no válido. Ej: 76C97H6P+QF'); return }
     const { lat, lng } = decodePlusCode(code)
     setUbicPendiente({ lat, lng, plus_code: code })
@@ -688,13 +708,25 @@ export default function Cobranza() {
   const guardarUbicacionCliente = async () => {
     if (!ubicPendiente) return
     setGuardandoUbic(true)
-    const idCliente = cuentaSeleccionada.cliente?.id_cliente
+    const esRuta = !!ubicRutaCuenta
+    const idCliente = clienteUbicActivo()?.id_cliente
     const payload = { id_cliente: idCliente, latitud: ubicPendiente.lat, longitud: ubicPendiente.lng, plus_code: ubicPendiente.plus_code }
+    // Refleja la ubicación nueva en la lista ya cargada (quita el ⚠️ aproximada)
+    const aplicarLocal = () => {
+      setCuentas(prev => prev.map(c => c.cliente?.id_cliente === idCliente
+        ? { ...c, cliente: { ...c.cliente, latitud: ubicPendiente.lat, longitud: ubicPendiente.lng, plus_code: ubicPendiente.plus_code, ubicaciones: [] } }
+        : c))
+    }
+    const cerrar = () => { esRuta ? cerrarCorreccionUbicacionRuta() : cerrarCorreccionUbicacion() }
+    const avisar = (msg) => {
+      if (esRuta) { setAvisoRuta(msg); setTimeout(() => setAvisoRuta(''), 4000) }
+      else { setExito(msg); setTimeout(() => setExito(''), 4000) }
+    }
     const guardarLocalYSalir = () => {
       encolarUbicacion(payload)
-      cerrarCorreccionUbicacion()
-      setExito('📴 Ubicación guardada localmente — se enviará cuando haya conexión')
-      setTimeout(() => setExito(''), 4000)
+      aplicarLocal()
+      cerrar()
+      avisar('📴 Ubicación guardada localmente — se enviará cuando haya conexión')
     }
     if (!navigator.onLine) { guardarLocalYSalir(); setGuardandoUbic(false); return }
     try {
@@ -703,9 +735,9 @@ export default function Cobranza() {
         longitud:  ubicPendiente.lng,
         plus_code: ubicPendiente.plus_code,
       }, { timeout: 10000 })
-      cerrarCorreccionUbicacion()
-      setExito('Ubicación actualizada ✅')
-      setTimeout(() => setExito(''), 4000)
+      aplicarLocal()
+      cerrar()
+      avisar('Ubicación actualizada ✅')
     } catch (err) {
       if (err.response) alert(err.response.data?.error || 'Error al guardar la ubicación')
       else guardarLocalYSalir()
@@ -1836,6 +1868,8 @@ export default function Cobranza() {
           enlaceMapaCliente={enlaceMapaCliente}
           onRegistrarPago={abrirModal}
           onMarcar={marcarParada}
+          onCorregirUbicacion={abrirCorreccionUbicacionRuta}
+          aviso={avisoRuta}
           verCompleta={verRutaCompleta}
           setVerCompleta={setVerRutaCompleta}
           onSalir={salirModoRuta}
@@ -2332,101 +2366,19 @@ export default function Cobranza() {
 
             {/* Panel corrección de ubicación */}
             {panelUbicacion && (
-              <div className="px-4 md:px-6 py-4 border-b bg-blue-50">
-                {modoUbicacion === 'opciones' && (
-                  <div>
-                    <p className="text-sm font-semibold text-blue-800 mb-3">¿Cómo quieres corregir la ubicación?</p>
-                    <div className="flex flex-col gap-2">
-                      <button
-                        type="button"
-                        onClick={usarGPSUbicacion}
-                        disabled={buscandoGPS}
-                        className="flex items-center gap-3 bg-white border border-blue-200 rounded-xl px-4 py-3 text-left hover:bg-blue-50 transition disabled:opacity-50"
-                      >
-                        <span className="text-2xl">🎯</span>
-                        <div>
-                          <p className="font-semibold text-gray-800 text-sm">
-                            {buscandoGPS ? 'Obteniendo GPS…' : 'Usar mi ubicación actual'}
-                          </p>
-                          <p className="text-xs text-gray-500">Captura las coordenadas GPS de tu celular</p>
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setModoUbicacion('manual')}
-                        className="flex items-center gap-3 bg-white border border-blue-200 rounded-xl px-4 py-3 text-left hover:bg-blue-50 transition"
-                      >
-                        <span className="text-2xl">⌨️</span>
-                        <div>
-                          <p className="font-semibold text-gray-800 text-sm">Ingresar Plus Code</p>
-                          <p className="text-xs text-gray-500">Escribe manualmente el código de ubicación</p>
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {modoUbicacion === 'manual' && (
-                  <div>
-                    <p className="text-sm font-semibold text-blue-800 mb-2">Ingresa el Plus Code</p>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={ubicInput}
-                        onChange={e => setUbicInput(e.target.value)}
-                        placeholder="Ej: 76C97H6P+QF"
-                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={usarPlusCodeManualUbicacion}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium"
-                      >
-                        Verificar
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setModoUbicacion('opciones')}
-                      className="mt-2 text-xs text-gray-500 hover:text-gray-700"
-                    >
-                      ← Volver
-                    </button>
-                  </div>
-                )}
-
-                {modoUbicacion === 'confirmar' && ubicPendiente && (
-                  <div>
-                    <p className="text-sm font-semibold text-blue-800 mb-3">
-                      ¿Guardar esta ubicación para {cuentaSeleccionada.cliente?.nombre}?
-                    </p>
-                    <div className="bg-white border border-blue-200 rounded-xl px-4 py-3 mb-3">
-                      <p className="text-xs text-gray-500 mb-1">Plus Code generado</p>
-                      <p className="font-mono font-bold text-blue-700 text-base">{ubicPendiente.plus_code}</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {ubicPendiente.lat.toFixed(6)}, {ubicPendiente.lng.toFixed(6)}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setModoUbicacion('opciones')}
-                        className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm"
-                      >
-                        Cambiar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={guardarUbicacionCliente}
-                        disabled={guardandoUbic}
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50"
-                      >
-                        {guardandoUbic ? 'Guardando…' : 'Guardar ubicación ✅'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <PanelCorreccionUbicacion
+                clienteNombre={cuentaSeleccionada.cliente?.nombre}
+                modo={modoUbicacion}
+                setModo={setModoUbicacion}
+                ubicInput={ubicInput}
+                setUbicInput={setUbicInput}
+                ubicPendiente={ubicPendiente}
+                buscandoGPS={buscandoGPS}
+                guardando={guardandoUbic}
+                onGPS={usarGPSUbicacion}
+                onPlusCode={usarPlusCodeManualUbicacion}
+                onGuardar={guardarUbicacionCliente}
+              />
             )}
 
             {/* Info de la cuenta */}
@@ -3615,7 +3567,141 @@ export default function Cobranza() {
         </div>
       )}
 
+      {/* Corregir ubicación desde el modo "Ruta del mapa" (modal aparte) */}
+      {ubicRutaCuenta && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-end sm:items-center justify-center z-[60] sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="min-w-0">
+                <h3 className="font-bold text-gray-800 truncate">Corregir ubicación</h3>
+                <p className="text-sm text-gray-500 truncate">{ubicRutaCuenta.cliente?.nombre}</p>
+              </div>
+              <button onClick={cerrarCorreccionUbicacionRuta} className="text-gray-400 hover:text-gray-600 text-xl shrink-0">✕</button>
+            </div>
+            <PanelCorreccionUbicacion
+              clienteNombre={ubicRutaCuenta.cliente?.nombre}
+              modo={modoUbicacion}
+              setModo={setModoUbicacion}
+              ubicInput={ubicInput}
+              setUbicInput={setUbicInput}
+              ubicPendiente={ubicPendiente}
+              buscandoGPS={buscandoGPS}
+              guardando={guardandoUbic}
+              onGPS={usarGPSUbicacion}
+              onPlusCode={usarPlusCodeManualUbicacion}
+              onGuardar={guardarUbicacionCliente}
+            />
+          </div>
+        </div>
+      )}
+
     </Layout>
+  )
+}
+
+// ──────────────── PANEL CORRECCIÓN DE UBICACIÓN ────────────────
+// GPS del celular o Plus Code manual. Se usa dentro del modal de pago y también
+// como modal aparte desde el modo "Ruta del mapa".
+function PanelCorreccionUbicacion({
+  clienteNombre, modo, setModo, ubicInput, setUbicInput, ubicPendiente,
+  buscandoGPS, guardando, onGPS, onPlusCode, onGuardar,
+}) {
+  return (
+    <div className="px-4 md:px-6 py-4 border-b bg-blue-50">
+      {modo === 'opciones' && (
+        <div>
+          <p className="text-sm font-semibold text-blue-800 mb-3">¿Cómo quieres corregir la ubicación?</p>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={onGPS}
+              disabled={buscandoGPS}
+              className="flex items-center gap-3 bg-white border border-blue-200 rounded-xl px-4 py-3 text-left hover:bg-blue-50 transition disabled:opacity-50"
+            >
+              <span className="text-2xl">🎯</span>
+              <div>
+                <p className="font-semibold text-gray-800 text-sm">
+                  {buscandoGPS ? 'Obteniendo GPS…' : 'Usar mi ubicación actual'}
+                </p>
+                <p className="text-xs text-gray-500">Estando en el domicilio del cliente, captura el GPS del celular</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setModo('manual')}
+              className="flex items-center gap-3 bg-white border border-blue-200 rounded-xl px-4 py-3 text-left hover:bg-blue-50 transition"
+            >
+              <span className="text-2xl">⌨️</span>
+              <div>
+                <p className="font-semibold text-gray-800 text-sm">Ingresar Plus Code</p>
+                <p className="text-xs text-gray-500">Escribe manualmente el código de ubicación</p>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {modo === 'manual' && (
+        <div>
+          <p className="text-sm font-semibold text-blue-800 mb-2">Ingresa el Plus Code</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={ubicInput}
+              onChange={e => setUbicInput(e.target.value)}
+              placeholder="Ej: 76C97H6P+QF"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="button"
+              onClick={onPlusCode}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium"
+            >
+              Verificar
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setModo('opciones')}
+            className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+          >
+            ← Volver
+          </button>
+        </div>
+      )}
+
+      {modo === 'confirmar' && ubicPendiente && (
+        <div>
+          <p className="text-sm font-semibold text-blue-800 mb-3">
+            ¿Guardar esta ubicación{clienteNombre ? ` para ${clienteNombre}` : ''}?
+          </p>
+          <div className="bg-white border border-blue-200 rounded-xl px-4 py-3 mb-3">
+            <p className="text-xs text-gray-500 mb-1">Plus Code generado</p>
+            <p className="font-mono font-bold text-blue-700 text-base">{ubicPendiente.plus_code}</p>
+            <p className="text-xs text-gray-400 mt-1">
+              {ubicPendiente.lat.toFixed(6)}, {ubicPendiente.lng.toFixed(6)}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setModo('opciones')}
+              className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm"
+            >
+              Cambiar
+            </button>
+            <button
+              type="button"
+              onClick={onGuardar}
+              disabled={guardando}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50"
+            >
+              {guardando ? 'Guardando…' : 'Guardar ubicación ✅'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -3624,7 +3710,7 @@ export default function Cobranza() {
 // generó en el Mapa. No reordena ni recalcula: sigue el orden importado tal cual.
 function PanelRutaMapa({
   paradas, paso, setPaso, estados, meta, fmt, enlaceMapaCliente,
-  onRegistrarPago, onMarcar, verCompleta, setVerCompleta, onSalir,
+  onRegistrarPago, onMarcar, onCorregirUbicacion, aviso, verCompleta, setVerCompleta, onSalir,
 }) {
   const total = paradas.length
   const resueltas = paradas.filter(c => estados[c.id_cuenta]).length
@@ -3696,6 +3782,9 @@ function PanelRutaMapa({
           </div>
           <button onClick={onSalir} className="text-xs text-blue-700 hover:text-blue-900 underline shrink-0">Salir</button>
         </div>
+        {aviso && (
+          <p className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg px-2 py-1 mt-2">{aviso}</p>
+        )}
         <div className="mt-2">
           <div className="flex justify-between text-xs text-blue-700 mb-1">
             <span>{resueltas} de {total} atendidas</span>
@@ -3747,6 +3836,17 @@ function PanelRutaMapa({
               <span className="text-center bg-gray-50 text-gray-300 py-2.5 rounded-xl text-sm">Sin teléfono</span>
             )}
           </div>
+
+          <button
+            onClick={() => onCorregirUbicacion(actual)}
+            className={`w-full mt-2 py-2.5 rounded-xl text-sm font-medium transition border ${
+              esAproximada(actual)
+                ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            📍 Corregir ubicación{esAproximada(actual) ? ' (está aproximada)' : ''}
+          </button>
 
           <button onClick={() => onRegistrarPago(actual)} className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition">💵 Registrar pago</button>
 
