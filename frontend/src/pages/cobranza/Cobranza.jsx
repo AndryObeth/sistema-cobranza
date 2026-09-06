@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
 import { encolarPago, encolarVisita, encolarCambioDia, encolarUbicacion, getQueue } from '../../utils/offlineQueue.js'
 import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
+import { sinAcentos } from '../../utils/texto.js'
 import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
@@ -209,13 +210,28 @@ export default function Cobranza() {
     setModoCobranza(false)
     setModoTarjetero(false)
     setModoRuta(true)
+    // Releer la meta local (fecha/ruta/día de la última ruta generada en este equipo)
+    let metaLocal = null
+    try { metaLocal = JSON.parse(localStorage.getItem('cobranza_ruta_importada_meta')) } catch {}
+    let localIds = []
+    try { localIds = JSON.parse(localStorage.getItem('cobranza_orden_manual_ruta_importada')) ?? [] } catch {}
     try {
       const res = await api.get('/usuarios/mi-orden', { params: { dia: 'ruta_importada' }, timeout: 10000 })
       if (Array.isArray(res.data.orden) && res.data.orden.length > 0) {
+        const cambio = JSON.stringify(res.data.orden) !== JSON.stringify(localIds)
         setRutaImportada(res.data.orden)
         localStorage.setItem('cobranza_orden_manual_ruta_importada', JSON.stringify(res.data.orden))
+        if (cambio) {
+          // La ruta del servidor difiere de la local (se genero en otro equipo):
+          // sintetizar una meta y empezar el progreso limpio.
+          metaLocal = { generada: `srv-${res.data.orden.length}-${res.data.orden[0]}`, total: res.data.orden.length, dia: null, ruta: null }
+          localStorage.setItem('cobranza_ruta_importada_meta', JSON.stringify(metaLocal))
+          setPasoRuta(0)
+          setParadasRuta({})
+        }
       }
     } catch {}
+    if (metaLocal) setRutaMeta(metaLocal)
   }
 
   const salirModoRuta = () => setModoRuta(false)
@@ -699,7 +715,7 @@ export default function Cobranza() {
 
   const usarPlusCodeManualUbicacion = () => {
     const code = normalizePlusCode(ubicInput, refCliente(clienteUbicActivo()))
-    if (!code) { alert('Plus Code no válido. Ej: 76C97H6P+QF'); return }
+    if (!code) { alert('Plus Code no válido o incompleto. Pega el código completo (ej: 76QX2FXQ+QF) o usa «Usar mi ubicación actual».'); return }
     const { lat, lng } = decodePlusCode(code)
     setUbicPendiente({ lat, lng, plus_code: code })
     setModoUbicacion('confirmar')
@@ -711,11 +727,24 @@ export default function Cobranza() {
     const esRuta = !!ubicRutaCuenta
     const idCliente = clienteUbicActivo()?.id_cliente
     const payload = { id_cliente: idCliente, latitud: ubicPendiente.lat, longitud: ubicPendiente.lng, plus_code: ubicPendiente.plus_code }
-    // Refleja la ubicación nueva en la lista ya cargada (quita el ⚠️ aproximada)
+    // Refleja la ubicación nueva en la lista ya cargada (quita el ⚠️ aproximada).
+    // El backend actualiza la fila del cliente; si además hay una ubicación con
+    // nombre, sincronizamos la [0] en memoria para que "Ir con Maps" (que lee
+    // ubicaciones[0] primero) muestre el punto nuevo, sin borrar las demás.
     const aplicarLocal = () => {
-      setCuentas(prev => prev.map(c => c.cliente?.id_cliente === idCliente
-        ? { ...c, cliente: { ...c.cliente, latitud: ubicPendiente.lat, longitud: ubicPendiente.lng, plus_code: ubicPendiente.plus_code, ubicaciones: [] } }
-        : c))
+      const { lat, lng, plus_code } = ubicPendiente
+      setCuentas(prev => prev.map(c => {
+        if (c.cliente?.id_cliente !== idCliente) return c
+        const ubics = Array.isArray(c.cliente.ubicaciones) ? c.cliente.ubicaciones : []
+        return {
+          ...c,
+          cliente: {
+            ...c.cliente,
+            latitud: lat, longitud: lng, plus_code,
+            ubicaciones: ubics.map((u, i) => i === 0 ? { ...u, latitud: lat, longitud: lng, plus_code } : u),
+          },
+        }
+      }))
     }
     const cerrar = () => { esRuta ? cerrarCorreccionUbicacionRuta() : cerrarCorreccionUbicacion() }
     const avisar = (msg) => {
@@ -1413,8 +1442,7 @@ export default function Cobranza() {
 
   const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
-  const normalizar = (s) =>
-    (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+  const normalizar = sinAcentos // alias local; implementaci\u00f3n \u00fanica en utils/texto.js
 
   const toTitleCase = (s) =>
     (s || '').toLowerCase().replace(/(?:^|\s)\S/g, c => c.toUpperCase())
@@ -1860,6 +1888,9 @@ export default function Cobranza() {
       {modoRuta ? (
         <PanelRutaMapa
           paradas={rutaImportada.map(id => cuentas.find(c => c.id_cuenta === id)).filter(Boolean)}
+          totalImportadas={rutaImportada.length}
+          cargando={cargando}
+          errorCarga={errorCarga}
           paso={pasoRuta}
           setPaso={setPasoRuta}
           estados={paradasRuta}
@@ -3709,10 +3740,11 @@ function PanelCorreccionUbicacion({
 // Vista "parada actual / siguiente" para ejecutar la ruta optimizada que se
 // generó en el Mapa. No reordena ni recalcula: sigue el orden importado tal cual.
 function PanelRutaMapa({
-  paradas, paso, setPaso, estados, meta, fmt, enlaceMapaCliente,
+  paradas, totalImportadas, cargando, errorCarga, paso, setPaso, estados, meta, fmt, enlaceMapaCliente,
   onRegistrarPago, onMarcar, onCorregirUbicacion, aviso, verCompleta, setVerCompleta, onSalir,
 }) {
   const total = paradas.length
+  const faltantes = Math.max((totalImportadas ?? total) - total, 0)
   const resueltas = paradas.filter(c => estados[c.id_cuenta]).length
   const pagadas = paradas.filter(c => estados[c.id_cuenta] === 'pagado').length
   const pct = total > 0 ? Math.round((resueltas / total) * 100) : 0
@@ -3726,10 +3758,22 @@ function PanelRutaMapa({
     : null
 
   if (total === 0) {
+    if (cargando) {
+      return <div className="bg-white rounded-2xl shadow p-8 text-center text-gray-500">Cargando tus cuentas…</div>
+    }
     return (
       <div className="bg-white rounded-2xl shadow p-8 text-center space-y-3">
-        <p className="text-gray-500">La ruta importada no coincide con ninguna de tus cuentas actuales.</p>
-        <p className="text-xs text-gray-400">Genera una ruta nueva desde el Mapa y toca «📋 Usar en Cobranza».</p>
+        {errorCarga ? (
+          <>
+            <p className="text-gray-500">📴 Sin conexión y sin cuentas guardadas — la ruta no se puede mostrar todavía.</p>
+            <p className="text-xs text-gray-400">Vuelve a intentar cuando tengas señal; el modo ruta sigue disponible.</p>
+          </>
+        ) : (
+          <>
+            <p className="text-gray-500">La ruta importada no coincide con ninguna de tus cuentas actuales.</p>
+            <p className="text-xs text-gray-400">Genera una ruta nueva desde el Mapa y toca «📋 Usar en Cobranza».</p>
+          </>
+        )}
         <button onClick={onSalir} className="text-sm text-blue-600 underline">Salir del modo ruta</button>
       </div>
     )
@@ -3784,6 +3828,11 @@ function PanelRutaMapa({
         </div>
         {aviso && (
           <p className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg px-2 py-1 mt-2">{aviso}</p>
+        )}
+        {faltantes > 0 && (
+          <p className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-2">
+            ⚠️ {faltantes} parada{faltantes !== 1 ? 's' : ''} de la ruta no {faltantes !== 1 ? 'están' : 'está'} en tu lista actual (cuenta liquidada, cambio de ruta o sin señal).
+          </p>
         )}
         <div className="mt-2">
           <div className="flex justify-between text-xs text-blue-700 mb-1">

@@ -3,14 +3,14 @@ import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
+import { sinAcentos } from '../../utils/texto.js'
 import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
 
 // ─── Detección de errores de ortografía en municipio/colonia ────────────────
-const normalizarTexto = (s) =>
-  (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+const normalizarTexto = sinAcentos // alias; implementación única en utils/texto.js
 
 function distanciaEdicion(a, b) {
   const m = a.length, n = b.length
@@ -576,7 +576,7 @@ export default function Clientes() {
     try {
       const code = normalizePlusCode(form.plus_code)
       if (!code) {
-        alert('Plus Code no válido. Debe tener formato como: 76C97H6P+QF')
+        alert('Plus Code no válido o incompleto. Pega el código COMPLETO (empieza con algo como "76QX…", ej: 76QX2FXQ+QF). Un código corto tipo "2FXQ+QF" no se puede ubicar sin referencia.')
         return
       }
       if (code !== form.plus_code.trim().toUpperCase()) setForm(f => ({ ...f, plus_code: code }))

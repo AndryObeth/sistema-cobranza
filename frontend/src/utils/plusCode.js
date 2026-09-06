@@ -2,9 +2,6 @@ import { OpenLocationCode } from 'open-location-code'
 
 const olc = new OpenLocationCode()
 
-// Centro de Tuxtepec — referencia por defecto para recuperar Plus Codes cortos
-const REF_DEFECTO = { lat: 18.0886, lng: -96.1342 }
-
 export function encodePlusCode(lat, lng) {
   return olc.encode(lat, lng)
 }
@@ -28,21 +25,23 @@ export function isValidPlusCode(code) {
 // Acepta:
 //  - código completo:            "76QX2FXQ+XX"
 //  - código completo con texto:  "76QX2FXQ+XX San Juan Bautista Tuxtepec"
-//  - código corto (de Google):   "2FXQ+XX Tuxtepec, Oax."  -> lo recupera usando `ref`
-// `ref` = { lat, lng } cercana (la ubicación aproximada del cliente). Si no se
-// pasa, usa el centro de Tuxtepec (sirve para códigos de la zona).
+//  - código corto (de Google):   "2FXQ+XX Tuxtepec, Oax."  -> SOLO se puede
+//    recuperar si se pasa `ref` = { lat, lng } cercana (la ubicación aproximada
+//    del cliente). Sin `ref` un código corto es ambiguo (puede caer a decenas de
+//    km) y se rechaza (null): en ese caso el usuario debe pegar el código
+//    completo o usar el GPS.
 export function normalizePlusCode(input, ref) {
   if (!input) return null
   const raw = String(input).trim().toUpperCase()
   // Aísla el token del código e ignora el nombre de la localidad que suele venir pegado
   const m = raw.match(/([23456789CFGHJMPQRVWX]{2,8}\+[23456789CFGHJMPQRVWX]{0,7})/)
   const token = m ? m[1] : raw
+  const refValida = ref && Number.isFinite(ref.lat) && Number.isFinite(ref.lng)
   try {
     if (!olc.isValid(token)) return null
     if (olc.isFull(token)) return token
-    if (olc.isShort(token)) {
-      const r = ref && Number.isFinite(ref.lat) && Number.isFinite(ref.lng) ? ref : REF_DEFECTO
-      return olc.recoverNearest(token, r.lat, r.lng)
+    if (olc.isShort(token) && refValida) {
+      return olc.recoverNearest(token, ref.lat, ref.lng)
     }
   } catch {
     return null

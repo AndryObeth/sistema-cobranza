@@ -68,6 +68,11 @@ export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
 
   const guardar = async () => {
     if (!form.etiqueta.trim()) { setError('Ingresa una etiqueta'); return }
+    const pcNorm = form.plus_code?.trim() ? normalizePlusCode(form.plus_code) : null
+    if (form.plus_code?.trim() && !pcNorm) {
+      setError('Plus Code no válido o incompleto. Pega el código completo (ej: 76QX2FXQ+QF) o déjalo vacío.')
+      return
+    }
     setGuardando(true)
     setError('')
 
@@ -75,13 +80,12 @@ export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
       etiqueta:        form.etiqueta.trim(),
       nombre_contacto: form.nombre_contacto || null,
       descripcion:     form.descripcion     || null,
-      plus_code:       normalizePlusCode(form.plus_code) || form.plus_code || null,
+      plus_code:       pcNorm || null,
       es_principal:    form.es_principal,
       // Solo al crear: un reintento de la misma ubicación nueva por señal
       // mala no debe duplicarla. Editar ya es idempotente de por sí.
       ...(!editando && { idempotency_key: crypto.randomUUID() }),
     }
-    const pcNorm = normalizePlusCode(form.plus_code)
     if (pcNorm) {
       const coords = decodePlusCode(pcNorm)
       if (coords) { payload.latitud = coords.lat; payload.longitud = coords.lng }
