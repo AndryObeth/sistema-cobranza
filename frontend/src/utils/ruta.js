@@ -1,16 +1,21 @@
 // Optimización de ruta para cobranza en campo.
 //
 // Antes se usaba solo "vecino más cercano" (Nearest Neighbor): en cada paso
-// salta al cliente más próximo. Es rápido de calcular pero deja clientes
-// sueltos regados que obligan a regresar al final -> el cobrador da vueltas
-// de más.
+// salta al cliente más próximo. Es rápido pero deja clientes sueltos regados
+// que obligan a regresar -> el cobrador da vueltas de más.
 //
-// Ahora: NN como semilla + 2-opt (deshace cruces de la trayectoria) + Or-opt
-// (reubica corridas de 1-3 paradas a un mejor lugar). Es el enfoque estándar
-// para rutas de ~50-200 paradas y corre en el teléfono en pocos ms.
+// Ahora: varias semillas NN + búsqueda local (2-opt ⇄ Or-opt) hasta que
+// convergen juntas, y se queda con la mejor. 2-opt deshace los cruces de la
+// trayectoria; Or-opt reubica corridas de 1-3 paradas.
 //
 // La ruta es ABIERTA: arranca en `origen` (donde está el cobrador) y no
 // regresa al inicio.
+//
+// Limitación conocida: la distancia es en línea recta (Haversine), no por
+// calles. Cerca del río Papaloapan dos casas en orillas opuestas quedan
+// "cerca" en línea recta aunque manejar entre ellas sea largo. Sin una API
+// de rutas (de pago y sin offline) no hay forma limpia de corregir eso; el
+// cobrador puede reacomodar a mano las pocas paradas que queden mal.
 
 const R = 6371 // radio terrestre en km
 
@@ -31,6 +36,109 @@ const coord = (p) => ({
   lng: p.lng ?? parseFloat(p.longitud),
 })
 
+// ── Búsqueda local: 2-opt + Or-opt sobre una ruta abierta ──────────────────
+// `orden` = array de índices 0..n-1. `d(i,j)` = distancia entre nodos del
+// espacio "con origen" (0 = origen, k+1 = punto k). Devuelve `orden` mejorado.
+function busquedaLocal(orden, d) {
+  let mejoroGlobal = true
+  let rondas = 0
+  while (mejoroGlobal && rondas < 12) {
+    mejoroGlobal = false
+    rondas++
+
+    // 2-opt: invertir segmentos [i..j] mientras acorte
+    const nodoPrev = (i) => (i === 0 ? 0 : orden[i - 1] + 1)
+    const nodoNext = (j) => (j === orden.length - 1 ? -1 : orden[j + 1] + 1)
+    let mejoro = true
+    let pasadas = 0
+    while (mejoro && pasadas < 40) {
+      mejoro = false
+      pasadas++
+      for (let i = 0; i < orden.length - 1; i++) {
+        for (let j = i + 1; j < orden.length; j++) {
+          const a = nodoPrev(i)
+          const b = orden[i] + 1
+          const c = orden[j] + 1
+          const e = nodoNext(j)
+          let antes = d(a, b)
+          let despues = d(a, c)
+          if (e !== -1) {
+            antes += d(c, e)
+            despues += d(b, e)
+          }
+          if (despues + 1e-9 < antes) {
+            let lo = i
+            let hi = j
+            while (lo < hi) {
+              const t = orden[lo]
+              orden[lo] = orden[hi]
+              orden[hi] = t
+              lo++
+              hi--
+            }
+            mejoro = true
+            mejoroGlobal = true
+          }
+        }
+      }
+    }
+
+    // Or-opt: mover corridas de 1..3 paradas (recta o invertida) a mejor lugar.
+    // Costo por delta (O(n²) por pasada), no recalculando la ruta completa.
+    for (let segLen = 1; segLen <= 3 && segLen < orden.length; segLen++) {
+      let cambio = true
+      let it = 0
+      while (cambio && it < 12) {
+        cambio = false
+        it++
+        for (let i = 0; i + segLen <= orden.length; i++) {
+          const s0 = orden[i] + 1
+          const s1 = orden[i + segLen - 1] + 1
+          const p = i === 0 ? 0 : orden[i - 1] + 1
+          const q = i + segLen >= orden.length ? -1 : orden[i + segLen] + 1
+          const gananciaQuitar =
+            d(p, s0) + (q !== -1 ? d(s1, q) : 0) - (q !== -1 ? d(p, q) : 0)
+
+          const resto = orden.slice(0, i).concat(orden.slice(i + segLen))
+          let mejorK = -1
+          let mejorDelta = -1e-9 // debe mejorar
+          let mejorRev = false
+          for (let k = 0; k <= resto.length; k++) {
+            if (k === i) continue
+            const u = k === 0 ? 0 : resto[k - 1] + 1
+            const v = k >= resto.length ? -1 : resto[k] + 1
+            const arUV = v !== -1 ? d(u, v) : 0
+            const costoRecto = d(u, s0) + (v !== -1 ? d(s1, v) : 0) - arUV
+            const deltaRecto = gananciaQuitar - costoRecto
+            if (deltaRecto > mejorDelta) {
+              mejorDelta = deltaRecto
+              mejorK = k
+              mejorRev = false
+            }
+            if (segLen > 1) {
+              const costoRev = d(u, s1) + (v !== -1 ? d(s0, v) : 0) - arUV
+              const deltaRev = gananciaQuitar - costoRev
+              if (deltaRev > mejorDelta) {
+                mejorDelta = deltaRev
+                mejorK = k
+                mejorRev = true
+              }
+            }
+          }
+          if (mejorK !== -1) {
+            const seg = orden.slice(i, i + segLen)
+            const s = mejorRev ? seg.reverse() : seg
+            orden = resto.slice(0, mejorK).concat(s, resto.slice(mejorK))
+            cambio = true
+            mejoroGlobal = true
+          }
+        }
+      }
+    }
+  }
+  return orden
+}
+
 // Devuelve `puntos` reordenados para minimizar la distancia total recorrida
 // arrancando desde `origen`. `puntos` puede traer cualquier metadato extra;
 // solo se leen sus coordenadas.
@@ -41,117 +149,63 @@ export function optimizarRuta(puntos, origen) {
   // Nodo 0 = origen; nodos 1..n = puntos[0..n-1]
   const nodos = [coord(origen), ...puntos.map(coord)]
   const D = nodos.map((a) => nodos.map((b) => distanciaKm(a, b)))
-  const d = (i, j) => D[i][j] // índices en el espacio "con origen"
+  const d = (i, j) => D[i][j]
 
-  // Largo de una ruta abierta origen -> ord[0] -> ord[1] -> ... (ord = índices 0..n-1)
-  const largo = (ord) => {
+  const largoTotal = (ord) => {
     let s = d(0, ord[0] + 1)
     for (let i = 0; i < ord.length - 1; i++) s += d(ord[i] + 1, ord[i + 1] + 1)
     return s
   }
 
-  // ── 1. Nearest Neighbor desde el origen ──────────────────────────────────
-  const visitado = new Array(n).fill(false)
-  let orden = []
-  let actual = 0
-  for (let k = 0; k < n; k++) {
-    let best = -1
-    let bestD = Infinity
-    for (let j = 0; j < n; j++) {
-      if (visitado[j]) continue
-      const dist = d(actual, j + 1)
-      if (dist < bestD) {
-        bestD = dist
-        best = j
-      }
+  // Semillas: NN desde el origen + NN "como si" empezara en los k puntos más
+  // cercanos al origen. Cada semilla da una topología distinta; la búsqueda
+  // local sobre varias y quedarse con la mejor evita quedar atrapado en una
+  // ruta con "regresos".
+  const nn = (primero) => {
+    const visitado = new Array(n).fill(false)
+    const orden = []
+    let actual = 0
+    if (primero != null) {
+      visitado[primero] = true
+      orden.push(primero)
+      actual = primero + 1
     }
-    visitado[best] = true
-    orden.push(best)
-    actual = best + 1
+    while (orden.length < n) {
+      let best = -1
+      let bestD = Infinity
+      for (let j = 0; j < n; j++) {
+        if (visitado[j]) continue
+        const dist = d(actual, j + 1)
+        if (dist < bestD) {
+          bestD = dist
+          best = j
+        }
+      }
+      visitado[best] = true
+      orden.push(best)
+      actual = best + 1
+    }
+    return orden
   }
 
-  // ── 2. 2-opt: invierte segmentos [i..j] mientras acorte ─────────────────
-  // Ruta abierta: el nodo antes de i es (i-1) o el origen; el de después de j
-  // es (j+1) o "nada" (fin abierto, esa arista no existe).
-  const nodoPrev = (i) => (i === 0 ? 0 : orden[i - 1] + 1)
-  const nodoNext = (j) => (j === orden.length - 1 ? -1 : orden[j + 1] + 1)
+  const cercanosAlOrigen = puntos
+    .map((_, i) => i)
+    .sort((a, b) => d(0, a + 1) - d(0, b + 1))
+  const K = Math.min(4, n)
+  const semillas = [nn(null), ...cercanosAlOrigen.slice(0, K).map((i) => nn(i))]
 
-  let mejoro = true
-  let pasadas = 0
-  while (mejoro && pasadas < 40) {
-    mejoro = false
-    pasadas++
-    for (let i = 0; i < orden.length - 1; i++) {
-      for (let j = i + 1; j < orden.length; j++) {
-        const a = nodoPrev(i)
-        const b = orden[i] + 1
-        const c = orden[j] + 1
-        const e = nodoNext(j)
-        let antes = d(a, b)
-        let despues = d(a, c)
-        if (e !== -1) {
-          antes += d(c, e)
-          despues += d(b, e)
-        }
-        if (despues + 1e-9 < antes) {
-          let lo = i
-          let hi = j
-          while (lo < hi) {
-            const t = orden[lo]
-            orden[lo] = orden[hi]
-            orden[hi] = t
-            lo++
-            hi--
-          }
-          mejoro = true
-        }
-      }
+  let mejorOrden = null
+  let mejorLargo = Infinity
+  for (const semilla of semillas) {
+    const mejorada = busquedaLocal([...semilla], d)
+    const L = largoTotal(mejorada)
+    if (L < mejorLargo) {
+      mejorLargo = L
+      mejorOrden = mejorada
     }
   }
 
-  // ── 3. Or-opt: mueve corridas de 1..3 paradas a mejor posición ──────────
-  for (let segLen = 1; segLen <= 3 && segLen < orden.length; segLen++) {
-    let cambio = true
-    let it = 0
-    while (cambio && it < 15) {
-      cambio = false
-      it++
-      for (let i = 0; i + segLen <= orden.length; i++) {
-        const seg = orden.slice(i, i + segLen)
-        const resto = orden.slice(0, i).concat(orden.slice(i + segLen))
-        const largoBase = largo(orden)
-        let mejorK = -1
-        let mejorLargo = largoBase
-        let mejorRev = false
-        for (let k = 0; k <= resto.length; k++) {
-          if (k === i) continue // misma posición
-          const rectoK = resto.slice(0, k).concat(seg, resto.slice(k))
-          const Lrecto = largo(rectoK)
-          if (Lrecto + 1e-9 < mejorLargo) {
-            mejorLargo = Lrecto
-            mejorK = k
-            mejorRev = false
-          }
-          if (segLen > 1) {
-            const revK = resto.slice(0, k).concat([...seg].reverse(), resto.slice(k))
-            const Lrev = largo(revK)
-            if (Lrev + 1e-9 < mejorLargo) {
-              mejorLargo = Lrev
-              mejorK = k
-              mejorRev = true
-            }
-          }
-        }
-        if (mejorK !== -1) {
-          const s = mejorRev ? [...seg].reverse() : seg
-          orden = resto.slice(0, mejorK).concat(s, resto.slice(mejorK))
-          cambio = true
-        }
-      }
-    }
-  }
-
-  return orden.map((idx) => puntos[idx])
+  return mejorOrden.map((idx) => puntos[idx])
 }
 
 // Distancia total (km) de una lista de puntos ya ordenada, arrancando en origen.
