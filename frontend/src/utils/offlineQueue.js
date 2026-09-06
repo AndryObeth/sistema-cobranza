@@ -13,7 +13,17 @@ export function getQueue() {
 }
 
 function saveQueue(queue) {
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
+  try {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
+  } catch (e) {
+    // Sin espacio en localStorage (típicamente por una foto de comprobante
+    // grande). Se sueltan las imágenes de la cola para no perder los pagos:
+    // el pago/visita se sincroniza igual, solo sin comprobante adjunto.
+    const sinImagenes = queue.map(op =>
+      op?.datos?.comprobante_base64 ? { ...op, datos: { ...op.datos, comprobante_base64: undefined, _comprobante_descartado: true } } : op
+    )
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(sinImagenes))
+  }
   window.dispatchEvent(new Event('offline-queue-changed'))
 }
 

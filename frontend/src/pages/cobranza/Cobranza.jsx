@@ -71,8 +71,29 @@ const TIPOS_SIN_PAGO = [
   { value: 'promesa_pago',  label: 'Promesa de pago' },
 ]
 
-const FORM_PAGO_VACIO   = { monto_pago: '', tipo_pago: 'abono', origen_pago: 'domicilio', observaciones: '' }
+const FORM_PAGO_VACIO   = { monto_pago: '', tipo_pago: 'abono', origen_pago: 'domicilio', metodo_pago: 'efectivo', observaciones: '' }
 const FORM_VISITA_VACIO = { tipo_seguimiento: 'no_localizado', comentario: '', fecha_programada: '' }
+
+// Comprime una imagen (File) a JPEG ~1000px para que quepa en la cola offline
+// y no pese al subir. Devuelve un data URI base64.
+function comprimirImagen(file, maxLado = 1000, calidad = 0.7) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const escala = Math.min(1, maxLado / Math.max(img.width, img.height))
+      const w = Math.round(img.width * escala)
+      const h = Math.round(img.height * escala)
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', calidad))
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen')) }
+    img.src = url
+  })
+}
 
 const TELEFONO_EMPRESA = '5646430474'
 const TELEFONO_EMPRESA_FMT = TELEFONO_EMPRESA.replace(/(\d{2})(\d{4})(\d{4})/, '$1 $2 $3')
@@ -374,6 +395,22 @@ export default function Cobranza() {
   // Formularios
   const [formPago, setFormPago]     = useState(FORM_PAGO_VACIO)
   const [formVisita, setFormVisita] = useState(FORM_VISITA_VACIO)
+  const [comprobanteDeposito, setComprobanteDeposito] = useState(null) // data URI base64 | null
+  const [procesandoComprobante, setProcesandoComprobante] = useState(false)
+  const [comprobanteVisto, setComprobanteVisto] = useState(null) // blob URL para el visor
+
+  const verComprobante = async (idPago) => {
+    try {
+      const res = await api.get(`/pagos/${idPago}/comprobante`, { responseType: 'blob', timeout: 15000 })
+      setComprobanteVisto(URL.createObjectURL(res.data))
+    } catch {
+      alert('No se pudo cargar el comprobante (sin conexión o no existe).')
+    }
+  }
+  const cerrarComprobanteVisto = () => {
+    if (comprobanteVisto) URL.revokeObjectURL(comprobanteVisto)
+    setComprobanteVisto(null)
+  }
 
   // Estado de envío
   const [guardando, setGuardando] = useState(false)
@@ -622,6 +659,7 @@ export default function Cobranza() {
     setNoHuboPago(false)
     setRegistrarVisitaTambien(false)
     setFormPago(FORM_PAGO_VACIO)
+    setComprobanteDeposito(null)
     setFormVisita(FORM_VISITA_VACIO)
     setError('')
     setExito('')
@@ -641,6 +679,7 @@ export default function Cobranza() {
     setNoHuboPago(false)
     setRegistrarVisitaTambien(false)
     setFormPago(FORM_PAGO_VACIO)
+    setComprobanteDeposito(null)
     setFormVisita(FORM_VISITA_VACIO)
     setError('')
     setExito('')
@@ -931,6 +970,7 @@ export default function Cobranza() {
     setNoHuboPago(sinPago)
     setRegistrarVisitaTambien(false)
     setFormPago(FORM_PAGO_VACIO)
+    setComprobanteDeposito(null)
     setFormVisita({ ...FORM_VISITA_VACIO, tipo_seguimiento: sinPago ? 'no_localizado' : 'visita' })
     setError('')
     setExito('')
@@ -972,6 +1012,7 @@ export default function Cobranza() {
       center('MONTO ABONADO'),
       center(fmt(datos.monto_pago)),
       row('Tipo:', tipoStr),
+      row('Metodo:', datos.metodo_pago === 'deposito' ? 'DEPOSITO' : 'Efectivo'),
       das,
       row('Saldo anterior:', fmt(datos.saldo_anterior)),
       row('Saldo restante:', fmt(datos.saldo_nuevo)),
@@ -990,7 +1031,7 @@ export default function Cobranza() {
     const { logo: logoSrc, f400, f700 } = recursos || {}
     const {
       id_pago, fecha_pago, monto_pago, saldo_anterior, saldo_nuevo,
-      tipo_pago, origen_pago,
+      tipo_pago, origen_pago, metodo_pago,
       cliente_nombre, numero_expediente, numero_cuenta, folio_cuenta, plan_actual,
       cobrador_nombre,
       precio_original_total, precio_final_total,
@@ -1099,6 +1140,7 @@ export default function Cobranza() {
   <div class="monto-label">MONTO ABONADO</div>
   <div class="monto-principal">${fmtMXN(monto_pago)}</div>
   <div class="row"><span>Tipo:</span><span>${tipoStr}</span></div>
+  <div class="row"><span>Método:</span><span${metodo_pago === 'deposito' ? ' class="bold"' : ''}>${metodo_pago === 'deposito' ? '💳 Depósito' : 'Efectivo'}</span></div>
   <div class="sep-das"></div>
   <div class="row"><span>Saldo anterior:</span><span>${fmtMXN(saldo_anterior)}</span></div>
   <div class="row"><span>Saldo restante:</span><span class="bold">${fmtMXN(saldo_nuevo)}</span></div>
@@ -1151,6 +1193,7 @@ export default function Cobranza() {
       saldo_nuevo: p.saldo_nuevo,
       tipo_pago: p.tipo_pago,
       origen_pago: p.origen_pago,
+      metodo_pago: p.metodo_pago,
       cliente_nombre: cuentaDetalle.cliente?.nombre,
       numero_expediente: cuentaDetalle.cliente?.numero_expediente,
       numero_cuenta: cuentaDetalle.numero_cuenta,
@@ -1194,6 +1237,7 @@ export default function Cobranza() {
           id_cuenta: cuentaSeleccionada.id_cuenta,
           ...formPago,
           monto_pago: monto,
+          ...(formPago.metodo_pago === 'deposito' && comprobanteDeposito ? { comprobante_base64: comprobanteDeposito } : {}),
           ...(pagoHistorico && fechaPagoHistorico && { fecha_pago: fechaPagoHistorico }),
           // Misma clave en todos los reintentos (directo, cola offline, resincronización)
           // para que una respuesta perdida por señal mala no duplique el pago en el servidor.
@@ -1229,6 +1273,7 @@ export default function Cobranza() {
             saldo_nuevo:     Math.max(0, saldoAntes - monto),
             tipo_pago:       formPago.tipo_pago,
             origen_pago:     formPago.origen_pago,
+            metodo_pago:     formPago.metodo_pago,
             cliente_nombre:  cuentaSeleccionada.cliente?.nombre,
             numero_expediente: cuentaSeleccionada.cliente?.numero_expediente,
             numero_cuenta:     cuentaSeleccionada.numero_cuenta,
@@ -1242,6 +1287,7 @@ export default function Cobranza() {
           })
           setExito('__offline__')
           setFormPago(FORM_PAGO_VACIO)
+          setComprobanteDeposito(null)
           setFormVisita(FORM_VISITA_VACIO)
           setRegistrarVisitaTambien(false)
         }
@@ -1284,6 +1330,7 @@ export default function Cobranza() {
           saldo_nuevo:     res.data.saldo_nuevo,
           tipo_pago:       res.data.pago.tipo_pago,
           origen_pago:     res.data.pago.origen_pago,
+          metodo_pago:     res.data.pago.metodo_pago,
           cliente_nombre:  cuentaSeleccionada.cliente?.nombre,
           numero_expediente: cuentaSeleccionada.cliente?.numero_expediente,
           numero_cuenta:     cuentaSeleccionada.numero_cuenta,
@@ -1308,6 +1355,7 @@ export default function Cobranza() {
               `Comisión: $${parseFloat(res.data.comision_cobrador).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
         )
         setFormPago(FORM_PAGO_VACIO)
+        setComprobanteDeposito(null)
         setFormVisita(FORM_VISITA_VACIO)
         setRegistrarVisitaTambien(false)
         if (modoRuta) marcarParada(cuentaSeleccionada.id_cuenta, 'pagado')
@@ -2759,6 +2807,52 @@ export default function Cobranza() {
                       </select>
                     </div>
 
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Método de pago</label>
+                      <select
+                        value={formPago.metodo_pago}
+                        onChange={e => { const m = e.target.value; setFormPago({ ...formPago, metodo_pago: m }); if (m !== 'deposito') setComprobanteDeposito(null) }}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="efectivo">Efectivo</option>
+                        <option value="deposito">Depósito</option>
+                      </select>
+                    </div>
+
+                    {formPago.metodo_pago === 'deposito' && (
+                      <div className="col-span-2 border border-indigo-200 bg-indigo-50 rounded-xl p-3 space-y-2">
+                        <p className="text-xs text-indigo-800 font-medium">
+                          💳 Depósito — este dinero NO lo trae el cobrador; entra a comisión pero no al efectivo del corte.
+                        </p>
+                        {comprobanteDeposito ? (
+                          <div className="flex items-start gap-3">
+                            <img src={comprobanteDeposito} alt="Comprobante" className="w-24 h-24 object-cover rounded-lg border border-indigo-200" />
+                            <button type="button" onClick={() => setComprobanteDeposito(null)}
+                              className="text-xs text-red-600 hover:text-red-800 font-medium">Quitar foto</button>
+                          </div>
+                        ) : (
+                          <label className={`flex items-center justify-center gap-2 bg-white border border-indigo-300 rounded-lg px-3 py-2.5 text-sm font-medium text-indigo-700 cursor-pointer hover:bg-indigo-100 transition ${procesandoComprobante ? 'opacity-50 pointer-events-none' : ''}`}>
+                            {procesandoComprobante ? 'Procesando…' : '📷 Foto del comprobante'}
+                            <input
+                              type="file" accept="image/*" capture="environment" className="hidden"
+                              onChange={async e => {
+                                const file = e.target.files?.[0]
+                                e.target.value = ''
+                                if (!file) return
+                                setProcesandoComprobante(true)
+                                try { setComprobanteDeposito(await comprimirImagen(file)) }
+                                catch { alert('No se pudo procesar la imagen') }
+                                finally { setProcesandoComprobante(false) }
+                              }}
+                            />
+                          </label>
+                        )}
+                        {!comprobanteDeposito && (
+                          <p className="text-xs text-indigo-500">La foto es recomendada pero no obligatoria.</p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones del pago</label>
                       <input
@@ -3586,6 +3680,13 @@ export default function Cobranza() {
                             <div>
                               <span className={`font-medium ${esFusion ? 'text-purple-800' : 'text-gray-800'}`}>{fmt(p.monto_pago)}</span>
                               <span className="text-gray-400 ml-2 text-xs">{p.tipo_pago?.replace(/_/g, ' ')}</span>
+                              {p.metodo_pago === 'deposito' && (
+                                <span className="ml-2 text-xs font-medium text-indigo-600">💳 Depósito</span>
+                              )}
+                              {p.comprobante && (
+                                <button type="button" onClick={() => verComprobante(p.id_pago)}
+                                  className="ml-2 text-xs text-blue-600 hover:text-blue-800 underline">ver comprobante</button>
+                              )}
                               {p.observaciones && !esFusion && <p className="text-gray-400 text-xs mt-0.5">{p.observaciones}</p>}
                             </div>
                             <div className="text-right">
@@ -3681,6 +3782,16 @@ export default function Cobranza() {
               onPlusCode={usarPlusCodeManualUbicacion}
               onGuardar={guardarUbicacionCliente}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Visor del comprobante de depósito */}
+      {comprobanteVisto && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-4" onClick={cerrarComprobanteVisto}>
+          <div className="max-w-2xl max-h-[90vh] flex flex-col items-center gap-3" onClick={e => e.stopPropagation()}>
+            <img src={comprobanteVisto} alt="Comprobante de depósito" className="max-w-full max-h-[80vh] rounded-lg object-contain" />
+            <button onClick={cerrarComprobanteVisto} className="bg-white text-gray-800 px-4 py-2 rounded-lg text-sm font-medium">Cerrar</button>
           </div>
         </div>
       )}

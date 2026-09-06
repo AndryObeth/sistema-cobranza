@@ -50,7 +50,7 @@ router.get('/cuenta/:id_cuenta', auth, async (req, res) => {
         pagos: {
           orderBy: { fecha_pago: 'desc' },
           take: 10,
-          include: { cobrador: true }
+          include: { cobrador: true, comprobante: { select: { id_comprobante: true } } }
         }
       }
     })
@@ -115,7 +115,8 @@ router.get('/por-fecha', auth, async (req, res) => {
       where,
       include: {
         cuenta: { include: { cliente: { select: { nombre: true, numero_expediente: true } } } },
-        cobrador: { select: { nombre: true } }
+        cobrador: { select: { nombre: true } },
+        comprobante: { select: { id_comprobante: true } }
       },
       orderBy: { fecha_pago: 'asc' }
     })
@@ -143,6 +144,8 @@ router.get('/por-fecha', auth, async (req, res) => {
         monto_pago:        parseFloat(p.monto_pago),
         tipo_pago:         p.tipo_pago,
         origen_pago:       p.origen_pago,
+        metodo_pago:       p.metodo_pago,
+        tiene_comprobante: !!p.comprobante,
         cliente_nombre:    p.cuenta?.cliente?.nombre,
         numero_expediente: p.cuenta?.cliente?.numero_expediente,
         cobrador_nombre:   p.cobrador?.nombre || '—',
@@ -150,6 +153,25 @@ router.get('/por-fecha', auth, async (req, res) => {
     })
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener pagos por fecha', detalle: error.message })
+  }
+})
+
+// GET /api/pagos/:id/comprobante — imagen del comprobante de deposito (binario)
+router.get('/:id/comprobante', auth, async (req, res) => {
+  try {
+    const comp = await prisma.comprobantePago.findUnique({
+      where: { id_pago: parseInt(req.params.id) },
+      select: { imagen: true },
+    })
+    if (!comp?.imagen) return res.status(404).json({ error: 'Sin comprobante' })
+    const match = comp.imagen.match(/^data:(.+);base64,(.+)$/)
+    if (!match) return res.status(500).json({ error: 'Formato inválido' })
+    const [, mimeType, base64Data] = match
+    res.setHeader('Content-Type', mimeType)
+    res.setHeader('Cache-Control', 'private, max-age=86400')
+    res.send(Buffer.from(base64Data, 'base64'))
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener comprobante' })
   }
 })
 
@@ -258,7 +280,8 @@ router.put('/cuenta/:id/frecuencia', auth, async (req, res) => {
 // POST /api/pagos — registrar pago
 router.post('/', auth, async (req, res) => {
   try {
-    const { id_cuenta, monto_pago, tipo_pago, origen_pago, observaciones, fecha_pago, idempotency_key } = req.body
+    const { id_cuenta, monto_pago, tipo_pago, origen_pago, observaciones, fecha_pago, idempotency_key, metodo_pago, comprobante_base64 } = req.body
+    const metodo = metodo_pago === 'deposito' ? 'deposito' : 'efectivo'
     const esAdmin = ['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)
     const fechaPago = esAdmin && fecha_pago ? new Date(fecha_pago + 'T12:00:00') : new Date()
 
@@ -361,6 +384,7 @@ router.post('/', auth, async (req, res) => {
         saldo_nuevo,
         tipo_pago: tipo_pago || 'abono',
         origen_pago: origen_pago || 'domicilio',
+        metodo_pago: metodo,
         aplica_a_enganche_regado,
         monto_aplicado_enganche_regado: monto_aplicado_enganche,
         monto_aplicado_saldo,
@@ -368,6 +392,16 @@ router.post('/', auth, async (req, res) => {
         idempotency_key: idempotency_key || null
       }
     })
+
+    // Comprobante del deposito (opcional). Si falla el guardado de la imagen no
+    // se aborta el pago — el comprobante es recomendado, no obligatorio.
+    if (metodo === 'deposito' && typeof comprobante_base64 === 'string' && comprobante_base64.startsWith('data:image/')) {
+      try {
+        await prisma.comprobantePago.create({ data: { id_pago: pago.id_pago, imagen: comprobante_base64 } })
+      } catch (e) {
+        console.error('No se pudo guardar el comprobante del pago', pago.id_pago, e.message)
+      }
+    }
 
     // Actualizar cuenta
     await prisma.cuenta.update({

@@ -23,12 +23,14 @@ const ordenarPorNumeroCuenta = (detalle) => {
 
 // PDF de un corte (vía ventana de impresión) — reutilizable tanto para el
 // periodo actual en pantalla como para cualquier corte ya cerrado del historial.
-const exportarPdfCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCobrado, totalComisiones, cantidadPagos, detalle }) => {
+const exportarPdfCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCobrado, totalComisiones, cantidadPagos, detalle, totalDeposito = 0, totalEfectivo = null }) => {
+  const efectivo = totalEfectivo ?? (totalCobrado - totalDeposito)
   const filas = ordenarPorNumeroCuenta(detalle).map(p => `
     <tr>
       <td>${p.cliente}</td>
       <td>${p.numero_cuenta || '—'}</td>
       <td class="right">${fmt(p.monto)}</td>
+      <td>${p.metodo_pago === 'deposito' ? 'Deposito' : 'Efectivo'}</td>
       <td class="right">${fmt(p.saldo_nuevo)}</td>
       <td>${fmtFechaHora(p.fecha_pago)}</td>
       <td class="cap">${p.origen_pago}</td>
@@ -62,14 +64,14 @@ const exportarPdfCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCobrad
   <h1>Corte de cobrador — ${nombreCobrador}</h1>
   <p class="sub">Periodo: ${fmtFecha(semanaInicio)} – ${fmtFecha(semanaFin)} · Novedades Cancún</p>
   <div class="resumen">
-    <div class="card"><div class="label">Total cobrado</div><div class="valor">${fmt(totalCobrado)}</div></div>
-    <div class="card"><div class="label">Comisión (12%)</div><div class="valor" style="color:#16a34a">${fmt(totalComisiones)}</div></div>
+    <div class="card"><div class="label">Total cobrado</div><div class="valor">${fmt(totalCobrado)}</div>${totalDeposito > 0 ? `<div style="font-size:11px;color:#4f46e5;margin-top:2px;">Depósitos: ${fmt(totalDeposito)} · Efectivo: ${fmt(efectivo)}</div>` : ''}</div>
+    <div class="card"><div class="label">Comisión (12%)${totalDeposito > 0 ? ' — incluye depósitos' : ''}</div><div class="valor" style="color:#16a34a">${fmt(totalComisiones)}</div></div>
     <div class="card"><div class="label">Cantidad de pagos</div><div class="valor" style="color:#2563eb">${cantidadPagos}</div></div>
   </div>
   <table>
-    <thead><tr><th>Cliente</th><th>No. cuenta</th><th class="right">Monto</th><th class="right">Saldo actual</th><th>Fecha y hora</th><th>Origen</th></tr></thead>
+    <thead><tr><th>Cliente</th><th>No. cuenta</th><th class="right">Monto</th><th>Método</th><th class="right">Saldo actual</th><th>Fecha y hora</th><th>Origen</th></tr></thead>
     <tbody>${filas}</tbody>
-    <tfoot><tr><td>Total</td><td></td><td class="right">${fmt(totalCobrado)}</td><td></td><td colspan="2"></td></tr></tfoot>
+    <tfoot><tr><td>Total</td><td></td><td class="right">${fmt(totalCobrado)}</td><td>${totalDeposito > 0 ? 'Efvo ' + fmt(efectivo) : ''}</td><td></td><td colspan="2"></td></tr></tfoot>
   </table>
   <button class="btn-imprimir" onclick="window.print()">Imprimir / Guardar como PDF</button>
   <script>window.onload = function(){ window.print(); }</script>
@@ -85,7 +87,7 @@ const exportarPdfCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCobrad
 // Texto plano para compartir el corte por RawBT (impresora térmica portátil).
 // Resumen arriba + desglose por cuenta (no. cuenta / monto / saldo actual)
 // en formato de tabla de 3 columnas, para que quepa en el rollo de 58mm.
-const formatearTextoCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCobrado, totalComisiones, cantidadPagos, detalle }) => {
+const formatearTextoCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCobrado, totalComisiones, cantidadPagos, detalle, totalDeposito = 0, totalEfectivo = null }) => {
   const W = 32
   const sep = '='.repeat(W)
   const das = '-'.repeat(W)
@@ -114,6 +116,10 @@ const formatearTextoCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCob
     row('Periodo:', periodo),
     das,
     row('Total cobrado:', money(totalCobrado)),
+    ...(totalDeposito > 0 ? [
+      row('- Depositos:', money(totalDeposito)),
+      row('= Efectivo:', money(totalEfectivo ?? (totalCobrado - totalDeposito))),
+    ] : []),
     row('Comision (12%):', money(totalComisiones)),
     row('Cantidad de pagos:', String(cantidadPagos)),
     das,
@@ -179,27 +185,38 @@ function ModalCerrarCorte({ cobradorId, semana, onCerrar, onClose }) {
 
         <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm space-y-1">
           <p><span className="text-gray-500">Total cobrado:</span> <strong>{fmt(semana.total_cobrado)}</strong></p>
-          <p><span className="text-gray-500">Comisión:</span> <strong>{fmt(semana.total_comisiones)}</strong></p>
+          {semana.total_deposito > 0 && (
+            <>
+              <p><span className="text-indigo-500">− Depósitos directos:</span> <strong className="text-indigo-700">{fmt(semana.total_deposito)}</strong> <span className="text-gray-400 text-xs">(no los trae el cobrador)</span></p>
+              <p className="border-t pt-1"><span className="text-gray-700">= Efectivo a entregar:</span> <strong>{fmt(semana.total_efectivo ?? semana.total_cobrado)}</strong></p>
+            </>
+          )}
+          <p><span className="text-gray-500">Comisión (incluye depósitos):</span> <strong className="text-green-700">{fmt(semana.total_comisiones)}</strong></p>
           <p><span className="text-gray-500">Pagos:</span> <strong>{semana.cantidad_pagos}</strong></p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Total depositado *</label>
+            <label className="block text-sm font-medium mb-1">Total entregado / depositado por el cobrador *</label>
             <input
               type="number"
               step="0.01"
               value={totalDepositado}
               onChange={e => setTotalDepositado(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
+              placeholder={`${(semana.total_efectivo ?? semana.total_cobrado).toFixed(2)}`}
               required
             />
-            {totalDepositado && (
-              <p className={`text-xs mt-1 ${parseFloat(totalDepositado) < semana.total_cobrado ? 'text-red-600' : 'text-green-600'}`}>
-                Diferencia: {fmt(semana.total_cobrado - parseFloat(totalDepositado))}
-              </p>
-            )}
+            <p className="text-xs text-gray-400 mt-0.5">Solo el efectivo que el cobrador entregó — los depósitos directos ya están en la empresa.</p>
+            {totalDepositado && (() => {
+              const efectivo = semana.total_efectivo ?? semana.total_cobrado
+              const dif = efectivo - parseFloat(totalDepositado)
+              return (
+                <p className={`text-xs mt-1 font-medium ${Math.abs(dif) < 0.01 ? 'text-green-600' : dif > 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                  Diferencia (efectivo): {fmt(dif)} {Math.abs(dif) < 0.01 ? '✓ cuadra' : dif > 0 ? '— falta entregar' : '— entregó de más'}
+                </p>
+              )
+            })()}
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Observaciones</label>
@@ -245,6 +262,20 @@ function TabCobrador({ usuario }) {
   const [fechaFin, setFechaFin] = useState('')
   const [inputInicio, setInputInicio] = useState('')
   const [inputFin, setInputFin] = useState('')
+  const [comprobanteVisto, setComprobanteVisto] = useState(null)
+
+  const verComprobante = async (idPago) => {
+    try {
+      const res = await api.get(`/pagos/${idPago}/comprobante`, { responseType: 'blob', timeout: 15000 })
+      setComprobanteVisto(URL.createObjectURL(res.data))
+    } catch {
+      alert('No se pudo cargar el comprobante.')
+    }
+  }
+  const cerrarComprobanteVisto = () => {
+    if (comprobanteVisto) URL.revokeObjectURL(comprobanteVisto)
+    setComprobanteVisto(null)
+  }
 
   const esCobrador = ['cobrador', 'supervisor_cobranza'].includes(usuario?.rol)
 
@@ -313,6 +344,8 @@ function TabCobrador({ usuario }) {
       totalComisiones: resumen.total_comisiones,
       cantidadPagos: resumen.cantidad_pagos,
       detalle: resumen.detalle,
+      totalDeposito: resumen.total_deposito || 0,
+      totalEfectivo: resumen.total_efectivo,
     })
   }
 
@@ -329,6 +362,7 @@ function TabCobrador({ usuario }) {
       saldo_nuevo: parseFloat(d.pago?.saldo_nuevo || 0),
       fecha_pago: d.pago?.fecha_pago,
       origen_pago: d.pago?.origen_pago || '—',
+      metodo_pago: d.pago?.metodo_pago,
     }))
     const totalComisiones = corte.detalles.reduce((s, d) => s + parseFloat(d.comision_generada), 0)
 
@@ -340,6 +374,8 @@ function TabCobrador({ usuario }) {
       totalComisiones,
       cantidadPagos: corte.detalles.length,
       detalle,
+      totalDeposito: parseFloat(corte.total_deposito || 0),
+      totalEfectivo: parseFloat(corte.total_deposito || 0) > 0 ? parseFloat(corte.total_cobrado) - parseFloat(corte.total_deposito) : null,
     })
   }
 
@@ -365,6 +401,8 @@ function TabCobrador({ usuario }) {
       totalComisiones: resumen.total_comisiones,
       cantidadPagos: resumen.cantidad_pagos,
       detalle: resumen.detalle,
+      totalDeposito: resumen.total_deposito || 0,
+      totalEfectivo: resumen.total_efectivo,
     })
   }
 
@@ -391,6 +429,8 @@ function TabCobrador({ usuario }) {
       totalCobrado: corte.total_cobrado,
       totalComisiones,
       cantidadPagos: corte.detalles.length,
+      totalDeposito: parseFloat(corte.total_deposito || 0),
+      totalEfectivo: parseFloat(corte.total_deposito || 0) > 0 ? parseFloat(corte.total_cobrado) - parseFloat(corte.total_deposito) : null,
       detalle,
     })
   }
@@ -458,9 +498,15 @@ function TabCobrador({ usuario }) {
             <div className="bg-white rounded-xl p-4 shadow-sm border">
               <p className="text-xs text-gray-500 mb-1">Total cobrado</p>
               <p className="text-2xl font-bold text-gray-800">{fmt(resumen.total_cobrado)}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {fmtFecha(resumen.semana_inicio)} – {fmtFecha(resumen.semana_fin)}
-              </p>
+              {resumen.total_deposito > 0 ? (
+                <p className="text-xs text-indigo-600 mt-1">
+                  💳 {fmt(resumen.total_deposito)} en depósito · efectivo {fmt(resumen.total_efectivo)}
+                </p>
+              ) : (
+                <p className="text-xs text-gray-400 mt-1">
+                  {fmtFecha(resumen.semana_inicio)} – {fmtFecha(resumen.semana_fin)}
+                </p>
+              )}
             </div>
             <div className="bg-white rounded-xl p-4 shadow-sm border">
               <p className="text-xs text-gray-500 mb-1">Comisión generada (12%)</p>
@@ -513,6 +559,7 @@ function TabCobrador({ usuario }) {
                       <th className="text-left px-4 py-3">Cliente</th>
                       <th className="text-left px-4 py-3">No. cuenta</th>
                       <th className="text-right px-4 py-3">Monto</th>
+                      <th className="text-left px-4 py-3">Método</th>
                       <th className="text-right px-4 py-3">Saldo actual</th>
                       <th className="text-left px-4 py-3">Fecha y hora</th>
                       <th className="text-left px-4 py-3">Origen</th>
@@ -524,6 +571,16 @@ function TabCobrador({ usuario }) {
                         <td className="px-4 py-3 font-medium">{p.cliente}</td>
                         <td className="px-4 py-3 text-blue-600 font-mono text-xs">{p.numero_cuenta || '—'}</td>
                         <td className="px-4 py-3 text-right">{fmt(p.monto)}</td>
+                        <td className="px-4 py-3 text-xs">
+                          {p.metodo_pago === 'deposito' ? (
+                            <span className="text-indigo-600 font-medium">
+                              💳 Depósito
+                              {p.tiene_comprobante && (
+                                <button onClick={() => verComprobante(p.id_pago)} className="ml-1 text-blue-600 underline">ver</button>
+                              )}
+                            </span>
+                          ) : <span className="text-gray-400">Efectivo</span>}
+                        </td>
                         <td className="px-4 py-3 text-right text-gray-700">{fmt(p.saldo_nuevo)}</td>
                         <td className="px-4 py-3 text-gray-500">{fmtFechaHora(p.fecha_pago)}</td>
                         <td className="px-4 py-3 capitalize text-gray-500">{p.origen_pago}</td>
@@ -535,8 +592,10 @@ function TabCobrador({ usuario }) {
                       <td className="px-4 py-3">Total</td>
                       <td className="px-4 py-3" />
                       <td className="px-4 py-3 text-right">{fmt(resumen.total_cobrado)}</td>
-                      <td className="px-4 py-3" />
-                      <td colSpan={2} />
+                      <td className="px-4 py-3 text-xs text-indigo-600">
+                        {resumen.total_deposito > 0 ? `💳 ${fmt(resumen.total_deposito)} · efvo ${fmt(resumen.total_efectivo)}` : ''}
+                      </td>
+                      <td colSpan={3} />
                     </tr>
                   </tfoot>
                 </table>
@@ -554,8 +613,9 @@ function TabCobrador({ usuario }) {
                     <tr>
                       <th className="text-left px-4 py-3">Período</th>
                       <th className="text-right px-4 py-3">Total cobrado</th>
-                      <th className="text-right px-4 py-3">Depositado</th>
-                      <th className="text-right px-4 py-3">Diferencia</th>
+                      <th className="text-right px-4 py-3">Depósitos</th>
+                      <th className="text-right px-4 py-3">Entregado</th>
+                      <th className="text-right px-4 py-3">Dif. efectivo</th>
                       <th className="text-right px-4 py-3">Comisión</th>
                       <th className="text-left px-4 py-3">Estado</th>
                       <th className="text-left px-4 py-3"></th>
@@ -568,8 +628,9 @@ function TabCobrador({ usuario }) {
                           {fmtFecha(c.fecha_inicio)} – {fmtFecha(c.fecha_fin)}
                         </td>
                         <td className="px-4 py-3 text-right">{fmt(c.total_cobrado)}</td>
+                        <td className="px-4 py-3 text-right text-indigo-600">{parseFloat(c.total_deposito) > 0 ? fmt(c.total_deposito) : '—'}</td>
                         <td className="px-4 py-3 text-right">{fmt(c.total_depositado)}</td>
-                        <td className={`px-4 py-3 text-right ${parseFloat(c.diferencia) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        <td className={`px-4 py-3 text-right ${Math.abs(parseFloat(c.diferencia)) < 0.01 ? 'text-green-600' : parseFloat(c.diferencia) > 0 ? 'text-red-600' : 'text-amber-600'}`}>
                           {fmt(c.diferencia)}
                         </td>
                         <td className="px-4 py-3 text-right text-green-600">{fmt(c.comision_total)}</td>
@@ -611,6 +672,15 @@ function TabCobrador({ usuario }) {
           onCerrar={recargar}
           onClose={() => setModalAbierto(false)}
         />
+      )}
+
+      {comprobanteVisto && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-4" onClick={cerrarComprobanteVisto}>
+          <div className="max-w-2xl max-h-[90vh] flex flex-col items-center gap-3" onClick={e => e.stopPropagation()}>
+            <img src={comprobanteVisto} alt="Comprobante de depósito" className="max-w-full max-h-[80vh] rounded-lg object-contain" />
+            <button onClick={cerrarComprobanteVisto} className="bg-white text-gray-800 px-4 py-2 rounded-lg text-sm font-medium">Cerrar</button>
+          </div>
+        </div>
       )}
     </div>
   )

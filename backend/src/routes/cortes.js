@@ -62,12 +62,19 @@ router.get('/cobrador/resumen/:id_cobrador', auth, async (req, res) => {
       include: {
         cliente: { select: { nombre: true } },
         cuenta:  { select: { numero_cuenta: true, folio_cuenta: true } },
-        comision_cobrador: true
+        comision_cobrador: true,
+        comprobante: { select: { id_comprobante: true } }
       },
       orderBy: { fecha_pago: 'asc' }
     })
 
     const total_cobrado = pagos.reduce((sum, p) => sum + parseFloat(p.monto_pago), 0)
+    // Depositos directos: el cliente deposito a la empresa, el cobrador NO trae
+    // ese dinero fisico. Cuentan para comision pero no para el efectivo a entregar.
+    const total_deposito = pagos
+      .filter(p => p.metodo_pago === 'deposito')
+      .reduce((sum, p) => sum + parseFloat(p.monto_pago), 0)
+    const total_efectivo = parseFloat((total_cobrado - total_deposito).toFixed(2))
     const total_comisiones = pagos.reduce(
       (sum, p) => sum + parseFloat(p.comision_cobrador?.comision_generada || 0), 0
     )
@@ -80,13 +87,17 @@ router.get('/cobrador/resumen/:id_cobrador', auth, async (req, res) => {
       comision_generada: parseFloat(p.comision_cobrador?.comision_generada || 0),
       saldo_nuevo: parseFloat(p.saldo_nuevo),
       fecha_pago: p.fecha_pago,
-      origen_pago: p.origen_pago
+      origen_pago: p.origen_pago,
+      metodo_pago: p.metodo_pago,
+      tiene_comprobante: !!p.comprobante
     }))
 
     res.json({
       semana_inicio: inicio,
       semana_fin: fin,
       total_cobrado,
+      total_deposito,
+      total_efectivo,
       total_comisiones,
       cantidad_pagos: pagos.length,
       detalle
@@ -119,10 +130,16 @@ router.post('/cobrador/cerrar', auth, async (req, res) => {
     }
 
     const total_cobrado = pagos.reduce((sum, p) => sum + parseFloat(p.monto_pago), 0)
+    const total_deposito = pagos
+      .filter(p => p.metodo_pago === 'deposito')
+      .reduce((sum, p) => sum + parseFloat(p.monto_pago), 0)
+    const total_efectivo = parseFloat((total_cobrado - total_deposito).toFixed(2))
     const comision_total = pagos.reduce(
       (sum, p) => sum + parseFloat(p.comision_cobrador?.comision_generada || 0), 0
     )
-    const diferencia = total_cobrado - parseFloat(total_depositado)
+    // La diferencia cuadra el EFECTIVO: lo que el cobrador cobro en efectivo vs
+    // lo que entrego/deposito. Los depositos directos no entran (nunca los tuvo).
+    const diferencia = parseFloat((total_efectivo - parseFloat(total_depositado)).toFixed(2))
 
     const corte = await prisma.corteCobrador.create({
       data: {
@@ -130,6 +147,7 @@ router.post('/cobrador/cerrar', auth, async (req, res) => {
         fecha_inicio: new Date(fecha_inicio),
         fecha_fin: new Date(fecha_fin),
         total_cobrado,
+        total_deposito,
         total_depositado: parseFloat(total_depositado),
         diferencia,
         comision_total,
@@ -165,9 +183,10 @@ router.get('/cobrador/historial/:id_cobrador', auth, async (req, res) => {
           include: {
             pago: {
               select: {
-                fecha_pago: true, origen_pago: true, saldo_nuevo: true,
+                fecha_pago: true, origen_pago: true, saldo_nuevo: true, metodo_pago: true,
                 cliente: { select: { nombre: true } },
-                cuenta: { select: { numero_cuenta: true, folio_cuenta: true } }
+                cuenta: { select: { numero_cuenta: true, folio_cuenta: true } },
+                comprobante: { select: { id_comprobante: true } }
               }
             }
           }
