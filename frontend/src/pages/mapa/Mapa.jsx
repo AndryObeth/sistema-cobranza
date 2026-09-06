@@ -5,6 +5,7 @@ import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
 import { encodePlusCode, decodePlusCode, isValidPlusCode, normalizePlusCode } from '../../utils/plusCode.js'
+import { encolarUbicacion } from '../../utils/offlineQueue.js'
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY
 const CENTRO_TUXTEPEC = { lat: 18.0886, lng: -96.1342 }
@@ -228,23 +229,30 @@ export default function Mapa() {
   const guardarUbicacionMapa = async () => {
     if (!ubicPendienteMapa || !modalCorreccion) return
     setGuardandoUbicMapa(true)
+    const idCliente = modalCorreccion.cliente?.id_cliente
+    const { lat, lng, plus_code } = ubicPendienteMapa
+    // Refleja la ubicación nueva en el mapa (quita el pin gris)
+    const aplicarLocal = () => setMarcadores(prev => prev.map(m =>
+      m.cuenta.cliente?.id_cliente === idCliente
+        ? { ...m, latitud: lat, longitud: lng, sinPlusCode: !plus_code,
+            cuenta: { ...m.cuenta, cliente: { ...m.cuenta.cliente, latitud: lat, longitud: lng, plus_code } } }
+        : m
+    ))
+    const guardarLocalYSalir = () => {
+      encolarUbicacion({ id_cliente: idCliente, latitud: lat, longitud: lng, plus_code })
+      aplicarLocal()
+      cerrarModalCorreccion()
+      mostrarToast('📴 Ubicación guardada localmente — se enviará al reconectar')
+    }
+    if (!navigator.onLine) { guardarLocalYSalir(); setGuardandoUbicMapa(false); return }
     try {
-      const idCliente = modalCorreccion.cliente?.id_cliente
-      await api.put(`/clientes/${idCliente}/coordenadas`, {
-        latitud:   ubicPendienteMapa.lat,
-        longitud:  ubicPendienteMapa.lng,
-        plus_code: ubicPendienteMapa.plus_code,
-      })
-      setMarcadores(prev => prev.map(m =>
-        m.cuenta.cliente?.id_cliente === idCliente
-          ? { ...m, latitud: ubicPendienteMapa.lat, longitud: ubicPendienteMapa.lng,
-              cuenta: { ...m.cuenta, cliente: { ...m.cuenta.cliente, plus_code: ubicPendienteMapa.plus_code } } }
-          : m
-      ))
+      await api.put(`/clientes/${idCliente}/coordenadas`, { latitud: lat, longitud: lng, plus_code }, { timeout: 10000 })
+      aplicarLocal()
       cerrarModalCorreccion()
       mostrarToast('Ubicación actualizada ✅')
-    } catch {
-      mostrarToast('Error al guardar la ubicación')
+    } catch (err) {
+      if (err.response) mostrarToast(err.response.data?.error || 'Error al guardar la ubicación')
+      else guardarLocalYSalir()
     } finally {
       setGuardandoUbicMapa(false)
     }
@@ -254,18 +262,31 @@ export default function Mapa() {
     if (!modoEdicion || !clienteEditandoCoords) return
     const lat = e.latLng.lat()
     const lng = e.latLng.lng()
+    const plus_code = encodePlusCode(lat, lng) // el punto marcado en el mapa es preciso
     const idCliente = clienteEditandoCoords.cuenta.cliente.id_cliente
+    const aplicarLocal = () => setMarcadores(prev => prev.map(m =>
+      m.cuenta.cliente?.id_cliente === idCliente
+        ? { ...m, latitud: lat, longitud: lng, sinPlusCode: false,
+            cuenta: { ...m.cuenta, cliente: { ...m.cuenta.cliente, latitud: lat, longitud: lng, plus_code } } }
+        : m
+    ))
+    const guardarLocalYSalir = () => {
+      encolarUbicacion({ id_cliente: idCliente, latitud: lat, longitud: lng, plus_code })
+      aplicarLocal()
+      setModoEdicion(false)
+      setClienteEditandoCoords(null)
+      mostrarToast('📴 Ubicación guardada localmente — se enviará al reconectar')
+    }
+    if (!navigator.onLine) { guardarLocalYSalir(); return }
     try {
-      await api.put(`/clientes/${idCliente}/coordenadas`, { latitud: lat, longitud: lng })
-      setMarcadores(prev => prev.map(m =>
-        m.cuenta.cliente?.id_cliente === idCliente ? { ...m, latitud: lat, longitud: lng } : m
-      ))
+      await api.put(`/clientes/${idCliente}/coordenadas`, { latitud: lat, longitud: lng, plus_code }, { timeout: 10000 })
+      aplicarLocal()
       setModoEdicion(false)
       setClienteEditandoCoords(null)
       mostrarToast('Ubicación actualizada correctamente')
-    } catch {
-      mostrarToast('Error al actualizar la ubicación')
-      cancelarEdicion()
+    } catch (err) {
+      if (err.response) { mostrarToast(err.response.data?.error || 'Error al actualizar la ubicación'); cancelarEdicion() }
+      else guardarLocalYSalir()
     }
   }
 
