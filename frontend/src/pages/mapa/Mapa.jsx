@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
 import { encodePlusCode, decodePlusCode, isValidPlusCode, normalizePlusCode } from '../../utils/plusCode.js'
 import { encolarUbicacion } from '../../utils/offlineQueue.js'
+import { optimizarRuta, largoRutaKm } from '../../utils/ruta.js'
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY
 const CENTRO_TUXTEPEC = { lat: 18.0886, lng: -96.1342 }
@@ -51,27 +52,6 @@ function distanciaKm(a, b) {
     Math.cos((b.lat * Math.PI) / 180) *
     Math.sin(dLng / 2) ** 2
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
-}
-
-// Algoritmo Nearest Neighbor para ordenar puntos
-function optimizarRuta(puntos, origen) {
-  if (puntos.length === 0) return []
-  const restantes = [...puntos]
-  const ruta = []
-  let actual = origen
-
-  while (restantes.length > 0) {
-    let minDist = Infinity
-    let idx = 0
-    restantes.forEach((p, i) => {
-      const d = distanciaKm(actual, { lat: p.latitud, lng: p.longitud })
-      if (d < minDist) { minDist = d; idx = i }
-    })
-    const siguiente = restantes.splice(idx, 1)[0]
-    ruta.push(siguiente)
-    actual = { lat: siguiente.latitud, lng: siguiente.longitud }
-  }
-  return ruta
 }
 
 // Reparte n puntos en un círculo alrededor de un centro, para despegar pines encimados.
@@ -144,7 +124,8 @@ export default function Mapa() {
 
   const [cuentas, setCuentas] = useState([])
   const [marcadores, setMarcadores] = useState([]) // { cuenta, latitud, longitud }
-  const [rutaOptimizada, setRutaOptimizada] = useState([]) // solo paradas con ubicación precisa
+  const [rutaOptimizada, setRutaOptimizada] = useState([])
+  const [rutaKm, setRutaKm] = useState(null) // distancia total estimada de la ruta
   const [seleccionado, setSeleccionado] = useState(null)
   const [rutaOrdenada, setRutaOrdenada] = useState(false)
   const [geocodificando, setGeocodificando] = useState(false)
@@ -461,25 +442,19 @@ export default function Mapa() {
   }
 
   const handleOptimizar = () => {
-    // Respeta los filtros de ruta/día activos. Se optimizan primero los clientes
-    // con ubicación precisa (con plus_code) y al final se agregan los de ubicación
-    // aproximada (pin gris) — también enrutados entre sí, pero marcados aparte
-    // para que el cobrador sepa que ese punto no es exacto.
+    // Respeta los filtros de ruta/día activos. Todos los clientes (ubicación
+    // precisa y aproximada) entran a UNA sola optimización — separarlos hacía
+    // que un cliente aproximado que queda de paso se visitara hasta el final,
+    // provocando regresos. Los aproximados solo se marcan con ⚠️ en la lista.
     const conFiltro = marcadoresFiltrados.filter(m => m.latitud && m.longitud)
-    const precisos     = conFiltro.filter(m => !m.sinPlusCode)
-    const aproximados  = conFiltro.filter(m => m.sinPlusCode)
-    if (precisos.length === 0 && aproximados.length === 0) {
+    if (conFiltro.length === 0) {
       alert('No hay clientes con ubicación para optimizar con los filtros actuales.')
       return
     }
     const origen = miUbicacion || CENTRO_TUXTEPEC
-    const ordenPrecisos = optimizarRuta(precisos, origen)
-    const ultimoPunto = ordenPrecisos.length > 0
-      ? { lat: ordenPrecisos[ordenPrecisos.length - 1].latitud, lng: ordenPrecisos[ordenPrecisos.length - 1].longitud }
-      : origen
-    const ordenAproximados = optimizarRuta(aproximados, ultimoPunto)
-    const ordenados = [...ordenPrecisos, ...ordenAproximados]
+    const ordenados = optimizarRuta(conFiltro, origen)
     setRutaOptimizada(ordenados)   // no toca marcadores — todos siguen visibles en el mapa
+    setRutaKm(largoRutaKm(ordenados, origen))
     setRutaOrdenada(true)
     if (mapRef.current && window.google) {
       const bounds = new window.google.maps.LatLngBounds()
@@ -499,6 +474,7 @@ export default function Mapa() {
       total: ids.length,
       dia: filtroDia || null,
       ruta: filtroRuta || null,
+      km: rutaKm != null ? Math.round(rutaKm * 10) / 10 : null,
     }
     localStorage.setItem('cobranza_orden_manual_ruta_importada', JSON.stringify(ids))
     localStorage.setItem('cobranza_ruta_importada_meta', JSON.stringify(meta))
@@ -580,7 +556,7 @@ export default function Mapa() {
           </button>
           {rutaOrdenada && (
             <button
-              onClick={() => { setRutaOrdenada(false); setRutaOptimizada([]) }}
+              onClick={() => { setRutaOrdenada(false); setRutaOptimizada([]); setRutaKm(null) }}
               className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 transition"
             >
               Restablecer
@@ -933,10 +909,13 @@ export default function Mapa() {
         <div className="mt-4 bg-white rounded-2xl shadow overflow-hidden">
           <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-blue-800">Orden de visitas optimizado ({rutaOptimizada.length} paradas)</p>
+              <p className="text-sm font-semibold text-blue-800">
+                Orden de visitas optimizado ({rutaOptimizada.length} paradas)
+                {rutaKm != null && <span className="text-blue-500 font-normal"> · ~{rutaKm.toFixed(1)} km</span>}
+              </p>
               {rutaOptimizada.some(m => m.sinPlusCode) && (
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {rutaOptimizada.filter(m => !m.sinPlusCode).length} con ubicación precisa · {rutaOptimizada.filter(m => m.sinPlusCode).length} aproximada (al final)
+                  {rutaOptimizada.filter(m => m.sinPlusCode).length} con ubicación aproximada (marcadas ⚠️)
                 </p>
               )}
             </div>

@@ -6,34 +6,13 @@ import api from '../../api.js'
 import { encolarPago, encolarVisita, encolarCambioDia, encolarUbicacion, getQueue } from '../../utils/offlineQueue.js'
 import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
 import { sinAcentos } from '../../utils/texto.js'
+import { optimizarRuta } from '../../utils/ruta.js'
 import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
 const CENTRO_TUXTEPEC = { lat: 18.0886, lng: -96.1342 }
-
-function distanciaKm(a, b) {
-  const R = 6371
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180
-  const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
-}
-
-function rutaPorCercania(puntos, origen) {
-  const restantes = [...puntos]
-  const ruta = []
-  let actual = origen
-  while (restantes.length > 0) {
-    let minDist = Infinity, idx = 0
-    restantes.forEach((p, i) => { const d = distanciaKm(actual, p); if (d < minDist) { minDist = d; idx = i } })
-    const sig = restantes.splice(idx, 1)[0]
-    ruta.push(sig)
-    actual = sig
-  }
-  return ruta
-}
 
 function SortableCardWrapper({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
@@ -269,7 +248,7 @@ export default function Cobranza() {
       })
       .filter(Boolean)
     if (puntos.length === 0) return
-    const ordenados = rutaPorCercania(puntos, origen)
+    const ordenados = optimizarRuta(puntos, origen)
     const ordenadosIds = ordenados.map(p => p.id_cuenta)
     const sinUbicacion = datos
       .filter(c => !puntos.find(p => p.id_cuenta === c.id_cuenta))
@@ -3989,7 +3968,7 @@ function PanelRutaMapa({
           <div>
             <p className="text-sm font-bold text-blue-800">🧭 Ruta del mapa</p>
             <p className="text-xs text-blue-600 mt-0.5">
-              {total} paradas{fechaGen ? ` · generada ${fechaGen}` : ''}
+              {total} paradas{meta?.km ? ` · ~${meta.km} km` : ''}{fechaGen ? ` · generada ${fechaGen}` : ''}
               {meta?.ruta ? ` · Ruta ${meta.ruta}` : ''}
               {meta?.dia ? ` · ${LABEL_DIA_COBRANZA[meta.dia] || meta.dia}` : ''}
             </p>
