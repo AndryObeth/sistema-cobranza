@@ -383,6 +383,35 @@ export default function Cobranza() {
   // Datos del último pago registrado (para el ticket)
   const [datosPago, setDatosPago] = useState(null)
 
+  // Recursos del ticket (logo + fuente Comic Neue) precargados como blob URLs.
+  // El popup del ticket es about:blank y NO pasa por el service worker, así que
+  // se descargan aquí (donde el SW sí responde, incluso sin señal) una sola vez.
+  const recursosTicketRef = useRef(null)
+  const cargarRecursosTicket = async () => {
+    if (recursosTicketRef.current) return recursosTicketRef.current
+    const origen = window.location.origin
+    const fallback = {
+      logo:  `${origen}/logo.png`,
+      f400:  `${origen}/fonts/comic-neue-400.woff2`,
+      f700:  `${origen}/fonts/comic-neue-700.woff2`,
+    }
+    try {
+      const [logo, f400, f700] = await Promise.all([
+        fetch(fallback.logo).then(r => r.blob()),
+        fetch(fallback.f400).then(r => r.blob()),
+        fetch(fallback.f700).then(r => r.blob()),
+      ])
+      recursosTicketRef.current = {
+        logo: URL.createObjectURL(logo),
+        f400: URL.createObjectURL(f400),
+        f700: URL.createObjectURL(f700),
+      }
+    } catch {
+      return fallback // sin señal y sin caché: se usan URLs directas (el ticket igual se genera)
+    }
+    return recursosTicketRef.current
+  }
+
   // Edición de frecuencia de cobro
   const [editandoFrecuencia, setEditandoFrecuencia] = useState(false)
   const [formFrecuencia, setFormFrecuencia] = useState({ frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '' })
@@ -957,7 +986,8 @@ export default function Cobranza() {
     ].join('\n')
   }
 
-  const buildTicketHtml = (datos, logoSrc) => {
+  const buildTicketHtml = (datos, recursos) => {
+    const { logo: logoSrc, f400, f700 } = recursos || {}
     const {
       id_pago, fecha_pago, monto_pago, saldo_anterior, saldo_nuevo,
       tipo_pago, origen_pago,
@@ -993,10 +1023,20 @@ export default function Cobranza() {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Comprobante ${folioPago}</title>
   <style>
+    @font-face {
+      font-family: 'Comic Neue';
+      font-style: normal; font-weight: 400; font-display: swap;
+      src: url('${f400 || window.location.origin + '/fonts/comic-neue-400.woff2'}') format('woff2');
+    }
+    @font-face {
+      font-family: 'Comic Neue';
+      font-style: normal; font-weight: 700; font-display: swap;
+      src: url('${f700 || window.location.origin + '/fonts/comic-neue-700.woff2'}') format('woff2');
+    }
     @page { size: 58mm auto; margin: 2mm 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Courier New', Courier, monospace;
+      font-family: 'Comic Neue', 'Comic Sans MS', 'Comic Sans', 'Chalkboard SE', cursive;
       font-size: 11px;
       width: 58mm;
       max-width: 58mm;
@@ -1091,40 +1131,38 @@ export default function Cobranza() {
 
 
 
-  const generarTicket = (datos) => {
-    const html = buildTicketHtml(datos, window.location.origin + '/logo.png')
-
+  const generarTicket = async (datos) => {
+    // window.open debe ser sincrono dentro del gesto del usuario o el popup se bloquea
     const ventana = window.open('', '_blank', 'width=350,height=650')
     if (!ventana) throw new Error('Popup bloqueado')
-    ventana.document.write(html)
+    const recursos = await cargarRecursosTicket()
+    ventana.document.write(buildTicketHtml(datos, recursos))
     ventana.document.close()
   }
 
   // Reimpresión de un ticket ya registrado — admin/supervisor, por si al
   // cobrador se le olvidó imprimirlo o compartirlo en el momento.
   const reimprimirTicket = (p) => {
-    try {
-      generarTicket({
-        id_pago: p.id_pago,
-        fecha_pago: p.fecha_pago,
-        monto_pago: p.monto_pago,
-        saldo_anterior: p.saldo_anterior,
-        saldo_nuevo: p.saldo_nuevo,
-        tipo_pago: p.tipo_pago,
-        origen_pago: p.origen_pago,
-        cliente_nombre: cuentaDetalle.cliente?.nombre,
-        numero_expediente: cuentaDetalle.cliente?.numero_expediente,
-        numero_cuenta: cuentaDetalle.numero_cuenta,
-        folio_cuenta: cuentaDetalle.folio_cuenta,
-        plan_actual: cuentaDetalle.plan_actual,
-        cobrador_nombre: p.cobrador?.nombre || '—',
-        precio_original_total: cuentaDetalle.venta?.precio_original_total,
-        precio_final_total: cuentaDetalle.venta?.precio_final_total,
-        productos: (cuentaDetalle.venta?.detalles || []).map(d => ({ nombre: d.producto, cantidad: d.cantidad })),
-      })
-    } catch {
+    generarTicket({
+      id_pago: p.id_pago,
+      fecha_pago: p.fecha_pago,
+      monto_pago: p.monto_pago,
+      saldo_anterior: p.saldo_anterior,
+      saldo_nuevo: p.saldo_nuevo,
+      tipo_pago: p.tipo_pago,
+      origen_pago: p.origen_pago,
+      cliente_nombre: cuentaDetalle.cliente?.nombre,
+      numero_expediente: cuentaDetalle.cliente?.numero_expediente,
+      numero_cuenta: cuentaDetalle.numero_cuenta,
+      folio_cuenta: cuentaDetalle.folio_cuenta,
+      plan_actual: cuentaDetalle.plan_actual,
+      cobrador_nombre: p.cobrador?.nombre || '—',
+      precio_original_total: cuentaDetalle.venta?.precio_original_total,
+      precio_final_total: cuentaDetalle.venta?.precio_final_total,
+      productos: (cuentaDetalle.venta?.detalles || []).map(d => ({ nombre: d.producto, cantidad: d.cantidad })),
+    }).catch(() => {
       alert('El navegador bloqueó la ventana emergente. Habilítala para reimprimir el ticket.')
-    }
+    })
   }
 
   const liquidarCuenta = () => {
@@ -2845,7 +2883,7 @@ export default function Cobranza() {
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => generarTicket(datosPago)}
+                        onClick={() => generarTicket(datosPago).catch(() => alert('El navegador bloqueó la ventana emergente. Habilítala para ver el comprobante.'))}
                         className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded-lg text-sm font-medium transition"
                       >
                         🖨️ Ver comprobante provisional
@@ -2869,7 +2907,7 @@ export default function Cobranza() {
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => generarTicket(datosPago)}
+                        onClick={() => generarTicket(datosPago).catch(() => alert('El navegador bloqueó la ventana emergente. Habilítala para ver el comprobante.'))}
                         className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded-lg text-sm font-medium transition"
                       >
                         🖨️ Ver comprobante
