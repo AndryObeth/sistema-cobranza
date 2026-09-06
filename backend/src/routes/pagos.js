@@ -80,7 +80,12 @@ router.get('/todas-cuentas', auth, async (req, res) => {
           ubicaciones: { where: { es_principal: true, activo: true }, take: 1,
             select: { latitud: true, longitud: true, plus_code: true } }
         }},
-        venta: { include: { vendedor: true, cobrador: true } }
+        venta: { include: {
+          vendedor: true, cobrador: true,
+          // Nombre de los productos para el ticket (también funciona offline:
+          // este endpoint es el que cachea la PWA)
+          detalles: { select: { producto: true, cantidad: true } },
+        } }
       },
       orderBy: { semanas_atraso: 'desc' }
     })

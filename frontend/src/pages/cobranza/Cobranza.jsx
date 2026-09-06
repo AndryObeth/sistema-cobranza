@@ -921,6 +921,10 @@ export default function Cobranza() {
     const row      = (l, r) => { const sp = Math.max(1, W - l.length - r.length); return l + ' '.repeat(sp) + r }
     const nombre   = (datos.cliente_nombre || '').substring(0, 20)
     const tipoStr  = { abono: 'Abono', liquidacion: 'Liquidacion', pago_extra: 'Pago extra', recuperacion_enganche: 'Rec. enganche' }[datos.tipo_pago] || datos.tipo_pago || ''
+    const wrap     = (s) => (s.match(/.{1,32}/g) || [s]) // parte lineas > 32 chars
+    const lineasProd = (datos.productos || [])
+      .filter(p => p?.nombre)
+      .flatMap(p => wrap(`${p.cantidad > 1 ? p.cantidad + 'x ' : ''}${p.nombre}`))
 
     return [
       sep,
@@ -934,6 +938,7 @@ export default function Cobranza() {
       row('Expediente:', datos.numero_expediente || ''),
       ...(datos.numero_cuenta ? [row('No. cuenta:', datos.numero_cuenta)] : []),
       row('Plan:', (datos.plan_actual || '').replace(/_/g, ' ')),
+      ...(lineasProd.length ? [das, center('PRODUCTO(S)'), ...lineasProd] : []),
       das,
       center('MONTO ABONADO'),
       center(fmt(datos.monto_pago)),
@@ -959,8 +964,15 @@ export default function Cobranza() {
       cliente_nombre, numero_expediente, numero_cuenta, folio_cuenta, plan_actual,
       cobrador_nombre,
       precio_original_total, precio_final_total,
+      productos,
       pendienteSync,
     } = datos
+
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+    const filasProductos = (productos || [])
+      .filter(p => p?.nombre)
+      .map(p => `<div class="row"><span>${esc(p.nombre)}</span><span>${p.cantidad > 1 ? '&times;' + p.cantidad : ''}</span></div>`)
+      .join('')
 
     const precioOrig  = parseFloat(precio_original_total || 0)
     const precioFinal = parseFloat(precio_final_total || 0)
@@ -1029,6 +1041,12 @@ export default function Cobranza() {
   ${numero_cuenta ? `<div class="row"><span>No. cuenta:</span><span class="bold">${numero_cuenta}</span></div>` : ''}
   <div class="row"><span>Folio sistema:</span><span>${folio_cuenta}</span></div>
   <div class="row"><span>Plan:</span><span>${plan_actual.replace(/_/g, ' ')}</span></div>
+
+  ${filasProductos ? `
+  <div class="sep-das"></div>
+  <div class="monto-label" style="font-size:9px;">PRODUCTO(S)</div>
+  ${filasProductos}
+  ` : ''}
 
   ${precioOrig > 0 ? `
   <div class="sep-das"></div>
@@ -1102,6 +1120,7 @@ export default function Cobranza() {
         cobrador_nombre: p.cobrador?.nombre || '—',
         precio_original_total: cuentaDetalle.venta?.precio_original_total,
         precio_final_total: cuentaDetalle.venta?.precio_final_total,
+        productos: (cuentaDetalle.venta?.detalles || []).map(d => ({ nombre: d.producto, cantidad: d.cantidad })),
       })
     } catch {
       alert('El navegador bloqueó la ventana emergente. Habilítala para reimprimir el ticket.')
@@ -1180,6 +1199,7 @@ export default function Cobranza() {
             cobrador_nombre: usuario?.nombre || 'Cobrador',
             precio_original_total: cuentaSeleccionada.venta?.precio_original_total,
             precio_final_total:    cuentaSeleccionada.venta?.precio_final_total,
+            productos: (cuentaSeleccionada.venta?.detalles || []).map(d => ({ nombre: d.producto, cantidad: d.cantidad })),
             pendienteSync: true,
           })
           setExito('__offline__')
@@ -1233,7 +1253,8 @@ export default function Cobranza() {
           plan_actual:     cuentaSeleccionada.plan_actual,
           cobrador_nombre:       usuario?.nombre || 'Cobrador',
           precio_original_total: cuentaSeleccionada.venta?.precio_original_total,
-          precio_final_total:    cuentaSeleccionada.venta?.precio_final_total
+          precio_final_total:    cuentaSeleccionada.venta?.precio_final_total,
+          productos: (cuentaSeleccionada.venta?.detalles || []).map(d => ({ nombre: d.producto, cantidad: d.cantidad })),
         }
 
         // No se cierra el modal ni se abre el ticket solo (ni siquiera al liquidar):
