@@ -2824,25 +2824,31 @@ export default function Cobranza() {
                             <button type="button" onClick={() => setComprobanteDeposito(null)}
                               className="text-xs text-red-600 hover:text-red-800 font-medium">Quitar foto</button>
                           </div>
-                        ) : (
-                          <label className={`flex items-center justify-center gap-2 bg-white border border-indigo-300 rounded-lg px-3 py-2.5 text-sm font-medium text-indigo-700 cursor-pointer hover:bg-indigo-100 transition ${procesandoComprobante ? 'opacity-50 pointer-events-none' : ''}`}>
-                            {procesandoComprobante ? 'Procesando…' : '📷 Foto del comprobante'}
-                            <input
-                              type="file" accept="image/*" capture="environment" className="hidden"
-                              onChange={async e => {
-                                const file = e.target.files?.[0]
-                                e.target.value = ''
-                                if (!file) return
-                                setProcesandoComprobante(true)
-                                try { setComprobanteDeposito(await comprimirImagen(file)) }
-                                catch { alert('No se pudo procesar la imagen') }
-                                finally { setProcesandoComprobante(false) }
-                              }}
-                            />
-                          </label>
-                        )}
+                        ) : (() => {
+                          const procesar = async e => {
+                            const file = e.target.files?.[0]
+                            e.target.value = ''
+                            if (!file) return
+                            setProcesandoComprobante(true)
+                            try { setComprobanteDeposito(await comprimirImagen(file)) }
+                            catch { alert('No se pudo procesar la imagen') }
+                            finally { setProcesandoComprobante(false) }
+                          }
+                          return (
+                            <div className={`grid grid-cols-2 gap-2 ${procesandoComprobante ? 'opacity-50 pointer-events-none' : ''}`}>
+                              <label className="flex items-center justify-center gap-1.5 bg-white border border-indigo-300 rounded-lg px-3 py-2.5 text-sm font-medium text-indigo-700 cursor-pointer hover:bg-indigo-100 transition">
+                                {procesandoComprobante ? 'Procesando…' : '📷 Tomar foto'}
+                                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={procesar} />
+                              </label>
+                              <label className="flex items-center justify-center gap-1.5 bg-white border border-indigo-300 rounded-lg px-3 py-2.5 text-sm font-medium text-indigo-700 cursor-pointer hover:bg-indigo-100 transition">
+                                🖼️ De galería
+                                <input type="file" accept="image/*" className="hidden" onChange={procesar} />
+                              </label>
+                            </div>
+                          )
+                        })()}
                         {!comprobanteDeposito && (
-                          <p className="text-xs text-indigo-500">La foto es recomendada pero no obligatoria.</p>
+                          <p className="text-xs text-indigo-500">Toma la foto del comprobante o sube la captura desde tu galería. Recomendada pero no obligatoria.</p>
                         )}
                       </div>
                     )}
