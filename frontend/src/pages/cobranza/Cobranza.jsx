@@ -206,6 +206,20 @@ export default function Cobranza() {
     setParadasRuta(prev => ({ ...prev, [id]: estado }))
   }, [])
 
+  // Reordenar a mano la ruta importada del mapa. `nuevoOrdenIds` es el orden
+  // nuevo de las cuentas visibles; las que la ruta traía pero ya no están en
+  // la lista (faltantes) se conservan al final. Se guarda local + servidor y
+  // se mantiene el paso apuntando a la misma cuenta.
+  const reordenarRutaImportada = useCallback((nuevoOrdenIds) => {
+    setRutaImportada(prev => {
+      const faltantes = prev.filter(id => !nuevoOrdenIds.includes(id))
+      const next = [...nuevoOrdenIds, ...faltantes]
+      localStorage.setItem('cobranza_orden_manual_ruta_importada', JSON.stringify(next))
+      api.put('/usuarios/mi-orden', { orden: next, dia: 'ruta_importada' }, { timeout: 10000 }).catch(() => {})
+      return next
+    })
+  }, [])
+
   const activarModoRuta = async () => {
     setModoCobranza(false)
     setModoTarjetero(false)
@@ -1986,6 +2000,7 @@ export default function Cobranza() {
           onRegistrarPago={abrirModal}
           onMarcar={marcarParada}
           onCorregirUbicacion={abrirCorreccionUbicacionRuta}
+          onReordenar={reordenarRutaImportada}
           aviso={avisoRuta}
           verCompleta={verRutaCompleta}
           setVerCompleta={setVerRutaCompleta}
@@ -3890,7 +3905,7 @@ function PanelCorreccionUbicacion({
 // generó en el Mapa. No reordena ni recalcula: sigue el orden importado tal cual.
 function PanelRutaMapa({
   paradas, totalImportadas, cargando, errorCarga, paso, setPaso, estados, meta, fmt, enlaceMapaCliente,
-  onRegistrarPago, onMarcar, onCorregirUbicacion, aviso, verCompleta, setVerCompleta, onSalir,
+  onRegistrarPago, onMarcar, onCorregirUbicacion, onReordenar, aviso, verCompleta, setVerCompleta, onSalir,
 }) {
   const total = paradas.length
   const faltantes = Math.max((totalImportadas ?? total) - total, 0)
@@ -3944,6 +3959,19 @@ function PanelRutaMapa({
   const marcarYAvanzar = (id, estado) => {
     onMarcar(id, estado)
     setPaso(Math.min(idxActual + 1, total - 1))
+  }
+
+  // Mover la parada `desde` a la posición `hacia` (dentro de `paradas`), guardar
+  // el nuevo orden y mantener el paso apuntando a la parada en curso.
+  const moverParada = (desde, hacia) => {
+    if (hacia < 0 || hacia >= total || desde === hacia) return
+    const idActual = paradas[idxActual]?.id_cuenta
+    const arr = [...paradas]
+    const [x] = arr.splice(desde, 1)
+    arr.splice(hacia, 0, x)
+    onReordenar(arr.map(c => c.id_cuenta))
+    const nuevoIdx = arr.findIndex(c => c.id_cuenta === idActual)
+    if (nuevoIdx >= 0) setPaso(nuevoIdx)
   }
 
   const chipAtendida = (c) => {
@@ -4070,33 +4098,65 @@ function PanelRutaMapa({
             {verCompleta ? 'Ver menos' : 'Ver todas'}
           </button>
         </div>
+        {verCompleta && (
+          <p className="px-4 py-1.5 text-xs text-gray-400 bg-gray-50 border-b border-gray-100">
+            ¿El orden te hace dar vueltas? Usa ↑ ↓ o «traer» para acomodarlo a como conoces las calles.
+          </p>
+        )}
         <div className="divide-y divide-gray-50 max-h-96 overflow-y-auto">
           {paradas.map((c, i) => {
             if (!verCompleta && (i < idxActual || i > idxActual + 5)) return null
             const e = estados[c.id_cuenta]
             return (
-              <button
+              <div
                 key={c.id_cuenta}
-                onClick={() => setPaso(i)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 transition ${i === idxActual ? 'bg-blue-50' : ''}`}
+                className={`flex items-center gap-2 px-3 py-2.5 transition ${i === idxActual ? 'bg-blue-50' : ''}`}
               >
-                <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold shrink-0 ${
-                  e === 'pagado' ? 'bg-green-600 text-white'
-                    : e === 'no_pago' ? 'bg-gray-300 text-white'
-                    : i === idxActual ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-500'
-                }`}>
-                  {e === 'pagado' ? '✓' : e === 'no_pago' ? '✗' : i + 1}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-gray-800 truncate">
-                    {c.cliente?.nombre}
-                    {esAproximada(c) && <span className="text-amber-600" title="Ubicación aproximada"> ⚠️</span>}
+                <button
+                  onClick={() => setPaso(i)}
+                  className="flex items-center gap-3 text-left min-w-0 flex-1"
+                >
+                  <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold shrink-0 ${
+                    e === 'pagado' ? 'bg-green-600 text-white'
+                      : e === 'no_pago' ? 'bg-gray-300 text-white'
+                      : i === idxActual ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {e === 'pagado' ? '✓' : e === 'no_pago' ? '✗' : i + 1}
                   </span>
-                  <span className="block text-xs text-gray-400 truncate">{dir(c)}</span>
-                </span>
-                <span className="text-sm font-semibold text-gray-600 shrink-0">{fmt(c.saldo_actual)}</span>
-              </button>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-gray-800 truncate">
+                      {c.cliente?.nombre}
+                      {esAproximada(c) && <span className="text-amber-600" title="Ubicación aproximada"> ⚠️</span>}
+                    </span>
+                    <span className="block text-xs text-gray-400 truncate">{dir(c)}</span>
+                  </span>
+                  <span className="text-sm font-semibold text-gray-600 shrink-0">{fmt(c.saldo_actual)}</span>
+                </button>
+                {verCompleta && (
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      onClick={() => moverParada(i, i - 1)}
+                      disabled={i === 0}
+                      className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded disabled:opacity-20"
+                      aria-label="Subir"
+                    >▲</button>
+                    <button
+                      onClick={() => moverParada(i, i + 1)}
+                      disabled={i === total - 1}
+                      className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded disabled:opacity-20"
+                      aria-label="Bajar"
+                    >▼</button>
+                    {i > idxActual + 1 && (
+                      <button
+                        onClick={() => moverParada(i, idxActual + 1)}
+                        className="text-[11px] text-blue-600 hover:text-blue-800 px-1.5 py-1 rounded whitespace-nowrap"
+                        title="Mover justo después de la parada actual"
+                      >traer</button>
+                    )}
+                  </div>
+                )}
+              </div>
             )
           })}
         </div>

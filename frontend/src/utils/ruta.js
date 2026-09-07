@@ -157,6 +157,27 @@ export function optimizarRuta(puntos, origen) {
     return s
   }
 
+  // "Regresos" bruscos: en cada tramo A→B→C, si el giro en B se acerca a 180°
+  // (saliste y volviste por donde llegaste) suma una fracción de la arista más
+  // corta del giro. Se usa solo para DESEMPATAR entre semillas de largo
+  // parecido — así, entre dos rutas casi iguales, gana la que hace menos
+  // "me pasé, tengo que regresar".
+  const penalRegresos = (ord) => {
+    let pen = 0
+    for (let i = 0; i < ord.length - 1; i++) {
+      const a = i === 0 ? 0 : ord[i - 1] + 1
+      const b = ord[i] + 1
+      const c = ord[i + 1] + 1
+      const ab = d(a, b)
+      const bc = d(b, c)
+      if (ab < 1e-6 || bc < 1e-6) continue
+      // ley de cosenos: cos ~ 1 => giro de 180° (regreso); cos ~ -1 => derecho
+      const cos = (ab * ab + bc * bc - d(a, c) ** 2) / (2 * ab * bc)
+      if (cos > 0) pen += Math.min(ab, bc) * cos
+    }
+    return pen
+  }
+
   // Semillas: NN desde el origen + NN "como si" empezara en los k puntos más
   // cercanos al origen. Cada semilla da una topología distinta; la búsqueda
   // local sobre varias y quedarse con la mejor evita quedar atrapado en una
@@ -195,12 +216,13 @@ export function optimizarRuta(puntos, origen) {
   const semillas = [nn(null), ...cercanosAlOrigen.slice(0, K).map((i) => nn(i))]
 
   let mejorOrden = null
-  let mejorLargo = Infinity
+  let mejorScore = Infinity
   for (const semilla of semillas) {
     const mejorada = busquedaLocal([...semilla], d)
-    const L = largoTotal(mejorada)
-    if (L < mejorLargo) {
-      mejorLargo = L
+    // score = distancia + un poco de castigo por regresos bruscos (desempate)
+    const score = largoTotal(mejorada) + 0.35 * penalRegresos(mejorada)
+    if (score < mejorScore) {
+      mejorScore = score
       mejorOrden = mejorada
     }
   }
