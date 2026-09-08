@@ -146,7 +146,11 @@ export default function Cobranza() {
 
   // Ruta importada del Mapa — modo "parada actual / siguiente".
   // Vive aparte del orden del día; no se recalcula por GPS.
-  const [modoRuta, setModoRuta] = useState(false)
+  // Persiste: el cobrador trabaja la ruta durante horas y la app/navegador
+  // se puede recargar (PWA, señal, cambiar de app) sin que se salga del modo.
+  const [modoRuta, setModoRuta] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cobranza_modo_ruta')) ?? false } catch { return false }
+  })
   const [rutaImportada, setRutaImportada] = useState(() => {
     try { return JSON.parse(localStorage.getItem('cobranza_orden_manual_ruta_importada')) ?? [] } catch { return [] }
   })
@@ -158,6 +162,7 @@ export default function Cobranza() {
   const [verRutaCompleta, setVerRutaCompleta] = useState(false)
 
   useEffect(() => { localStorage.setItem('cobranza_modo', JSON.stringify(modoCobranza)) }, [modoCobranza])
+  useEffect(() => { localStorage.setItem('cobranza_modo_ruta', JSON.stringify(modoRuta)) }, [modoRuta])
   useEffect(() => { localStorage.setItem('cobranza_visitados', JSON.stringify([...visitados])) }, [visitados])
   useEffect(() => { localStorage.setItem('cobranza_solo_pendientes', JSON.stringify(soloPendientes)) }, [soloPendientes])
   useEffect(() => { localStorage.setItem('cobranza_filtro_dia', JSON.stringify(filtroDia)) }, [filtroDia])
