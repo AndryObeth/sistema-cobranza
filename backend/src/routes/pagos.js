@@ -82,9 +82,10 @@ router.get('/todas-cuentas', auth, async (req, res) => {
         }},
         venta: { include: {
           vendedor: true, cobrador: true,
-          // Nombre de los productos para el ticket (también funciona offline:
-          // este endpoint es el que cachea la PWA)
-          detalles: { select: { producto: true, cantidad: true } },
+          // Datos de la compra para el ticket y la ficha de la parada en el
+          // modo ruta (también funciona offline: este endpoint es el que
+          // cachea la PWA)
+          detalles: { select: { producto: true, cantidad: true, precio_final_unitario: true } },
         } }
       },
       orderBy: { semanas_atraso: 'desc' }

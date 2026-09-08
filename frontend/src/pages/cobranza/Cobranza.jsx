@@ -183,12 +183,14 @@ export default function Cobranza() {
     })
   }
 
-  // Progreso del modo ruta: se guarda ligado a la fecha en que se generó la
-  // ruta, así una ruta nueva empieza limpia y una recarga de la app la conserva.
+  // Progreso del modo ruta: se guarda ligado a una firma de la ruta (fecha de
+  // generación, o firma sintética si vino de otro equipo), así una ruta nueva
+  // empieza limpia y una recarga de la app la conserva.
+  const firmaRuta = (m) => m?.firma || m?.generada || null
   useEffect(() => {
     try {
       const p = JSON.parse(localStorage.getItem('cobranza_ruta_importada_progreso'))
-      if (p && rutaMeta && p.generada === rutaMeta.generada) {
+      if (p && rutaMeta && p.firma && p.firma === firmaRuta(rutaMeta)) {
         setPasoRuta(p.paso ?? 0)
         setParadasRuta(p.paradas ?? {})
       }
@@ -196,9 +198,10 @@ export default function Cobranza() {
   }, []) // eslint-disable-line
 
   useEffect(() => {
-    if (!rutaMeta) return
+    const firma = firmaRuta(rutaMeta)
+    if (!firma) return
     localStorage.setItem('cobranza_ruta_importada_progreso', JSON.stringify({
-      generada: rutaMeta.generada, paso: pasoRuta, paradas: paradasRuta,
+      firma, paso: pasoRuta, paradas: paradasRuta,
     }))
   }, [pasoRuta, paradasRuta, rutaMeta])
 
@@ -237,8 +240,9 @@ export default function Cobranza() {
         localStorage.setItem('cobranza_orden_manual_ruta_importada', JSON.stringify(res.data.orden))
         if (cambio) {
           // La ruta del servidor difiere de la local (se genero en otro equipo):
-          // sintetizar una meta y empezar el progreso limpio.
-          metaLocal = { generada: `srv-${res.data.orden.length}-${res.data.orden[0]}`, total: res.data.orden.length, dia: null, ruta: null }
+          // sintetizar una meta y empezar el progreso limpio. `firma` identifica
+          // esta ruta para el progreso; `generada` queda null (no sabemos cuándo).
+          metaLocal = { firma: `srv-${res.data.orden.length}-${res.data.orden[0]}`, generada: null, total: res.data.orden.length, dia: null, ruta: null, km: null }
           localStorage.setItem('cobranza_ruta_importada_meta', JSON.stringify(metaLocal))
           setPasoRuta(0)
           setParadasRuta({})
@@ -3921,8 +3925,9 @@ function PanelRutaMapa({
   const idxActual = Math.min(paso, Math.max(total - 1, 0))
 
   const dir = (c) => [c.cliente?.colonia, c.cliente?.municipio].filter(Boolean).join(', ') || c.cliente?.direccion || '—'
-  const fechaGen = meta?.generada
-    ? new Date(meta.generada).toLocaleString('es-MX', {
+  const gen = meta?.generada ? new Date(meta.generada) : null
+  const fechaGen = gen && !isNaN(gen)
+    ? gen.toLocaleString('es-MX', {
         timeZone: 'America/Mexico_City', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
       })
     : null
@@ -4055,6 +4060,47 @@ function PanelRutaMapa({
               <p className="text-xl font-bold text-gray-800">{fmt(actual.saldo_actual)}</p>
             </div>
           </div>
+
+          {/* Detalle de la compra */}
+          {(() => {
+            const v = actual.venta
+            if (!v) return null
+            const dets = v.detalles || []
+            const fCompra = v.fecha_venta
+              ? new Date(v.fecha_venta).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: 'short', year: 'numeric' })
+              : null
+            const frecLabel = { semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual', dos_meses: 'Cada 2 meses' }[actual.frecuencia_pago] || actual.frecuencia_pago || '—'
+            return (
+              <div className="mt-3 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 space-y-1.5">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  {fCompra && (
+                    <span className="text-gray-500">📅 Compró: <span className="text-gray-800 font-medium">{fCompra}</span></span>
+                  )}
+                  <span className="text-gray-500">🗓️ Paga: <span className="text-gray-800 font-medium">{frecLabel}</span>
+                    {actual.abono_semanal ? <span className="text-gray-400"> · {fmt(actual.abono_semanal)}/pago</span> : null}
+                  </span>
+                  {v.precio_final_total != null && (
+                    <span className="text-gray-500 col-span-2">💰 Precio: <span className="text-gray-800 font-medium">{fmt(v.precio_final_total)}</span>
+                      {v.precio_original_total != null && parseFloat(v.precio_original_total) > parseFloat(v.precio_final_total) && (
+                        <span className="text-gray-400 line-through ml-1">{fmt(v.precio_original_total)}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                {dets.length > 0 && (
+                  <div className="pt-1 border-t border-gray-200">
+                    <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-0.5">Qué compró</p>
+                    {dets.map((d, i) => (
+                      <p key={i} className="text-xs text-gray-700">
+                        {d.cantidad > 1 ? `${d.cantidad}× ` : ''}{d.producto}
+                        {d.precio_final_unitario != null && <span className="text-gray-400"> — {fmt(d.precio_final_unitario)}</span>}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           <div className="grid grid-cols-2 gap-2 mt-4">
             {maps ? (
