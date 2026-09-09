@@ -146,6 +146,7 @@ export default function Mapa() {
   const [modoEdicion, setModoEdicion] = useState(false)
   const [clienteEditandoCoords, setClienteEditandoCoords] = useState(null)
   const [toast, setToast] = useState(null)
+  const [verSinUbicacion, setVerSinUbicacion] = useState(false)
 
   // Modal corrección de ubicación desde mapa
   const [modalCorreccion, setModalCorreccion] = useState(null) // cuenta object
@@ -207,18 +208,35 @@ export default function Mapa() {
     setModoCorrecMapa('confirmar')
   }
 
+  // Refleja una ubicación recién guardada en el estado local: actualiza `cuentas`
+  // (para que el panel "sin ubicación" recalcule) y `marcadores` — parcheando el
+  // pin si ya existía o creando uno nuevo si el cliente no tenía ninguno.
+  const aplicarUbicacionEnEstado = (idCliente, lat, lng, plus_code, cuentaFallback) => {
+    setCuentas(prev => prev.map(c => c.cliente?.id_cliente === idCliente
+      ? { ...c, cliente: { ...c.cliente, latitud: lat, longitud: lng, plus_code } }
+      : c))
+    setMarcadores(prev => {
+      let encontrado = false
+      const patched = prev.map(m => {
+        if (m.cuenta.cliente?.id_cliente !== idCliente) return m
+        encontrado = true
+        return { ...m, latitud: lat, longitud: lng, sinPlusCode: !plus_code,
+          cuenta: { ...m.cuenta, cliente: { ...m.cuenta.cliente, latitud: lat, longitud: lng, plus_code } } }
+      })
+      if (encontrado || !cuentaFallback) return patched
+      return [...patched, {
+        cuenta: { ...cuentaFallback, cliente: { ...cuentaFallback.cliente, latitud: lat, longitud: lng, plus_code } },
+        latitud: lat, longitud: lng, sinPlusCode: !plus_code,
+      }]
+    })
+  }
+
   const guardarUbicacionMapa = async () => {
     if (!ubicPendienteMapa || !modalCorreccion) return
     setGuardandoUbicMapa(true)
     const idCliente = modalCorreccion.cliente?.id_cliente
     const { lat, lng, plus_code } = ubicPendienteMapa
-    // Refleja la ubicación nueva en el mapa (quita el pin gris)
-    const aplicarLocal = () => setMarcadores(prev => prev.map(m =>
-      m.cuenta.cliente?.id_cliente === idCliente
-        ? { ...m, latitud: lat, longitud: lng, sinPlusCode: !plus_code,
-            cuenta: { ...m.cuenta, cliente: { ...m.cuenta.cliente, latitud: lat, longitud: lng, plus_code } } }
-        : m
-    ))
+    const aplicarLocal = () => aplicarUbicacionEnEstado(idCliente, lat, lng, plus_code, modalCorreccion)
     const guardarLocalYSalir = () => {
       encolarUbicacion({ id_cliente: idCliente, latitud: lat, longitud: lng, plus_code })
       aplicarLocal()
@@ -245,12 +263,7 @@ export default function Mapa() {
     const lng = e.latLng.lng()
     const plus_code = encodePlusCode(lat, lng) // el punto marcado en el mapa es preciso
     const idCliente = clienteEditandoCoords.cuenta.cliente.id_cliente
-    const aplicarLocal = () => setMarcadores(prev => prev.map(m =>
-      m.cuenta.cliente?.id_cliente === idCliente
-        ? { ...m, latitud: lat, longitud: lng, sinPlusCode: false,
-            cuenta: { ...m.cuenta, cliente: { ...m.cuenta.cliente, latitud: lat, longitud: lng, plus_code } } }
-        : m
-    ))
+    const aplicarLocal = () => aplicarUbicacionEnEstado(idCliente, lat, lng, plus_code, clienteEditandoCoords.cuenta)
     const guardarLocalYSalir = () => {
       encolarUbicacion({ id_cliente: idCliente, latitud: lat, longitud: lng, plus_code })
       aplicarLocal()
@@ -414,6 +427,39 @@ export default function Mapa() {
     return true
   }), [marcadores, filtroSinUbicacion, filtroRuta, filtroDia])
 
+  // Clientes SIN ubicación precisa, respetando los filtros de ruta/día activos.
+  //  - "aprox"  : tiene coordenadas pero sin Plus Code (pin gris, GPS impreciso)
+  //  - "singeo" : no tiene ninguna ubicación (no aparece en el mapa)
+  const analisisUbicacion = useMemo(() => {
+    const items = []
+    for (const c of cuentas) {
+      if (filtroRuta && c.cliente?.ruta !== filtroRuta) continue
+      if (filtroDia && c.cliente?.dia_cobranza !== filtroDia) continue
+      const tienePlus = c.cliente?.plus_code && isValidPlusCode(c.cliente.plus_code)
+      if (tienePlus) continue
+      const tieneCoords = !!(c.cliente?.latitud && c.cliente?.longitud)
+      items.push({ cuenta: c, tipo: tieneCoords ? 'aprox' : 'singeo' })
+    }
+    items.sort((a, b) => {
+      const ra = a.cuenta.cliente?.ruta || '~'
+      const rb = b.cuenta.cliente?.ruta || '~'
+      if (ra !== rb) return ra.localeCompare(rb, 'es')
+      return (a.cuenta.numero_cuenta || '').localeCompare(b.cuenta.numero_cuenta || '', 'es', { numeric: true })
+    })
+    const porRuta = {}
+    for (const it of items) {
+      const r = it.cuenta.cliente?.ruta || 'Sin ruta'
+      porRuta[r] = (porRuta[r] || 0) + 1
+    }
+    return {
+      items,
+      total: items.length,
+      aprox: items.filter(i => i.tipo === 'aprox').length,
+      singeo: items.filter(i => i.tipo === 'singeo').length,
+      porRuta,
+    }
+  }, [cuentas, filtroRuta, filtroDia])
+
   // Clusters visibles: solo los marcadores dentro del área a la vista, agrupados
   // por celda según el zoom. Recalcula al mover el mapa o cambiar el filtro.
   const grupos = useMemo(
@@ -499,8 +545,13 @@ export default function Mapa() {
           <h2 className="text-2xl font-bold text-gray-800">Mapa de Ruta</h2>
           <p className="text-gray-500 text-sm mt-1">
             {marcadoresFiltrados.length} de {marcadores.length} clientes con ubicación
-            {sinCoordenadas > 0 && (
-              <span className="ml-2 text-orange-600 font-medium">{sinCoordenadas} sin geocodificar</span>
+            {analisisUbicacion.total > 0 && (
+              <button
+                onClick={() => setVerSinUbicacion(v => !v)}
+                className="ml-2 text-amber-600 font-medium hover:text-amber-800 underline"
+              >
+                {analisisUbicacion.total} sin ubicación precisa{(filtroRuta || filtroDia) ? ' (con filtro)' : ''}
+              </button>
             )}
           </p>
         </div>
@@ -576,6 +627,73 @@ export default function Mapa() {
           <button onClick={() => navigate('/mapa')} className="ml-2 text-blue-600 underline">Ver todos</button>
         )}
       </div>
+
+      {/* Panel: clientes sin ubicación precisa (para saber a cuáles darles prioridad) */}
+      {verSinUbicacion && analisisUbicacion.total > 0 && (
+        <div className="mb-3 border border-amber-200 bg-amber-50 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-amber-200">
+            <span className="font-semibold text-amber-800">
+              📍 {analisisUbicacion.total} sin ubicación precisa
+              {(filtroRuta || filtroDia) && (
+                <span className="font-normal text-amber-600">
+                  {' · '}{filtroRuta ? `Ruta ${filtroRuta}` : ''}{filtroRuta && filtroDia ? ' / ' : ''}{filtroDia ? LABEL_DIA_COBRANZA[filtroDia] : ''}
+                </span>
+              )}
+            </span>
+            <span className="text-xs text-amber-600 shrink-0">
+              {analisisUbicacion.aprox} aprox. · {analisisUbicacion.singeo} sin geocodificar
+              <button onClick={() => setVerSinUbicacion(false)} className="ml-2 text-amber-700 hover:text-amber-900">✕</button>
+            </span>
+          </div>
+
+          {/* Por ruta — clic filtra */}
+          {!filtroRuta && Object.keys(analisisUbicacion.porRuta).length > 1 && (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 px-3 py-2 text-xs border-b border-amber-100">
+              <span className="text-amber-500">Por ruta:</span>
+              {Object.entries(analisisUbicacion.porRuta)
+                .sort((a, b) => a[0].localeCompare(b[0], 'es'))
+                .map(([r, n]) => (
+                  <button
+                    key={r}
+                    onClick={() => r !== 'Sin ruta' && setFiltroRuta(r)}
+                    className="text-amber-700 hover:text-amber-900 hover:underline"
+                  >
+                    {r}: <strong>{n}</strong>
+                  </button>
+                ))}
+            </div>
+          )}
+
+          {/* Lista */}
+          <div className="max-h-72 overflow-y-auto divide-y divide-amber-100">
+            {analisisUbicacion.items.map(({ cuenta: c, tipo }) => (
+              <div key={c.id_cuenta} className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-amber-100/50">
+                <span className="font-mono text-blue-600 w-14 shrink-0">{c.numero_cuenta || c.folio_cuenta}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-medium text-gray-800">{c.cliente?.nombre}</span>
+                  <span className="text-gray-400">
+                    {' · '}{[c.cliente?.colonia, c.cliente?.municipio].filter(Boolean).join(', ') || 'sin dirección'}
+                  </span>
+                </span>
+                {!filtroRuta && (
+                  <span className="text-gray-400 shrink-0 w-8 text-right">{c.cliente?.ruta || '—'}</span>
+                )}
+                <span className={`shrink-0 px-1.5 py-0.5 rounded-full font-medium ${
+                  tipo === 'aprox' ? 'bg-gray-200 text-gray-600' : 'bg-orange-100 text-orange-700'
+                }`}>
+                  {tipo === 'aprox' ? 'aprox.' : 'sin geo'}
+                </span>
+                <button
+                  onClick={() => abrirModalCorreccion(c)}
+                  className="shrink-0 text-blue-600 hover:text-blue-800 font-semibold"
+                >
+                  Ubicar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Mapa */}
       <div className="relative rounded-2xl overflow-hidden shadow" style={{ height: 'calc(100vh - 280px)', minHeight: 400 }}>
