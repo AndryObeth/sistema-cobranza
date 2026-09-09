@@ -4005,7 +4005,7 @@ function PanelRutaMapa({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 fuente-comic">
       {/* Barra superior */}
       <div className="bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3">
         <div className="flex items-start justify-between gap-2">
@@ -4071,9 +4071,11 @@ function PanelRutaMapa({
             const v = actual.venta
             if (!v) return null
             const dets = v.detalles || []
-            const fCompra = v.fecha_venta
-              ? new Date(v.fecha_venta).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: 'short', year: 'numeric' })
+            const fmtFecha = (f) => f
+              ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: 'short', year: 'numeric' })
               : null
+            const fCompra = fmtFecha(v.fecha_venta)
+            const fUltimoPago = fmtFecha(actual.fecha_ultimo_pago)
             const frecLabel = { semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual', dos_meses: 'Cada 2 meses' }[actual.frecuencia_pago] || actual.frecuencia_pago || '—'
             return (
               <div className="mt-3 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 space-y-1.5">
@@ -4081,6 +4083,7 @@ function PanelRutaMapa({
                   {fCompra && (
                     <span className="text-gray-500">📅 Compró: <span className="text-gray-800 font-medium">{fCompra}</span></span>
                   )}
+                  <span className="text-gray-500">💵 Últ. pago: <span className="text-gray-800 font-medium">{fUltimoPago || 'sin pagos'}</span></span>
                   <span className="text-gray-500">🗓️ Paga: <span className="text-gray-800 font-medium">{frecLabel}</span>
                     {actual.abono_semanal ? <span className="text-gray-400"> · {fmt(actual.abono_semanal)}/pago</span> : null}
                   </span>

@@ -1,3 +1,24 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Comic Neue (clon libre de Comic Sans) — empaquetada en public/fonts y
+   precacheada por la PWA. Se usa en el modo "Ruta del mapa" de Cobranza. */
+@font-face {
+  font-family: 'Comic Neue';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/comic-neue-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Comic Neue';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/comic-neue-700.woff2') format('woff2');
+}
+
+.fuente-comic {
+  font-family: 'Comic Neue', 'Comic Sans MS', 'Comic Sans', cursive;
+}
