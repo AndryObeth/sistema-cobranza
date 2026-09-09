@@ -9,7 +9,7 @@ const FORM_VACIO = {
   etiqueta: '', nombre_contacto: '', descripcion: '', plus_code: '', es_principal: false
 }
 
-export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
+export default function UbicacionesPanel({ idCliente, puedeEditar = false, refCoords = null }) {
   const [ubicaciones, setUbicaciones]   = useState([])
   const [cargando, setCargando]         = useState(true)
   const [formAbierto, setFormAbierto]   = useState(false)
@@ -68,9 +68,9 @@ export default function UbicacionesPanel({ idCliente, puedeEditar = false }) {
 
   const guardar = async () => {
     if (!form.etiqueta.trim()) { setError('Ingresa una etiqueta'); return }
-    const pcNorm = form.plus_code?.trim() ? normalizePlusCode(form.plus_code) : null
+    const pcNorm = form.plus_code?.trim() ? normalizePlusCode(form.plus_code, refCoords) : null
     if (form.plus_code?.trim() && !pcNorm) {
-      setError('Plus Code no válido o incompleto. Pega el código completo (ej: 76QX2FXQ+QF) o déjalo vacío.')
+      setError('Plus Code no válido. Revisa que esté bien escrito (ej: XW6C+RP3 o 76QX2FXQ+QF) o déjalo vacío.')
       return
     }
     setGuardando(true)

@@ -307,7 +307,11 @@ function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
           )}
 
           {tab === 'ubicaciones' && (
-            <UbicacionesPanel idCliente={cliente.id_cliente} puedeEditar={puedeEditar} />
+            <UbicacionesPanel
+              idCliente={cliente.id_cliente}
+              puedeEditar={puedeEditar}
+              refCoords={cliente.latitud && cliente.longitud ? { lat: parseFloat(cliente.latitud), lng: parseFloat(cliente.longitud) } : null}
+            />
           )}
         </div>
       </div>
@@ -576,7 +580,7 @@ export default function Clientes() {
     try {
       const code = normalizePlusCode(form.plus_code)
       if (!code) {
-        alert('Plus Code no válido o incompleto. Pega el código COMPLETO (empieza con algo como "76QX…", ej: 76QX2FXQ+QF). Un código corto tipo "2FXQ+QF" no se puede ubicar sin referencia.')
+        alert('Plus Code no válido. Revisa que esté bien escrito (ej: XW6C+RP3 o 76QX2FXQ+QF).')
         return
       }
       if (code !== form.plus_code.trim().toUpperCase()) setForm(f => ({ ...f, plus_code: code }))
