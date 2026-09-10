@@ -51,7 +51,7 @@ function AppRoutes() {
         <Route path="/cobranza" element={<RutaProtegida roles={['cobrador', 'administrador', 'supervisor_cobranza']}><Cobranza /></RutaProtegida>} />
         <Route path="/usuarios" element={<RutaProtegida roles={['administrador', 'supervisor_cobranza']}><Usuarios /></RutaProtegida>} />
         <Route path="/visitas"  element={<RutaProtegida roles={['cobrador', 'administrador', 'supervisor_cobranza']}><Visitas /></RutaProtegida>} />
-        <Route path="/cortes"   element={<RutaProtegida roles={['administrador', 'supervisor_cobranza']}><Cortes /></RutaProtegida>} />
+        <Route path="/cortes"   element={<RutaProtegida roles={['administrador', 'supervisor_cobranza', 'cobrador']}><Cortes /></RutaProtegida>} />
         <Route path="/mapa"     element={<RutaProtegida roles={['cobrador', 'jefe_camioneta', 'administrador', 'supervisor_cobranza']}><Mapa /></RutaProtegida>} />
         <Route path="/listado"     element={<RutaProtegida roles={['administrador', 'supervisor_cobranza']}><Listado /></RutaProtegida>} />
         <Route path="/lista-negra" element={<RutaProtegida><ListaNegra /></RutaProtegida>} />

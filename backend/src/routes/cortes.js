@@ -45,7 +45,10 @@ function semanaActual() {
 // 1. GET /api/cortes/cobrador/resumen/:id_cobrador
 router.get('/cobrador/resumen/:id_cobrador', auth, async (req, res) => {
   try {
-    const id_cobrador = parseInt(req.params.id_cobrador)
+    // Un cobrador solo puede ver su propio resumen
+    const id_cobrador = req.usuario.rol === 'cobrador'
+      ? req.usuario.id
+      : parseInt(req.params.id_cobrador)
     const { fecha_inicio, fecha_fin } = req.query
 
     const { inicio, fin } = (fecha_inicio && fecha_fin)
@@ -183,7 +186,9 @@ router.post('/cobrador/cerrar', auth, async (req, res) => {
 // 3. GET /api/cortes/cobrador/historial/:id_cobrador
 router.get('/cobrador/historial/:id_cobrador', auth, async (req, res) => {
   try {
-    const id_cobrador = parseInt(req.params.id_cobrador)
+    const id_cobrador = req.usuario.rol === 'cobrador'
+      ? req.usuario.id
+      : parseInt(req.params.id_cobrador)
 
     const cortes = await prisma.corteCobrador.findMany({
       where: { id_cobrador },

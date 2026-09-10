@@ -902,37 +902,43 @@ function TabVendedor() {
 export default function Cortes() {
   const { usuario } = useAuth()
   const [tab, setTab] = useState('cobrador')
+  // El corte de vendedor (pago de comisiones) es solo admin/supervisor
+  const puedeVerVendedor = ['administrador', 'supervisor_cobranza'].includes(usuario?.rol)
 
   return (
     <Layout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Cortes y Comisiones</h1>
-          <p className="text-gray-500 text-sm mt-1">Cierre semanal de cobrador y pago de comisiones a vendedores</p>
+          <p className="text-gray-500 text-sm mt-1">
+            {puedeVerVendedor ? 'Cierre semanal de cobrador y pago de comisiones a vendedores' : 'Tu corte semanal'}
+          </p>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-          <button
-            onClick={() => setTab('cobrador')}
-            className={`px-4 py-2 text-sm rounded-md font-medium transition ${
-              tab === 'cobrador' ? 'bg-white shadow text-blue-700' : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            ✂️ Corte cobrador
-          </button>
-          <button
-            onClick={() => setTab('vendedor')}
-            className={`px-4 py-2 text-sm rounded-md font-medium transition ${
-              tab === 'vendedor' ? 'bg-white shadow text-blue-700' : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            💰 Corte vendedor
-          </button>
-        </div>
+        {/* Tabs — el de vendedor solo para admin/supervisor */}
+        {puedeVerVendedor && (
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+            <button
+              onClick={() => setTab('cobrador')}
+              className={`px-4 py-2 text-sm rounded-md font-medium transition ${
+                tab === 'cobrador' ? 'bg-white shadow text-blue-700' : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              ✂️ Corte cobrador
+            </button>
+            <button
+              onClick={() => setTab('vendedor')}
+              className={`px-4 py-2 text-sm rounded-md font-medium transition ${
+                tab === 'vendedor' ? 'bg-white shadow text-blue-700' : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              💰 Corte vendedor
+            </button>
+          </div>
+        )}
 
-        {tab === 'cobrador' && <TabCobrador usuario={usuario} />}
-        {tab === 'vendedor' && <TabVendedor />}
+        {(tab === 'cobrador' || !puedeVerVendedor) && <TabCobrador usuario={usuario} />}
+        {tab === 'vendedor' && puedeVerVendedor && <TabVendedor />}
       </div>
     </Layout>
   )

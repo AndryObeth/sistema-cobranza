@@ -14,7 +14,7 @@ const menu = [
   { path: '/mapa',      label: 'Mapa',       icono: '🗺️',  roles: ['cobrador', 'jefe_camioneta', 'administrador', 'supervisor_cobranza'] },
   { path: '/listado',   label: 'Listado',    icono: '📋', roles: ['administrador', 'supervisor_cobranza'] },
   { path: '/lista-negra', label: 'Lista Negra', icono: '⛔', roles: null },
-  { path: '/cortes',      label: 'Cortes',      icono: '✂️',  roles: ['administrador', 'supervisor_cobranza'] },
+  { path: '/cortes',      label: 'Cortes',      icono: '✂️',  roles: ['administrador', 'supervisor_cobranza', 'cobrador'] },
   { path: '/usuarios',    label: 'Usuarios',    icono: '👤', roles: ['administrador', 'supervisor_cobranza'] },
 ]
 
