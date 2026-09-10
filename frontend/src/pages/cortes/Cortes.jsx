@@ -140,20 +140,22 @@ const formatearTextoCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCob
 // ─── badge estado ────────────────────────────────
 function BadgeEstado({ estado }) {
   const colores = {
-    abierto:  'bg-yellow-100 text-yellow-800',
-    cerrado:  'bg-blue-100 text-blue-800',
-    revisado: 'bg-purple-100 text-purple-800',
-    pagado:   'bg-green-100 text-green-800',
+    abierto:     'bg-yellow-100 text-yellow-800',
+    en_revision: 'bg-amber-100 text-amber-800',
+    cerrado:     'bg-blue-100 text-blue-800',
+    revisado:    'bg-purple-100 text-purple-800',
+    pagado:      'bg-green-100 text-green-800',
   }
+  const etiqueta = { en_revision: 'por revisar' }[estado] || estado
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colores[estado] || 'bg-gray-100 text-gray-700'}`}>
-      {estado}
+      {etiqueta}
     </span>
   )
 }
 
 // ─── Modal Cerrar Corte Cobrador ─────────────────
-function ModalCerrarCorte({ cobradorId, semana, onCerrar, onClose }) {
+function ModalCerrarCorte({ cobradorId, semana, onCerrar, onClose, esPropio }) {
   const [totalDepositado, setTotalDepositado] = useState('')
   const [observaciones, setObservaciones] = useState('')
   const [cargando, setCargando] = useState(false)
@@ -163,25 +165,28 @@ function ModalCerrarCorte({ cobradorId, semana, onCerrar, onClose }) {
     if (!totalDepositado) return
     setCargando(true)
     try {
-      await api.post('/cortes/cobrador/cerrar', {
+      const res = await api.post('/cortes/cobrador/cerrar', {
         id_cobrador: cobradorId,
         fecha_inicio: semana.semana_inicio,
         fecha_fin: semana.semana_fin,
         total_depositado: parseFloat(totalDepositado),
         observaciones
       })
-      onCerrar()
+      onCerrar(res.data?.mensaje)
     } catch (err) {
-      alert('Error al cerrar corte: ' + (err.response?.data?.detalle || err.message))
+      alert('Error al cerrar corte: ' + (err.response?.data?.detalle || err.response?.data?.error || err.message))
     } finally {
       setCargando(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
-        <h2 className="text-lg font-bold mb-4">Cerrar corte de cobrador</h2>
+        <h2 className="text-lg font-bold mb-1">{esPropio ? 'Entregar mi corte' : 'Cerrar corte de cobrador'}</h2>
+        {esPropio && (
+          <p className="text-xs text-gray-500 mb-4">Se envía para que el administrador lo revise y apruebe.</p>
+        )}
 
         <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm space-y-1">
           <p><span className="text-gray-500">Total cobrado:</span> <strong>{fmt(semana.total_cobrado)}</strong></p>
@@ -197,7 +202,9 @@ function ModalCerrarCorte({ cobradorId, semana, onCerrar, onClose }) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Total entregado / depositado por el cobrador *</label>
+            <label className="block text-sm font-medium mb-1">
+              {esPropio ? 'Efectivo que vas a entregar *' : 'Total entregado / depositado por el cobrador *'}
+            </label>
             <input
               type="number"
               step="0.01"
@@ -207,7 +214,7 @@ function ModalCerrarCorte({ cobradorId, semana, onCerrar, onClose }) {
               placeholder={`${(semana.total_efectivo ?? semana.total_cobrado).toFixed(2)}`}
               required
             />
-            <p className="text-xs text-gray-400 mt-0.5">Solo el efectivo que el cobrador entregó — los depósitos directos ya están en la empresa.</p>
+            <p className="text-xs text-gray-400 mt-0.5">Solo el efectivo{esPropio ? '' : ' que el cobrador entregó'} — los depósitos directos ya están en la empresa.</p>
             {totalDepositado && (() => {
               const efectivo = semana.total_efectivo ?? semana.total_cobrado
               const dif = efectivo - parseFloat(totalDepositado)
@@ -241,7 +248,7 @@ function ModalCerrarCorte({ cobradorId, semana, onCerrar, onClose }) {
               disabled={cargando}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
             >
-              {cargando ? 'Cerrando…' : 'Cerrar corte'}
+              {cargando ? 'Enviando…' : esPropio ? 'Entregar corte' : 'Cerrar corte'}
             </button>
           </div>
         </form>
@@ -277,19 +284,55 @@ function TabCobrador({ usuario }) {
     setComprobanteVisto(null)
   }
 
-  const esCobrador = ['cobrador', 'supervisor_cobranza'].includes(usuario?.rol)
+  const esCobradorPuro = usuario?.rol === 'cobrador'
+  const puedeGestionar = ['administrador', 'supervisor_cobranza'].includes(usuario?.rol)
+  const [mensaje, setMensaje] = useState('')
+
+  const aprobarCorte = async (corte) => {
+    const dep = prompt(
+      `Aprobar corte del ${fmtFecha(corte.fecha_inicio)} – ${fmtFecha(corte.fecha_fin)}.\n\n` +
+      `El cobrador reportó entregar $${parseFloat(corte.total_depositado).toFixed(2)}.\n` +
+      `Deja vacío para dejar ese monto, o escribe el monto real que recibiste:`,
+      ''
+    )
+    if (dep === null) return
+    try {
+      await api.put(`/cortes/cobrador/${corte.id_corte_cobrador}/aprobar`,
+        dep.trim() ? { total_depositado: parseFloat(dep) } : {})
+      setMensaje('Corte aprobado ✅'); setTimeout(() => setMensaje(''), 4000)
+      recargar()
+    } catch (err) {
+      alert('Error al aprobar: ' + (err.response?.data?.error || err.message))
+    }
+  }
+
+  const reabrirCorte = async (corte) => {
+    if (!confirm(`¿Reabrir el corte del ${fmtFecha(corte.fecha_inicio)} – ${fmtFecha(corte.fecha_fin)}?\nLos ${corte.detalles?.length || 0} pago(s) quedarán libres para incluirse en otro corte.`)) return
+    try {
+      await api.delete(`/cortes/cobrador/${corte.id_corte_cobrador}`)
+      setMensaje('Corte reabierto — pagos liberados'); setTimeout(() => setMensaje(''), 4000)
+      recargar()
+    } catch (err) {
+      alert('Error al reabrir: ' + (err.response?.data?.error || err.message))
+    }
+  }
 
   useEffect(() => {
-    if (esCobrador) {
+    if (esCobradorPuro) {
       setIdCobrador(usuario.id)
     } else {
+      // admin y supervisor: pueden ver el corte de cualquier cobrador
       api.get('/usuarios').then(r => {
         const cobs = r.data.filter(u => ['cobrador', 'supervisor_cobranza'].includes(u.rol) && u.activo)
         setCobradores(cobs)
-        if (cobs.length > 0) setIdCobrador(cobs[0].id_usuario)
+        if (cobs.length > 0) {
+          // el supervisor arranca viendo el suyo si está en la lista
+          const propio = cobs.find(c => c.id_usuario === usuario.id)
+          setIdCobrador((propio || cobs[0]).id_usuario)
+        }
       }).catch(() => {})
     }
-  }, [esCobrador, usuario])
+  }, [esCobradorPuro, usuario])
 
   useEffect(() => {
     if (!idCobrador) return
@@ -306,8 +349,9 @@ function TabCobrador({ usuario }) {
     }).catch(() => {}).finally(() => setCargando(false))
   }, [idCobrador, fechaInicio, fechaFin])
 
-  const recargar = () => {
+  const recargar = (msg) => {
     setModalAbierto(false)
+    if (msg) { setMensaje(msg); setTimeout(() => setMensaje(''), 4000) }
     if (!idCobrador) return
     const params = (fechaInicio && fechaFin) ? { fecha_inicio: fechaInicio, fecha_fin: fechaFin } : {}
     Promise.all([
@@ -332,7 +376,7 @@ function TabCobrador({ usuario }) {
 
   const exportarPDF = () => {
     if (!resumen) return
-    const nombreCobrador = esCobrador
+    const nombreCobrador = esCobradorPuro
       ? usuario?.nombre
       : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || '')
 
@@ -350,7 +394,7 @@ function TabCobrador({ usuario }) {
   }
 
   const descargarCorteHistorial = (corte) => {
-    const nombreCobrador = esCobrador
+    const nombreCobrador = esCobradorPuro
       ? usuario?.nombre
       : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || corte.cobrador?.nombre || '')
 
@@ -389,7 +433,7 @@ function TabCobrador({ usuario }) {
 
   const compartirCorteActual = () => {
     if (!resumen) return
-    const nombreCobrador = esCobrador
+    const nombreCobrador = esCobradorPuro
       ? usuario?.nombre
       : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || '')
 
@@ -407,7 +451,7 @@ function TabCobrador({ usuario }) {
   }
 
   const compartirCorteHistorialFn = (corte) => {
-    const nombreCobrador = esCobrador
+    const nombreCobrador = esCobradorPuro
       ? usuario?.nombre
       : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || corte.cobrador?.nombre || '')
 
@@ -437,8 +481,12 @@ function TabCobrador({ usuario }) {
 
   return (
     <div className="space-y-6">
-      {/* Selector de cobrador (solo admin) */}
-      {!esCobrador && cobradores.length > 0 && (
+      {mensaje && (
+        <div className="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-2 font-medium">{mensaje}</div>
+      )}
+
+      {/* Selector de cobrador (admin / supervisor) */}
+      {!esCobradorPuro && cobradores.length > 0 && (
         <div className="flex items-center gap-3">
           <label className="text-sm font-medium text-gray-700">Cobrador:</label>
           <select
@@ -539,12 +587,12 @@ function TabCobrador({ usuario }) {
                     📲 Compartir / RawBT
                   </button>
                 )}
-                {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && resumen.cantidad_pagos > 0 && (
+                {resumen.cantidad_pagos > 0 && (
                   <button
                     onClick={() => setModalAbierto(true)}
                     className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
                   >
-                    ✂️ Cerrar corte
+                    {esCobradorPuro ? '📤 Entregar mi corte' : '✂️ Cerrar corte'}
                   </button>
                 )}
               </div>
@@ -623,9 +671,12 @@ function TabCobrador({ usuario }) {
                   </thead>
                   <tbody className="divide-y">
                     {historial.map(c => (
-                      <tr key={c.id_corte_cobrador} className="hover:bg-gray-50">
+                      <tr key={c.id_corte_cobrador} className={`hover:bg-gray-50 ${c.estado_corte === 'en_revision' ? 'bg-amber-50/60' : ''}`}>
                         <td className="px-4 py-3 text-gray-600">
                           {fmtFecha(c.fecha_inicio)} – {fmtFecha(c.fecha_fin)}
+                          {c.cerrado_por_el_cobrador && (
+                            <span className="block text-[11px] text-amber-600">entregado por el cobrador</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">{fmt(c.total_cobrado)}</td>
                         <td className="px-4 py-3 text-right text-indigo-600">{parseFloat(c.total_deposito) > 0 ? fmt(c.total_deposito) : '—'}</td>
@@ -636,7 +687,23 @@ function TabCobrador({ usuario }) {
                         <td className="px-4 py-3 text-right text-green-600">{fmt(c.comision_total)}</td>
                         <td className="px-4 py-3"><BadgeEstado estado={c.estado_corte} /></td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {puedeGestionar && c.estado_corte === 'en_revision' && (
+                              <button
+                                onClick={() => aprobarCorte(c)}
+                                className="text-green-700 hover:text-green-900 text-xs font-semibold whitespace-nowrap"
+                              >
+                                ✓ Aprobar
+                              </button>
+                            )}
+                            {puedeGestionar && ['en_revision', 'cerrado', 'revisado'].includes(c.estado_corte) && (
+                              <button
+                                onClick={() => reabrirCorte(c)}
+                                className="text-orange-600 hover:text-orange-800 text-xs whitespace-nowrap"
+                              >
+                                ↩ Reabrir
+                              </button>
+                            )}
                             {c.detalles?.length > 0 && (
                               <button
                                 onClick={() => descargarCorteHistorial(c)}
@@ -669,6 +736,7 @@ function TabCobrador({ usuario }) {
         <ModalCerrarCorte
           cobradorId={idCobrador}
           semana={resumen}
+          esPropio={esCobradorPuro}
           onCerrar={recargar}
           onClose={() => setModalAbierto(false)}
         />

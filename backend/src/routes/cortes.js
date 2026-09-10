@@ -108,9 +108,15 @@ router.get('/cobrador/resumen/:id_cobrador', auth, async (req, res) => {
 })
 
 // 2. POST /api/cortes/cobrador/cerrar
+// - Un cobrador solo puede cerrar SU propio corte, y queda "en_revision"
+//   (el admin lo aprueba después).
+// - Admin/supervisor cierra el de cualquiera y queda "cerrado" directo.
 router.post('/cobrador/cerrar', auth, async (req, res) => {
   try {
-    const { id_cobrador, fecha_inicio, fecha_fin, total_depositado, observaciones } = req.body
+    const esCobrador = req.usuario.rol === 'cobrador'
+    const id_cobrador = esCobrador ? req.usuario.id : req.body.id_cobrador
+    const { fecha_inicio, fecha_fin, total_depositado, observaciones } = req.body
+    if (!id_cobrador) return res.status(400).json({ error: 'Falta id_cobrador' })
 
     const pagos = await prisma.pago.findMany({
       where: {
@@ -151,7 +157,8 @@ router.post('/cobrador/cerrar', auth, async (req, res) => {
         total_depositado: parseFloat(total_depositado),
         diferencia,
         comision_total,
-        estado_corte: 'cerrado',
+        estado_corte: esCobrador ? 'en_revision' : 'cerrado',
+        cerrado_por: req.usuario.id,
         observaciones,
         detalles: {
           create: pagos.map(p => ({
@@ -164,7 +171,10 @@ router.post('/cobrador/cerrar', auth, async (req, res) => {
       include: { detalles: true }
     })
 
-    res.status(201).json({ mensaje: 'Corte cerrado exitosamente', corte })
+    res.status(201).json({
+      mensaje: esCobrador ? 'Corte entregado para revisión' : 'Corte cerrado exitosamente',
+      corte,
+    })
   } catch (error) {
     res.status(500).json({ error: 'Error al cerrar corte', detalle: error.message })
   }
@@ -195,9 +205,73 @@ router.get('/cobrador/historial/:id_cobrador', auth, async (req, res) => {
       orderBy: { created_at: 'desc' }
     })
 
-    res.json(cortes)
+    // quién lo cerró/entregó (nombre) para mostrarlo en el historial
+    const idsCerrado = [...new Set(cortes.map(c => c.cerrado_por).filter(Boolean))]
+    const usuarios = idsCerrado.length
+      ? await prisma.usuario.findMany({ where: { id_usuario: { in: idsCerrado } }, select: { id_usuario: true, nombre: true, rol: true } })
+      : []
+    const mapaU = Object.fromEntries(usuarios.map(u => [u.id_usuario, u]))
+
+    res.json(cortes.map(c => ({
+      ...c,
+      cerrado_por_nombre: c.cerrado_por ? (mapaU[c.cerrado_por]?.nombre || null) : null,
+      cerrado_por_el_cobrador: c.cerrado_por === c.id_cobrador,
+    })))
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener historial', detalle: error.message })
+  }
+})
+
+// 3b. PUT /api/cortes/cobrador/:id/aprobar — admin/supervisor aprueba un corte
+// que el cobrador dejó "en_revision". Puede ajustar total_depositado y notas.
+router.put('/cobrador/:id/aprobar', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'Solo admin/supervisor puede aprobar cortes' })
+    }
+    const id = parseInt(req.params.id)
+    const corte = await prisma.corteCobrador.findUnique({ where: { id_corte_cobrador: id } })
+    if (!corte) return res.status(404).json({ error: 'Corte no encontrado' })
+    if (corte.estado_corte !== 'en_revision') {
+      return res.status(400).json({ error: `El corte está "${corte.estado_corte}", no "en_revision"` })
+    }
+
+    const data = { estado_corte: 'cerrado' }
+    if (req.body.total_depositado != null && req.body.total_depositado !== '') {
+      const nuevoDepositado = parseFloat(req.body.total_depositado)
+      const totalEfectivo = parseFloat((parseFloat(corte.total_cobrado) - parseFloat(corte.total_deposito)).toFixed(2))
+      data.total_depositado = nuevoDepositado
+      data.diferencia = parseFloat((totalEfectivo - nuevoDepositado).toFixed(2))
+    }
+    if (typeof req.body.observaciones === 'string') data.observaciones = req.body.observaciones
+
+    const actualizado = await prisma.corteCobrador.update({ where: { id_corte_cobrador: id }, data })
+    res.json({ mensaje: 'Corte aprobado', corte: actualizado })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al aprobar corte', detalle: error.message })
+  }
+})
+
+// 3c. DELETE /api/cortes/cobrador/:id — admin/supervisor reabre (borra) un corte.
+// Los pagos quedan libres para incluirse en otro corte. No se puede si ya está "pagado".
+router.delete('/cobrador/:id', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'Solo admin/supervisor puede reabrir cortes' })
+    }
+    const id = parseInt(req.params.id)
+    const corte = await prisma.corteCobrador.findUnique({ where: { id_corte_cobrador: id } })
+    if (!corte) return res.status(404).json({ error: 'Corte no encontrado' })
+    if (corte.estado_corte === 'pagado') {
+      return res.status(400).json({ error: 'No se puede reabrir un corte ya pagado' })
+    }
+    await prisma.$transaction([
+      prisma.detalleCorteCorador.deleteMany({ where: { id_corte_cobrador: id } }),
+      prisma.corteCobrador.delete({ where: { id_corte_cobrador: id } }),
+    ])
+    res.json({ mensaje: 'Corte reabierto — los pagos quedaron libres' })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al reabrir corte', detalle: error.message })
   }
 })
 

@@ -515,6 +515,7 @@ model CorteCobrador {
   comision_total    Decimal  @db.Decimal(10, 2)
   estado_corte      EstadoCorte @default(abierto)
   observaciones     String?
+  cerrado_por       Int?     // id del usuario que lo cerró/entregó
   created_at        DateTime @default(now())
 
   // Relaciones
@@ -526,6 +527,7 @@ model CorteCobrador {
 
 enum EstadoCorte {
   abierto
+  en_revision   // entregado por el cobrador, falta que el admin lo apruebe
   revisado
   cerrado
   pagado
