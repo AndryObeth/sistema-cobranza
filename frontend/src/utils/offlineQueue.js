@@ -15,7 +15,7 @@ export function getQueue() {
 function saveQueue(queue) {
   try {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
-  } catch (e) {
+  } catch {
     // Sin espacio en localStorage (típicamente por una foto de comprobante
     // grande). Se sueltan las imágenes de la cola para no perder los pagos:
     // el pago/visita se sincroniza igual, solo sin comprobante adjunto.
@@ -119,64 +119,103 @@ export function encolarUbicacionNombrada(datos) {
 
 // ── Sincronizar la cola completa ──────────────────────────────────────────────
 
-export async function sincronizarCola() {
-  const queue = getQueue()
-  const pendientes = queue.filter(op => !op.sincronizado)
-  if (pendientes.length === 0) return { sincronizados: 0, errores: 0 }
-
-  let sincronizados = 0
-  let errores = 0
-  // Resultado de cada operación por id — NO se toca `queue`/localStorage
-  // directamente aquí, porque el usuario puede seguir encolando pagos
-  // nuevos (encolarPago, etc.) mientras este ciclo sigue en curso (cada
-  // envío puede tardar hasta 10s con señal mala). Guardar solo los
-  // resultados y fusionarlos al final contra la cola MÁS RECIENTE evita
-  // que un `saveQueue` con una foto vieja borre esas operaciones nuevas.
-  const resultados = {}
-
-  for (const op of pendientes) {
-    try {
-      if (op.tipo === 'POST_PAGO') {
-        await api.post('/pagos', op.datos, { timeout: 10000 })
-      } else if (op.tipo === 'POST_VISITA') {
-        await api.post('/visitas', op.datos, { timeout: 10000 })
-      } else if (op.tipo === 'PUT_DIA') {
-        await api.put(`/clientes/${op.datos.id_cliente}/dia-cobranza`, { dia_cobranza: op.datos.dia_cobranza }, { timeout: 10000 })
-      } else if (op.tipo === 'PUT_UBICACION') {
-        await api.put(`/clientes/${op.datos.id_cliente}/coordenadas`, {
-          latitud: op.datos.latitud, longitud: op.datos.longitud, plus_code: op.datos.plus_code
-        }, { timeout: 10000 })
-      } else if (op.tipo === 'UBICACION_NOMBRADA') {
-        const { idCliente, editando, payload } = op.datos
-        if (editando) {
-          await api.put(`/clientes/${idCliente}/ubicaciones/${editando}`, payload, { timeout: 10000 })
-        } else {
-          await api.post(`/clientes/${idCliente}/ubicaciones`, payload, { timeout: 10000 })
-        }
+// Envía UNA operación de la cola. Devuelve { sincronizado, error, errorEsDeRed }.
+async function enviarOperacion(op) {
+  try {
+    if (op.tipo === 'POST_PAGO') {
+      await api.post('/pagos', op.datos, { timeout: 20000 })
+    } else if (op.tipo === 'POST_VISITA') {
+      await api.post('/visitas', op.datos, { timeout: 20000 })
+    } else if (op.tipo === 'PUT_DIA') {
+      await api.put(`/clientes/${op.datos.id_cliente}/dia-cobranza`, { dia_cobranza: op.datos.dia_cobranza }, { timeout: 20000 })
+    } else if (op.tipo === 'PUT_UBICACION') {
+      await api.put(`/clientes/${op.datos.id_cliente}/coordenadas`, {
+        latitud: op.datos.latitud, longitud: op.datos.longitud, plus_code: op.datos.plus_code
+      }, { timeout: 20000 })
+    } else if (op.tipo === 'UBICACION_NOMBRADA') {
+      const { idCliente, editando, payload } = op.datos
+      if (editando) {
+        await api.put(`/clientes/${idCliente}/ubicaciones/${editando}`, payload, { timeout: 20000 })
+      } else {
+        await api.post(`/clientes/${idCliente}/ubicaciones`, payload, { timeout: 20000 })
       }
-      resultados[op.id] = { sincronizado: true, error: null, errorEsDeRed: false }
-      sincronizados++
-    } catch (err) {
-      // Sin err.response = fallo de red/tiempo agotado (se reintentará solo).
-      // Con err.response = el servidor lo rechazó de verdad (necesita revisión).
-      resultados[op.id] = {
-        sincronizado: false,
-        error: err.response?.data?.error || 'Error de red',
-        errorEsDeRed: !err.response,
-      }
-      errores++
+    }
+    return { sincronizado: true, error: null, errorEsDeRed: false }
+  } catch (err) {
+    // Sin err.response = fallo de red/tiempo agotado (se reintentará solo).
+    // Con err.response = el servidor lo rechazó de verdad (necesita revisión).
+    return {
+      sincronizado: false,
+      error: err.response?.data?.error || 'Error de red',
+      errorEsDeRed: !err.response,
     }
   }
+}
 
-  // Fusionar los resultados contra la cola actual (releída), no contra la
-  // foto de cuando empezó este ciclo — así no se pierde nada agregado mientras.
+// Clave para serializar: dos operaciones sobre la MISMA cuenta/cliente van una
+// tras otra (evita pisarse el saldo); las de cuentas distintas van en paralelo.
+function claveOrden(op) {
+  return String(op.datos?.id_cuenta ?? op.datos?.id_cliente ?? op.datos?.idCliente ?? op.id)
+}
+
+// `onProgreso(hecho, total)` — para mostrar avance. `concurrencia` = cuántas
+// cuentas distintas se suben a la vez.
+export async function sincronizarCola(onProgreso, concurrencia = 5) {
+  const pendientes = getQueue().filter(op => !op.sincronizado)
+  if (pendientes.length === 0) return { sincronizados: 0, errores: 0, red: 0 }
+
+  // Agrupar por cuenta/cliente; dentro de un grupo es secuencial, entre grupos
+  // se procesan hasta `concurrencia` grupos a la vez.
+  const grupos = new Map()
+  for (const op of pendientes) {
+    const k = claveOrden(op)
+    if (!grupos.has(k)) grupos.set(k, [])
+    grupos.get(k).push(op)
+  }
+  const colas = [...grupos.values()]
+
+  const resultados = {}
+  let hecho = 0
+  const total = pendientes.length
+  let siguiente = 0
+
+  const worker = async () => {
+    while (siguiente < colas.length) {
+      const grupo = colas[siguiente++]
+      for (const op of grupo) {
+        const r = await enviarOperacion(op)
+        resultados[op.id] = r
+        hecho++
+        if (onProgreso) onProgreso(hecho, total)
+        // Si este grupo fallo por red, no seguir con el resto del grupo:
+        // probablemente todos van a fallar y perdemos tiempo.
+        if (r.errorEsDeRed) {
+          for (let i = grupo.indexOf(op) + 1; i < grupo.length; i++) {
+            resultados[grupo[i].id] = { sincronizado: false, error: 'Error de red', errorEsDeRed: true }
+            hecho++
+            if (onProgreso) onProgreso(hecho, total)
+          }
+          break
+        }
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrencia, colas.length) }, worker))
+
+  // Fusionar contra la cola actual (releída) — el usuario pudo encolar más
+  // mientras esto corría.
   const actual = getQueue()
   const actualizada = actual
     .map(op => resultados[op.id] ? { ...op, ...resultados[op.id] } : op)
     .filter(op => !op.sincronizado)
   saveQueue(actualizada)
 
-  return { sincronizados, errores }
+  const vals = Object.values(resultados)
+  return {
+    sincronizados: vals.filter(r => r.sincronizado).length,
+    errores:       vals.filter(r => !r.sincronizado && !r.errorEsDeRed).length,
+    red:           vals.filter(r => r.errorEsDeRed).length,
+  }
 }
 
 // ── Limpiar operaciones con error manualmente ─────────────────────────────────

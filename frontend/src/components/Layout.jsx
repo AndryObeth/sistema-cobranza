@@ -32,6 +32,7 @@ export default function Layout({ children }) {
   const [conErrores, setConErrores] = useState(queueErrorCount())
   const [toast, setToast]           = useState(null)
   const [comentariosNoLeidos, setComentariosNoLeidos] = useState(0)
+  const [sincProgreso, setSincProgreso] = useState(null) // { hecho, total } | null
 
   const mostrarToast = (mensaje, tipo = 'info') => {
     setToast({ mensaje, tipo })
@@ -51,22 +52,38 @@ export default function Layout({ children }) {
     const actualizarConteo = () => { setPendientes(queueCount()); setConErrores(queueErrorCount()) }
 
     const sincronizarSiHayPendientes = async (silencioso = false) => {
-      const pendientesActuales = queueCount()
-      if (pendientesActuales === 0 || sincronizando) return
+      if (queueCount() === 0 || sincronizando || !navigator.onLine) return
       sincronizando = true
       try {
-        if (!silencioso) mostrarToast(`Sincronizando ${pendientesActuales} cambio(s) pendiente(s)...`, 'info')
-        const resultado = await sincronizarCola()
-        setPendientes(queueCount())
-        setConErrores(queueErrorCount())
-        if (resultado.sincronizados > 0) {
-          mostrarToast(`✅ ${resultado.sincronizados} cambio(s) sincronizados correctamente`, 'exito')
+        // Reintenta en la misma tanda: si la señal se cae a medias, en vez de
+        // esperar 60s al siguiente tic, vuelve a intentar con lo que quedó
+        // (hasta 4 vueltas, con pausas cortas). Así los pagos suben "de una"
+        // y no por partes con huecos de un minuto.
+        let totalSinc = 0
+        let totalErr = 0
+        for (let vuelta = 0; vuelta < 4; vuelta++) {
+          const restantes = queueCount()
+          if (restantes === 0) break
+          if (!navigator.onLine) break
+          if (!silencioso && vuelta === 0) mostrarToast(`Subiendo ${restantes} pago(s)/cambio(s) pendiente(s)…`, 'info')
+          const r = await sincronizarCola((hecho, total) => setSincProgreso({ hecho, total }))
+          totalSinc += r.sincronizados
+          totalErr  += r.errores
+          setPendientes(queueCount())
+          setConErrores(queueErrorCount())
+          // Si ya no hay errores de red pendientes, no tiene caso otra vuelta.
+          if (r.red === 0) break
+          await new Promise(res => setTimeout(res, 3000))
         }
-        if (resultado.errores > 0 && !silencioso) {
-          mostrarToast(`⚠️ ${resultado.errores} cambio(s) no pudieron sincronizarse`, 'error')
+        setSincProgreso(null)
+        if (totalSinc > 0) mostrarToast(`✅ ${totalSinc} cambio(s) sincronizados`, 'exito')
+        if (totalErr > 0 && !silencioso) mostrarToast(`⚠️ ${totalErr} cambio(s) rechazados por el servidor — revísalos`, 'error')
+        if (queueCount() > 0 && !silencioso && totalErr === 0) {
+          mostrarToast(`Quedan ${queueCount()} por subir — se reintenta solo al mejorar la señal`, 'info')
         }
       } finally {
         sincronizando = false
+        setSincProgreso(null)
       }
     }
 
@@ -86,11 +103,10 @@ export default function Layout({ children }) {
 
     // Reintento periódico: el navegador puede seguir "creyendo" que hay señal
     // aunque esté muy débil y las peticiones fallen, sin que el evento 'online'
-    // vuelva a dispararse. Se reintenta cada minuto en silencio (solo avisa si
-    // realmente logra sincronizar algo).
+    // vuelva a dispararse. Se reintenta cada 30s en silencio.
     const intervalo = setInterval(() => {
       if (navigator.onLine) sincronizarSiHayPendientes(true)
-    }, 60000)
+    }, 30000)
 
     return () => {
       window.removeEventListener('online',  handleOnline)
@@ -254,17 +270,29 @@ export default function Layout({ children }) {
         {/* Indicador de conexión */}
         <div className={[
           'mx-2 mb-2 px-3 py-2 rounded-lg text-xs flex items-center gap-2',
-          conErrores > 0 ? 'bg-amber-900/60 text-amber-300' : enLinea ? 'bg-gray-800 text-gray-300' : 'bg-red-900/60 text-red-300',
+          sincProgreso ? 'bg-blue-900/60 text-blue-200'
+            : conErrores > 0 ? 'bg-amber-900/60 text-amber-300'
+            : pendientes > 0 ? 'bg-blue-900/50 text-blue-200'
+            : enLinea ? 'bg-gray-800 text-gray-300' : 'bg-red-900/60 text-red-300',
           colapsado ? 'justify-center' : '',
         ].join(' ')}>
-          <span className={`w-2 h-2 rounded-full shrink-0 ${conErrores > 0 ? 'bg-amber-400 animate-pulse' : enLinea ? 'bg-green-400' : 'bg-red-400 animate-pulse'}`} />
+          <span className={`w-2 h-2 rounded-full shrink-0 ${
+            sincProgreso ? 'bg-blue-400 animate-pulse'
+              : conErrores > 0 ? 'bg-amber-400 animate-pulse'
+              : pendientes > 0 ? 'bg-blue-400 animate-pulse'
+              : enLinea ? 'bg-green-400' : 'bg-red-400 animate-pulse'
+          }`} />
           {!colapsado && (
             <span>
-              {conErrores > 0
-                ? `⚠️ ${conErrores} no se pudo(pudieron) enviar — revisar`
-                : enLinea
-                  ? 'En línea'
-                  : `Sin conexión${pendientes > 0 ? ` — ${pendientes} cambio(s) pendiente(s)` : ''}`
+              {sincProgreso
+                ? `⬆️ Subiendo ${sincProgreso.hecho}/${sincProgreso.total}…`
+                : conErrores > 0
+                  ? `⚠️ ${conErrores} rechazado(s) por el servidor — revisar`
+                  : pendientes > 0
+                    ? `${pendientes} pendiente(s) de subir${enLinea ? '' : ' (sin conexión)'}`
+                    : enLinea
+                      ? 'En línea'
+                      : 'Sin conexión'
               }
             </span>
           )}
