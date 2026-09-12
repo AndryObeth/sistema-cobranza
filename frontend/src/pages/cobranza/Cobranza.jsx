@@ -1732,12 +1732,36 @@ export default function Cobranza() {
   const totalVisitados   = modoCobranza ? [...visitados].filter(id => cuentasFiltradas.find(c => c.id_cuenta === id) || visitados.has(id)).length : 0
   const pendientesModo   = modoCobranza ? cuentasFiltradas.filter(c => !visitados.has(c.id_cuenta)).length : 0
 
+  // Base para "Organizar tarjetero": mismos filtros que cuentasFiltradas
+  // (ruta, estado, municipio, colonia, búsqueda) pero SIN el de día — el día
+  // es justo lo que se está asignando aquí, filtrar por él no tendría sentido
+  // y antes dejaba los conteos por día mostrando el total de TODAS las rutas
+  // en vez de solo la ruta elegida.
+  const cuentasParaTarjetero = modoTarjetero
+    ? cuentas.filter(c => {
+        if (soloVencidas && !estaVencida(c)) return false
+        if (filtroEstado && c.estado_cuenta !== filtroEstado) return false
+        if (filtroRuta && c.cliente?.ruta !== filtroRuta) return false
+        if (filtroMunicipio && normalizar(c.cliente?.municipio) !== filtroMunicipio) return false
+        if (filtroColonia  && normalizar(c.cliente?.colonia)  !== filtroColonia)  return false
+        const q = normalizar(busqueda)
+        if (q) return (
+          normalizar(c.cliente?.nombre).includes(q) ||
+          normalizar(c.folio_cuenta).includes(q) ||
+          normalizar(c.numero_cuenta).startsWith(q) ||
+          normalizar(c.cliente?.numero_expediente).includes(q) ||
+          normalizar(c.cliente?.municipio).includes(q) ||
+          normalizar(c.cliente?.colonia).includes(q)
+        )
+        return true
+      })
+    : []
   const conteoPorDia = modoTarjetero
-    ? DIAS_COBRANZA.reduce((acc, d) => { acc[d] = cuentas.filter(c => c.cliente?.dia_cobranza === d).length; return acc }, {})
+    ? DIAS_COBRANZA.reduce((acc, d) => { acc[d] = cuentasParaTarjetero.filter(c => c.cliente?.dia_cobranza === d).length; return acc }, {})
     : {}
-  const sinDiaCount = modoTarjetero ? cuentas.filter(c => !c.cliente?.dia_cobranza).length : 0
+  const sinDiaCount = modoTarjetero ? cuentasParaTarjetero.filter(c => !c.cliente?.dia_cobranza).length : 0
   const cuentasTarjetero = modoTarjetero
-    ? cuentasFiltradas.filter(c => !soloSinDia || !c.cliente?.dia_cobranza)
+    ? cuentasParaTarjetero.filter(c => !soloSinDia || !c.cliente?.dia_cobranza)
     : []
 
   const saldo          = parseFloat(cuentaSeleccionada?.saldo_actual || 0)
@@ -1965,7 +1989,7 @@ export default function Cobranza() {
             </select>
           )}
 
-          {usaDiasCobranza && (
+          {usaDiasCobranza && !modoTarjetero && (
             <select
               value={filtroDia || ''}
               onChange={e => setFiltroDia(e.target.value)}
@@ -1988,7 +2012,7 @@ export default function Cobranza() {
           )}
 
           <span className="text-xs text-gray-400 ml-auto">
-            {cuentasFiltradas.length} de {cuentas.length}
+            {modoTarjetero ? cuentasTarjetero.length : cuentasFiltradas.length} de {cuentas.length}
           </span>
         </div>
       </div>
