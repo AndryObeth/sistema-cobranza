@@ -11,6 +11,23 @@ const hoyISO = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+const MOTIVOS_CANCELACION = [
+  'No cumplió con los pagos',
+  'Cliente problemático',
+  'Cliente se arrepintió',
+  'Producto devuelto',
+  'Domicilio no localizado',
+  'Otro',
+]
+
+// Ventas canceladas antes de que existiera motivo_cancelacion en la venta: el motivo
+// quedó guardado únicamente en las observaciones de la cuenta (flujo de Cobranza).
+const extraerMotivoDeCuenta = obs => {
+  if (!obs) return null
+  const m = obs.match(/Cancelada el [^|]*?por:\s*(.*?)\.\s*Saldo pendiente/)
+  return m ? m[1].trim() : null
+}
+
 export default function Ventas() {
   const { usuario } = useAuth()
   const esAdmin = usuario?.rol === 'administrador'
@@ -29,7 +46,7 @@ export default function Ventas() {
   // Misma clave en todos los reintentos manuales de un mismo formulario
   // abierto, para que una respuesta perdida por señal mala no triplique la venta.
   const idempotencyKeyVentaRef = useRef(null)
-  const [mostrarLiquidadas, setMostrarLiquidadas] = useState(false)
+  const [vista, setVista] = useState('activa') // 'activa' | 'liquidada' | 'cancelada'
   const [busqueda, setBusqueda] = useState('')
 
   // Datos del modal — se cargan al abrirlo
@@ -272,6 +289,10 @@ export default function Ventas() {
   const abrirEdicion = (e, v) => {
     e.stopPropagation()
     setVentaEditando(v)
+    // Si ya tenía un motivo guardado (nuevo o rescatado de la cuenta), lo separamos
+    // en motivo/notas para prellenar el select + textarea
+    const motivoPrevio = v.motivo_cancelacion || extraerMotivoDeCuenta(v.cuenta?.observaciones) || ''
+    const [motivoSel, ...resto] = motivoPrevio.split(' — ')
     setFormEdicion({
       fecha_venta:             new Date(v.fecha_venta).toISOString().split('T')[0],
       precio_final_total:      parseFloat(v.precio_final_total).toFixed(2),
@@ -280,23 +301,38 @@ export default function Ventas() {
       estatus_venta:           v.estatus_venta,
       frecuencia_pago:         v.cuenta?.frecuencia_pago || 'semanal',
       numero_cuenta:           v.cuenta?.numero_cuenta || '',
+      motivoCancelacion:       MOTIVOS_CANCELACION.includes(motivoSel) ? motivoSel : (motivoPrevio ? 'Otro' : ''),
+      notasCancelacion:        MOTIVOS_CANCELACION.includes(motivoSel) ? resto.join(' — ') : motivoPrevio,
     })
     setErrorEdicion('')
   }
 
   const handleGuardarEdicion = async (e) => {
     e.preventDefault()
-    setGuardandoEdicion(true)
     setErrorEdicion('')
+
+    const seEstaCancelando = formEdicion.estatus_venta === 'cancelada' && ventaEditando.estatus_venta !== 'cancelada'
+    if (seEstaCancelando && !formEdicion.motivoCancelacion) {
+      setErrorEdicion('Selecciona un motivo de cancelación')
+      return
+    }
+
+    setGuardandoEdicion(true)
     try {
+      const payload = {
+        fecha_venta:             formEdicion.fecha_venta,
+        precio_final_total:      parseFloat(formEdicion.precio_final_total),
+        enganche_recibido_total: parseFloat(formEdicion.enganche_recibido_total),
+        observaciones:           formEdicion.observaciones,
+        estatus_venta:           formEdicion.estatus_venta,
+      }
+      if (seEstaCancelando) {
+        payload.motivo_cancelacion = formEdicion.notasCancelacion?.trim()
+          ? `${formEdicion.motivoCancelacion} — ${formEdicion.notasCancelacion.trim()}`
+          : formEdicion.motivoCancelacion
+      }
       const promesas = [
-        api.put(`/ventas/${ventaEditando.id_venta}`, {
-          fecha_venta:             formEdicion.fecha_venta,
-          precio_final_total:      parseFloat(formEdicion.precio_final_total),
-          enganche_recibido_total: parseFloat(formEdicion.enganche_recibido_total),
-          observaciones:           formEdicion.observaciones,
-          estatus_venta:           formEdicion.estatus_venta,
-        }, { timeout: 10000 })
+        api.put(`/ventas/${ventaEditando.id_venta}`, payload, { timeout: 10000 })
       ]
       // Si es a plazo y tiene cuenta, actualizar frecuencia si cambió
       if (ventaEditando.tipo_venta === 'plazo' && ventaEditando.cuenta?.id_cuenta) {
@@ -331,10 +367,21 @@ export default function Ventas() {
     ]
   }
 
-  const ventasFiltradas = ventas.filter(v => {
-    // Ocultar ventas cuya cuenta fue cancelada por fusión
-    if (v.cuenta?.estado_cuenta === 'cancelada' && v.cuenta?.observaciones?.startsWith('Fusionada con')) return false
-    if (!mostrarLiquidadas && v.estatus_venta === 'liquidada') return false
+  // Ventas visibles en cualquier pestaña, antes de filtrar por vista/búsqueda
+  // (excluye el artefacto de cuentas canceladas por fusión, que no es una cancelación real)
+  const ventasVisibles = ventas.filter(v =>
+    !(v.cuenta?.estado_cuenta === 'cancelada' && v.cuenta?.observaciones?.startsWith('Fusionada con'))
+  )
+
+  const conteoPorEstatus = useMemo(() => {
+    const c = { activa: 0, liquidada: 0, cancelada: 0 }
+    ventasVisibles.forEach(v => { if (c[v.estatus_venta] !== undefined) c[v.estatus_venta]++ })
+    return c
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ventas])
+
+  const ventasFiltradas = ventasVisibles.filter(v => {
+    if (v.estatus_venta !== vista) return false
     const q = busqueda.trim()
     if (q && !(
       incluyeTexto(v.cliente?.nombre, q) ||
@@ -359,40 +406,28 @@ export default function Ventas() {
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Ventas</h2>
           <p className="text-gray-500 text-sm mt-1">
-            {ventasFiltradas.length} ventas
-            {!mostrarLiquidadas && ventas.filter(v => v.estatus_venta === 'liquidada').length > 0 && (
-              <span className="text-gray-400"> · {ventas.filter(v => v.estatus_venta === 'liquidada').length} liquidadas ocultas</span>
-            )}
+            {ventasFiltradas.length} {vista === 'activa' ? 'activas' : vista === 'liquidada' ? 'liquidadas' : 'canceladas'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <input
-              type="text"
-              value={busqueda}
-              onChange={e => setBusqueda(e.target.value)}
-              placeholder="Buscar por cuenta o nombre..."
-              className="border border-gray-300 rounded-lg pl-3 pr-8 py-1.5 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {busqueda && (
-              <button
-                type="button"
-                onClick={() => setBusqueda('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <div
-              onClick={() => setMostrarLiquidadas(!mostrarLiquidadas)}
-              className={`relative w-10 h-6 rounded-full transition-colors ${mostrarLiquidadas ? 'bg-blue-500' : 'bg-gray-300'}`}
-            >
-              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${mostrarLiquidadas ? 'translate-x-5' : 'translate-x-1'}`} />
-            </div>
-            <span className="text-sm text-gray-600">Mostrar liquidadas</span>
-          </label>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setVista('activa')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              vista === 'activa' ? 'bg-green-100 text-green-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+            }`}>
+            📋 Activas{conteoPorEstatus.activa > 0 && ` (${conteoPorEstatus.activa})`}
+          </button>
+          <button onClick={() => setVista('liquidada')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              vista === 'liquidada' ? 'bg-gray-300 text-gray-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+            }`}>
+            ✅ Liquidadas{conteoPorEstatus.liquidada > 0 && ` (${conteoPorEstatus.liquidada})`}
+          </button>
+          <button onClick={() => setVista('cancelada')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              vista === 'cancelada' ? 'bg-red-100 text-red-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+            }`}>
+            🚫 Canceladas{conteoPorEstatus.cancelada > 0 && ` (${conteoPorEstatus.cancelada})`}
+          </button>
           <button onClick={() => { setModalAbierto(true); cargarDatosModal() }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
             + Nueva venta
@@ -400,10 +435,33 @@ export default function Ventas() {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <input
+            type="text"
+            value={busqueda}
+            onChange={e => setBusqueda(e.target.value)}
+            placeholder="Buscar por cuenta o nombre..."
+            className="w-full border border-gray-300 rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          {busqueda && (
+            <button
+              type="button"
+              onClick={() => setBusqueda('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
       {cargando ? (
         <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-500">Cargando...</div>
       ) : ventasFiltradas.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-400">No hay ventas registradas</div>
+        <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-400">
+          No hay ventas {vista === 'activa' ? 'activas' : vista === 'liquidada' ? 'liquidadas' : 'canceladas'}
+        </div>
       ) : (
         <>
           {/* Cards — móvil */}
@@ -433,6 +491,12 @@ export default function Ventas() {
                     }`}>{v.tipo_venta}</span>
                     <span className={`text-xs ${liquidada ? 'text-gray-300' : 'text-gray-500'}`}>{v.plan_venta?.replace(/_/g, ' ')}</span>
                   </div>
+
+                  {v.estatus_venta === 'cancelada' && (
+                    <p className="text-xs text-red-500 mt-2">
+                      Motivo: {v.motivo_cancelacion || extraerMotivoDeCuenta(v.cuenta?.observaciones) || 'No especificado'}
+                    </p>
+                  )}
 
                   <div className="flex items-end justify-between mt-3">
                     <div>
@@ -466,6 +530,7 @@ export default function Ventas() {
                   <th className="text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
                   <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Precio</th>
                   <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Fecha</th>
+                  {vista === 'cancelada' && <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Motivo</th>}
                   <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Estatus</th>
                   {puedeEditarVenta && <th className="px-4 md:px-6 py-3"></th>}
                 </tr>
@@ -495,6 +560,11 @@ export default function Ventas() {
                         <p className={`font-medium whitespace-nowrap ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{fmt(v.precio_final_total)}</p>
                       </td>
                       <td className={`hidden md:table-cell px-6 py-4 ${liquidada ? 'text-gray-400' : 'text-gray-500'}`}>{new Date(v.fecha_venta).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</td>
+                      {vista === 'cancelada' && (
+                        <td className="px-4 md:px-6 py-4 text-xs text-red-600 max-w-xs">
+                          {v.motivo_cancelacion || extraerMotivoDeCuenta(v.cuenta?.observaciones) || 'No especificado'}
+                        </td>
+                      )}
                       <td className="px-4 md:px-6 py-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           v.estatus_venta === 'activa'    ? 'bg-green-100 text-green-700' :
@@ -603,6 +673,33 @@ export default function Ventas() {
                     <option value="cancelada">cancelada</option>
                   </select>
                 </div>
+                {formEdicion.estatus_venta === 'cancelada' && (
+                  <>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Motivo de cancelación *</label>
+                      <select value={formEdicion.motivoCancelacion || ''}
+                        onChange={e => setFormEdicion({...formEdicion, motivoCancelacion: e.target.value})}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                        <option value="">Selecciona un motivo...</option>
+                        {MOTIVOS_CANCELACION.map(m => <option key={m}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Notas adicionales <span className="text-gray-400 font-normal">(opcional)</span>
+                      </label>
+                      <textarea rows={2} value={formEdicion.notasCancelacion || ''}
+                        onChange={e => setFormEdicion({...formEdicion, notasCancelacion: e.target.value})}
+                        placeholder="Detalles adicionales..."
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none" />
+                    </div>
+                    {ventaEditando.tipo_venta === 'plazo' && ventaEditando.cuenta && ventaEditando.estatus_venta !== 'cancelada' && (
+                      <div className="col-span-2 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+                        ⚠️ La cuenta asociada también se marcará como cancelada y dejará de aparecer como cobrable.
+                      </div>
+                    )}
+                  </>
+                )}
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
                   <textarea rows={2} value={formEdicion.observaciones}

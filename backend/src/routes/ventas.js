@@ -228,7 +228,7 @@ router.put('/:id', auth, async (req, res) => {
     }
 
     const id_venta = parseInt(req.params.id)
-    const { fecha_venta, precio_final_total, enganche_recibido_total, observaciones, estatus_venta } = req.body
+    const { fecha_venta, precio_final_total, enganche_recibido_total, observaciones, estatus_venta, motivo_cancelacion } = req.body
 
     const ventaActual = await prisma.venta.findUnique({
       where: { id_venta },
@@ -236,17 +236,37 @@ router.put('/:id', auth, async (req, res) => {
     })
     if (!ventaActual) return res.status(404).json({ error: 'Venta no encontrada' })
 
+    // Solo exigimos motivo cuando la venta se está cancelando en este momento
+    // (no al editar otros datos de una venta que ya estaba cancelada de antes)
+    const seEstaCancel = estatus_venta === 'cancelada' && ventaActual.estatus_venta !== 'cancelada'
+    if (seEstaCancel && !motivo_cancelacion?.trim()) {
+      return res.status(400).json({ error: 'Se requiere un motivo de cancelación' })
+    }
+
     const dataUpdate = {}
     if (fecha_venta !== undefined)           dataUpdate.fecha_venta            = new Date(fecha_venta + 'T12:00:00')
     if (precio_final_total !== undefined)    dataUpdate.precio_final_total      = parseFloat(precio_final_total)
     if (enganche_recibido_total !== undefined) dataUpdate.enganche_recibido_total = parseFloat(enganche_recibido_total)
     if (observaciones !== undefined)         dataUpdate.observaciones           = observaciones
     if (estatus_venta !== undefined)         dataUpdate.estatus_venta           = estatus_venta
+    if (motivo_cancelacion !== undefined)    dataUpdate.motivo_cancelacion      = motivo_cancelacion
 
     const venta = await prisma.venta.update({
       where: { id_venta },
       data: dataUpdate
     })
+
+    // Si se canceló una venta a plazo con cuenta asociada, cancelar también la cuenta
+    // (para que deje de aparecer como cobrable) — mismo criterio que /cuentas/:id/cancelar
+    if (seEstaCancel && ventaActual.cuenta && !['liquidada', 'cancelada'].includes(ventaActual.cuenta.estado_cuenta)) {
+      const hoyStr = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })
+      const nota = `Cancelada el ${hoyStr} por: ${motivo_cancelacion}. Saldo pendiente al cancelar: $${parseFloat(ventaActual.cuenta.saldo_actual).toFixed(2)}`
+      const obsActualizada = ventaActual.cuenta.observaciones ? `${ventaActual.cuenta.observaciones} | ${nota}` : nota
+      await prisma.cuenta.update({
+        where: { id_cuenta: ventaActual.cuenta.id_cuenta },
+        data:  { estado_cuenta: 'cancelada', observaciones: obsActualizada }
+      })
+    }
 
     // Si cambió el precio o el enganche y hay cuenta asociada, ajustar saldos
     if ((precio_final_total !== undefined || enganche_recibido_total !== undefined) && ventaActual.cuenta) {
@@ -267,7 +287,8 @@ router.put('/:id', auth, async (req, res) => {
           abono_inicial:      engancheNuevo,
           saldo_inicial:      nuevo_saldo_inicial,
           saldo_actual:       nuevo_saldo_actual,
-          estado_cuenta:      nuevo_saldo_actual === 0 ? 'liquidada' : ventaActual.cuenta.estado_cuenta
+          // Si ya se canceló arriba en esta misma edición, no revertir ese estado
+          estado_cuenta:      seEstaCancel ? 'cancelada' : nuevo_saldo_actual === 0 ? 'liquidada' : ventaActual.cuenta.estado_cuenta
         }
       })
 

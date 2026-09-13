@@ -654,7 +654,7 @@ router.post('/:id/anexar', auth, async (req, res) => {
       cuenta_origen:       numOrigen,
       cuenta_destino:      numDest,
       saldo_transferido,
-      saldo_nuevo_destino,
+      saldo_nuevo_destino: nuevo_saldo_destino,
     })
   } catch (error) {
     res.status(500).json({ error: 'Error al anexar cuenta', detalle: error.message })
@@ -796,7 +796,7 @@ router.post('/:id/cancelar', auth, async (req, res) => {
 
       await tx.venta.update({
         where: { id_venta: cuenta.id_venta },
-        data:  { estatus_venta: 'cancelada' },
+        data:  { estatus_venta: 'cancelada', motivo_cancelacion: motivoCompleto },
       })
     })
 
