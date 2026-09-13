@@ -776,15 +776,13 @@ export default function Cobranza() {
     )
   }
 
-  const refCliente = (cli) => {
-    const u = cli?.ubicaciones?.[0]
-    const lat = parseFloat(u?.latitud ?? cli?.latitud)
-    const lng = parseFloat(u?.longitud ?? cli?.longitud)
-    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null
-  }
-
   const usarPlusCodeManualUbicacion = () => {
-    const code = normalizePlusCode(ubicInput, refCliente(clienteUbicActivo()))
+    // Sin `ref`: normalizePlusCode usa el centro de Tuxtepec por defecto, que
+    // ya alcanza para toda la cartera. Usar las coordenadas YA guardadas del
+    // cliente como referencia era circular — son justo las que se está
+    // corrigiendo por estar mal — y podían sesgar la recuperación del código
+    // corto hacia esa misma ubicación equivocada.
+    const code = normalizePlusCode(ubicInput)
     if (!code) { alert('Plus Code no válido o incompleto. Pega el código completo (ej: 76QX2FXQ+QF) o usa «Usar mi ubicación actual».'); return }
     const { lat, lng } = decodePlusCode(code)
     setUbicPendiente({ lat, lng, plus_code: code })
@@ -926,7 +924,9 @@ export default function Cobranza() {
   }
 
   const usarPlusCodeManualDetalle = () => {
-    const code = normalizePlusCode(ubicInputDet, refCliente(cuentaDetalle?.cliente))
+    // Ver nota en usarPlusCodeManualUbicacion: no usar las coordenadas ya
+    // guardadas del cliente como referencia, son justo las que se corrigen.
+    const code = normalizePlusCode(ubicInputDet)
     if (!code) { alert('Plus Code no válido. Ej: 76C97H6P+QF'); return }
     const { lat, lng } = decodePlusCode(code)
     setUbicPendDet({ lat, lng, plus_code: code })

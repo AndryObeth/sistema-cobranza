@@ -197,11 +197,13 @@ export default function Mapa() {
   }
 
   const usarPlusCodeMapa = () => {
-    const cli = modalCorreccion?.cliente
-    const ref = cli?.latitud && cli?.longitud
-      ? { lat: parseFloat(cli.latitud), lng: parseFloat(cli.longitud) }
-      : (miUbicacion || null)
-    const code = normalizePlusCode(ubicInputMapa, ref)
+    // No usar las coordenadas YA guardadas del cliente como referencia: son
+    // justo las que se están corrigiendo por estar mal, y podían sesgar la
+    // recuperación de un código corto hacia esa misma ubicación equivocada.
+    // Mi ubicación (si ya se pidió) es una referencia más confiable; si no,
+    // normalizePlusCode usa el centro de Tuxtepec por defecto (alcanza para
+    // toda la cartera).
+    const code = normalizePlusCode(ubicInputMapa, miUbicacion || null)
     if (!code) { mostrarToast('Plus Code no válido'); return }
     const { lat, lng } = decodePlusCode(code)
     setUbicPendienteMapa({ lat, lng, plus_code: code })
