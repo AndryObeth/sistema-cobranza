@@ -293,71 +293,115 @@ export default function Listado() {
           </select>
         </div>
 
-        {/* Tabla */}
-        <div className="bg-white rounded-2xl shadow overflow-hidden">
-          {cargando ? (
-            <p className="text-center text-gray-400 py-12">Cargando...</p>
-          ) : filtradas.length === 0 ? (
-            <p className="text-center text-gray-400 py-12">Sin resultados</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">No. Cuenta</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Cliente</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Expediente</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ruta</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Plan</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Último pago</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Saldo</th>
-                    {esAdmin && <th className="px-4 py-3"></th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filtradas.map((c, i) => (
-                    <tr key={c.numero_cuenta + i} className="hover:bg-gray-50 transition">
-                      <td className="px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
-                      <td className="px-4 py-3 font-mono font-semibold text-blue-600">{c.numero_cuenta}</td>
-                      <td className="px-4 py-3 text-gray-800 font-medium">{c.nombre_cliente}</td>
-                      <td className="px-4 py-3 text-gray-500">{c.numero_expediente}</td>
-                      <td className="px-4 py-3 text-gray-600">{c.ruta || '—'}</td>
-                      <td className="px-4 py-3 text-gray-600">{PLAN_LABEL[c.plan_actual] || c.plan_actual}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_COLOR[c.estado_cuenta] || 'bg-gray-100 text-gray-600'}`}>
-                          {c.estado_cuenta}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">
-                        {c.fecha_ultimo_pago ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800">{fmt(c.saldo_actual)}</td>
-                      {esAdmin && (
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => setCuentaAnexar(c)}
-                            className="text-xs text-orange-600 hover:text-orange-800 font-medium transition"
-                            title="Anexar saldo a otra cuenta"
-                          >
-                            Anexar
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-gray-50 border-t">
-                  <tr>
-                    <td colSpan={esAdmin ? 9 : 8} className="px-4 py-3 text-sm font-semibold text-gray-600">Total</td>
-                    <td className="px-4 py-3 text-right font-bold text-gray-800">{fmt(totalSaldo)}</td>
-                  </tr>
-                </tfoot>
-              </table>
+        {cargando ? (
+          <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-400">Cargando...</div>
+        ) : filtradas.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-400">Sin resultados</div>
+        ) : (
+          <>
+            {/* Cards — móvil */}
+            <div className="sm:hidden space-y-3">
+              {filtradas.map((c, i) => (
+                <div key={c.numero_cuenta + i} className="bg-white rounded-2xl shadow p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-800 truncate">{c.nombre_cliente}</p>
+                      <p className="text-xs text-blue-600 font-mono">{c.numero_cuenta}</p>
+                    </div>
+                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_COLOR[c.estado_cuenta] || 'bg-gray-100 text-gray-600'}`}>
+                      {c.estado_cuenta}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-gray-500">
+                    {c.ruta && <span>Ruta {c.ruta}</span>}
+                    <span>{PLAN_LABEL[c.plan_actual] || c.plan_actual}</span>
+                    <span>Exp. {c.numero_expediente}</span>
+                  </div>
+                  <div className="flex items-end justify-between mt-3">
+                    <div>
+                      <p className="text-xs text-gray-400">
+                        Último pago: {c.fecha_ultimo_pago ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'}
+                      </p>
+                      <p className="text-lg font-bold text-gray-800">{fmt(c.saldo_actual)}</p>
+                    </div>
+                    {esAdmin && (
+                      <button
+                        onClick={() => setCuentaAnexar(c)}
+                        className="text-xs text-orange-600 hover:text-orange-800 font-medium transition px-2 py-1"
+                      >
+                        Anexar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div className="bg-white rounded-2xl shadow p-4 flex items-center justify-between text-sm">
+                <span className="font-semibold text-gray-600">Total</span>
+                <span className="font-bold text-gray-800">{fmt(totalSaldo)}</span>
+              </div>
             </div>
-          )}
-        </div>
+
+            {/* Tabla — desktop */}
+            <div className="hidden sm:block bg-white rounded-2xl shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">No. Cuenta</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Cliente</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Expediente</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ruta</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Plan</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Último pago</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Saldo</th>
+                      {esAdmin && <th className="px-4 py-3"></th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filtradas.map((c, i) => (
+                      <tr key={c.numero_cuenta + i} className="hover:bg-gray-50 transition">
+                        <td className="px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
+                        <td className="px-4 py-3 font-mono font-semibold text-blue-600">{c.numero_cuenta}</td>
+                        <td className="px-4 py-3 text-gray-800 font-medium">{c.nombre_cliente}</td>
+                        <td className="px-4 py-3 text-gray-500">{c.numero_expediente}</td>
+                        <td className="px-4 py-3 text-gray-600">{c.ruta || '—'}</td>
+                        <td className="px-4 py-3 text-gray-600">{PLAN_LABEL[c.plan_actual] || c.plan_actual}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_COLOR[c.estado_cuenta] || 'bg-gray-100 text-gray-600'}`}>
+                            {c.estado_cuenta}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">
+                          {c.fecha_ultimo_pago ? new Date(c.fecha_ultimo_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-800">{fmt(c.saldo_actual)}</td>
+                        {esAdmin && (
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              onClick={() => setCuentaAnexar(c)}
+                              className="text-xs text-orange-600 hover:text-orange-800 font-medium transition"
+                              title="Anexar saldo a otra cuenta"
+                            >
+                              Anexar
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 border-t">
+                    <tr>
+                      <td colSpan={esAdmin ? 9 : 8} className="px-4 py-3 text-sm font-semibold text-gray-600">Total</td>
+                      <td className="px-4 py-3 text-right font-bold text-gray-800">{fmt(totalSaldo)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {cuentaAnexar && (

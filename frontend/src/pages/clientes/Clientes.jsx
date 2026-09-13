@@ -689,61 +689,101 @@ export default function Clientes() {
         )}
       </div>
 
-      <div className="bg-white rounded-2xl shadow overflow-hidden">
-        {cargando ? (
-          <p className="text-center text-gray-500 py-12">Cargando...</p>
-        ) : clientesFiltrados.length === 0 ? (
-          <p className="text-center text-gray-400 py-12">No hay clientes registrados</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium whitespace-nowrap">ID Expediente</th>
-                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Nombre</th>
-                  <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Teléfono</th>
-                  <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Municipio</th>
-                  <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Ruta</th>
-                  <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Día</th>
-                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Estado</th>
-                  {esAdmin && <th className="px-4 md:px-6 py-3"></th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {clientesFiltrados.map(c => (
-                  <tr key={c.id_cliente} onClick={() => abrirExpediente(c.id_cliente)}
-                    className="hover:bg-blue-50 transition cursor-pointer">
-                    <td className="px-4 md:px-6 py-4 font-mono text-gray-500 text-xs whitespace-nowrap">{c.numero_expediente}</td>
-                    <td className="px-4 md:px-6 py-4 font-medium text-gray-800">
+      {cargando ? (
+        <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-500">Cargando...</div>
+      ) : clientesFiltrados.length === 0 ? (
+        <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-400">No hay clientes registrados</div>
+      ) : (
+        <>
+          {/* Cards — móvil */}
+          <div className="sm:hidden space-y-3">
+            {clientesFiltrados.map(c => (
+              <div key={c.id_cliente} onClick={() => abrirExpediente(c.id_cliente)}
+                className="bg-white rounded-2xl shadow p-4 active:bg-blue-50 transition cursor-pointer">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-800 truncate">
                       {c.nombre}
-                      {c.alias && <span className="text-gray-400 font-normal ml-2 hidden sm:inline">({c.alias})</span>}
-                    </td>
-                    <td className="hidden sm:table-cell px-6 py-4 text-gray-600">{c.telefono || '—'}</td>
-                    <td className="hidden md:table-cell px-6 py-4 text-gray-600">{c.municipio || '—'}</td>
-                    <td className="hidden sm:table-cell px-6 py-4 text-gray-600">{c.ruta || '—'}</td>
-                    <td className="hidden md:table-cell px-6 py-4 text-gray-600">{LABEL_DIA_COBRANZA[c.dia_cobranza] || '—'}</td>
-                    <td className="px-4 md:px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cliente]}`}>
-                        {c.estado_cliente}
-                      </span>
-                    </td>
-                    {esAdmin && (
-                      <td className="px-4 md:px-6 py-4 text-right">
-                        <button
-                          onClick={e => abrirEdicion(e, c)}
-                          className="text-xs px-3 min-h-[44px] md:min-h-0 md:py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition font-medium"
-                        >
-                          Editar
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      {c.alias && <span className="text-gray-400 font-normal"> ({c.alias})</span>}
+                    </p>
+                    <p className="text-xs text-gray-400 font-mono">{c.numero_expediente}</p>
+                  </div>
+                  <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${estadoColor[c.estado_cliente]}`}>
+                    {c.estado_cliente}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-gray-500">
+                  {c.ruta && <span>Ruta {c.ruta}</span>}
+                  {c.municipio && <span>{c.municipio}</span>}
+                  {c.dia_cobranza && <span>{LABEL_DIA_COBRANZA[c.dia_cobranza]}</span>}
+                  {c.telefono && <span>{c.telefono}</span>}
+                </div>
+                {esAdmin && (
+                  <div className="flex justify-end mt-2">
+                    <button
+                      onClick={e => abrirEdicion(e, c)}
+                      className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition font-medium"
+                    >
+                      Editar
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-        )}
-      </div>
+
+          {/* Tabla — desktop */}
+          <div className="hidden sm:block bg-white rounded-2xl shadow overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium whitespace-nowrap">ID Expediente</th>
+                    <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Nombre</th>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Teléfono</th>
+                    <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Municipio</th>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Ruta</th>
+                    <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Día</th>
+                    <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Estado</th>
+                    {esAdmin && <th className="px-4 md:px-6 py-3"></th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {clientesFiltrados.map(c => (
+                    <tr key={c.id_cliente} onClick={() => abrirExpediente(c.id_cliente)}
+                      className="hover:bg-blue-50 transition cursor-pointer">
+                      <td className="px-4 md:px-6 py-4 font-mono text-gray-500 text-xs whitespace-nowrap">{c.numero_expediente}</td>
+                      <td className="px-4 md:px-6 py-4 font-medium text-gray-800">
+                        {c.nombre}
+                        {c.alias && <span className="text-gray-400 font-normal ml-2">({c.alias})</span>}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">{c.telefono || '—'}</td>
+                      <td className="hidden md:table-cell px-6 py-4 text-gray-600">{c.municipio || '—'}</td>
+                      <td className="px-6 py-4 text-gray-600">{c.ruta || '—'}</td>
+                      <td className="hidden md:table-cell px-6 py-4 text-gray-600">{LABEL_DIA_COBRANZA[c.dia_cobranza] || '—'}</td>
+                      <td className="px-4 md:px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado_cliente]}`}>
+                          {c.estado_cliente}
+                        </span>
+                      </td>
+                      {esAdmin && (
+                        <td className="px-4 md:px-6 py-4 text-right">
+                          <button
+                            onClick={e => abrirEdicion(e, c)}
+                            className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition font-medium"
+                          >
+                            Editar
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Modal expediente */}
       {clienteExpediente && (

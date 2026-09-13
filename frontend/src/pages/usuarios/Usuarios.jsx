@@ -178,58 +178,94 @@ export default function Usuarios() {
         />
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white rounded-2xl shadow overflow-hidden">
-        {cargando ? (
-          <p className="text-center text-gray-500 py-12">Cargando...</p>
-        ) : usuariosFiltrados.length === 0 ? (
-          <p className="text-center text-gray-400 py-12">No hay usuarios registrados</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Nombre</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Usuario</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Rol</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Rutas asignadas</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Estado</th>
-                <th className="text-left px-6 py-3 text-gray-600 font-medium">Fecha registro</th>
-                <th className="px-6 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {usuariosFiltrados.map(u => (
-                <tr key={u.id_usuario} className={`hover:bg-gray-50 transition ${!u.activo ? 'opacity-60' : ''}`}>
-                  <td className="px-6 py-4 font-medium text-gray-800">{u.nombre}</td>
-                  <td className="px-6 py-4 font-mono text-gray-500">{u.usuario}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${rolColor[u.rol] || 'bg-gray-100 text-gray-700'}`}>
-                      {rolLabel[u.rol] || u.rol}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-gray-600">{u.rutas_asignadas?.length ? u.rutas_asignadas.join(', ') : '—'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                      {u.activo ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-gray-500">
-                    {new Date(u.fecha_creacion).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}
-                  </td>
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => abrirEdicion(u)}
-                      className="text-blue-600 hover:text-blue-800 text-xs font-medium transition"
-                    >
-                      Editar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {cargando ? (
+        <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-500">Cargando...</div>
+      ) : usuariosFiltrados.length === 0 ? (
+        <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-400">No hay usuarios registrados</div>
+      ) : (
+        <>
+          {/* Cards — móvil */}
+          <div className="sm:hidden space-y-3">
+            {usuariosFiltrados.map(u => (
+              <div key={u.id_usuario} className={`bg-white rounded-2xl shadow p-4 ${!u.activo ? 'opacity-60' : ''}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-800 truncate">{u.nombre}</p>
+                    <p className="text-xs text-gray-400 font-mono truncate">{u.usuario}</p>
+                  </div>
+                  <button
+                    onClick={() => abrirEdicion(u)}
+                    className="shrink-0 text-blue-600 hover:text-blue-800 text-xs font-semibold px-2 py-1"
+                  >
+                    Editar
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${rolColor[u.rol] || 'bg-gray-100 text-gray-700'}`}>
+                    {rolLabel[u.rol] || u.rol}
+                  </span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                    {u.activo ? 'Activo' : 'Inactivo'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mt-2 text-xs text-gray-400">
+                  <span>{u.rutas_asignadas?.length ? `Ruta${u.rutas_asignadas.length > 1 ? 's' : ''} ${u.rutas_asignadas.join(', ')}` : 'Sin rutas'}</span>
+                  <span>{new Date(u.fecha_creacion).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tabla — desktop */}
+          <div className="hidden sm:block bg-white rounded-2xl shadow overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Nombre</th>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Usuario</th>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Rol</th>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Rutas asignadas</th>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Estado</th>
+                    <th className="text-left px-6 py-3 text-gray-600 font-medium">Fecha registro</th>
+                    <th className="px-6 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {usuariosFiltrados.map(u => (
+                    <tr key={u.id_usuario} className={`hover:bg-gray-50 transition ${!u.activo ? 'opacity-60' : ''}`}>
+                      <td className="px-6 py-4 font-medium text-gray-800">{u.nombre}</td>
+                      <td className="px-6 py-4 font-mono text-gray-500">{u.usuario}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${rolColor[u.rol] || 'bg-gray-100 text-gray-700'}`}>
+                          {rolLabel[u.rol] || u.rol}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">{u.rutas_asignadas?.length ? u.rutas_asignadas.join(', ') : '—'}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                          {u.activo ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-500">
+                        {new Date(u.fecha_creacion).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => abrirEdicion(u)}
+                          className="text-blue-600 hover:text-blue-800 text-xs font-medium transition"
+                        >
+                          Editar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Modal */}
       {modalAbierto && (

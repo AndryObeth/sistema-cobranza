@@ -400,74 +400,125 @@ export default function Ventas() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow overflow-hidden">
-        {cargando ? (
-          <p className="text-center text-gray-500 py-12">Cargando...</p>
-        ) : ventasFiltradas.length === 0 ? (
-          <p className="text-center text-gray-400 py-12">No hay ventas registradas</p>
-        ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Cuenta</th>
-                <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Cliente</th>
-                <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Tipo</th>
-                <th className="hidden sm:table-cell text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
-                <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Precio</th>
-                <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Fecha</th>
-                <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Estatus</th>
-                {puedeEditarVenta && <th className="px-4 md:px-6 py-3"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {ventasFiltradas.map(v => {
-                const liquidada = v.estatus_venta === 'liquidada'
-                return (
-                  <tr key={v.id_venta} className={`transition ${liquidada ? 'opacity-50 bg-gray-50' : 'hover:bg-gray-50'}`}>
-                    <td className="hidden md:table-cell px-6 py-4 font-mono text-xs">
-                      {v.cuenta?.numero_cuenta
-                        ? <span className="font-semibold text-gray-700">{v.cuenta.numero_cuenta}</span>
-                        : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className={`px-4 md:px-6 py-4 font-medium ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{v.cliente?.nombre}</td>
-                    <td className="hidden sm:table-cell px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        liquidada ? 'bg-gray-100 text-gray-400' :
-                        v.tipo_venta === 'contado' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                      }`}>{v.tipo_venta}</span>
-                    </td>
-                    <td className={`hidden sm:table-cell px-6 py-4 text-xs ${liquidada ? 'text-gray-400' : 'text-gray-600'}`}>{v.plan_venta?.replace(/_/g, ' ')}</td>
-                    <td className="px-4 md:px-6 py-4">
+      {cargando ? (
+        <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-500">Cargando...</div>
+      ) : ventasFiltradas.length === 0 ? (
+        <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-400">No hay ventas registradas</div>
+      ) : (
+        <>
+          {/* Cards — móvil */}
+          <div className="sm:hidden space-y-3">
+            {ventasFiltradas.map(v => {
+              const liquidada = v.estatus_venta === 'liquidada'
+              return (
+                <div key={v.id_venta} className={`rounded-2xl shadow p-4 ${liquidada ? 'bg-gray-50 opacity-60' : 'bg-white'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className={`font-medium truncate ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{v.cliente?.nombre}</p>
+                      {v.cuenta?.numero_cuenta && (
+                        <p className="text-xs text-blue-600 font-mono">Cta. {v.cuenta.numero_cuenta}</p>
+                      )}
+                    </div>
+                    <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-medium ${
+                      v.estatus_venta === 'activa'    ? 'bg-green-100 text-green-700' :
+                      v.estatus_venta === 'liquidada' ? 'bg-gray-100 text-gray-400' :
+                      'bg-red-100 text-red-700'
+                    }`}>{v.estatus_venta}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      liquidada ? 'bg-gray-100 text-gray-400' :
+                      v.tipo_venta === 'contado' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                    }`}>{v.tipo_venta}</span>
+                    <span className={`text-xs ${liquidada ? 'text-gray-300' : 'text-gray-500'}`}>{v.plan_venta?.replace(/_/g, ' ')}</span>
+                  </div>
+
+                  <div className="flex items-end justify-between mt-3">
+                    <div>
                       {!liquidada && parseFloat(v.precio_original_total) > parseFloat(v.precio_final_total) && (
                         <p className="text-xs text-gray-400 line-through">{fmt(v.precio_original_total)}</p>
                       )}
-                      <p className={`font-medium whitespace-nowrap ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{fmt(v.precio_final_total)}</p>
-                    </td>
-                    <td className={`hidden md:table-cell px-6 py-4 ${liquidada ? 'text-gray-400' : 'text-gray-500'}`}>{new Date(v.fecha_venta).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</td>
-                    <td className="px-4 md:px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        v.estatus_venta === 'activa'    ? 'bg-green-100 text-green-700' :
-                        v.estatus_venta === 'liquidada' ? 'bg-gray-100 text-gray-400' :
-                        'bg-red-100 text-red-700'
-                      }`}>{v.estatus_venta}</span>
-                    </td>
+                      <p className={`text-lg font-bold ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{fmt(v.precio_final_total)}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{new Date(v.fecha_venta).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
+                    </div>
                     {puedeEditarVenta && (
-                      <td className="px-4 md:px-6 py-4 text-right">
-                        <button onClick={e => abrirEdicion(e, v)}
-                          className="text-xs px-3 min-h-[44px] md:min-h-0 md:py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition font-medium">
-                          Editar
-                        </button>
-                      </td>
+                      <button onClick={e => abrirEdicion(e, v)}
+                        className="text-xs px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition font-medium">
+                        Editar
+                      </button>
                     )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+              )
+            })}
           </div>
-        )}
-      </div>
+
+          {/* Tabla — desktop */}
+          <div className="hidden sm:block bg-white rounded-2xl shadow overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Cuenta</th>
+                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Cliente</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Tipo</th>
+                  <th className="text-left px-6 py-3 text-gray-600 font-medium">Plan</th>
+                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Precio</th>
+                  <th className="hidden md:table-cell text-left px-6 py-3 text-gray-600 font-medium">Fecha</th>
+                  <th className="text-left px-4 md:px-6 py-3 text-gray-600 font-medium">Estatus</th>
+                  {puedeEditarVenta && <th className="px-4 md:px-6 py-3"></th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {ventasFiltradas.map(v => {
+                  const liquidada = v.estatus_venta === 'liquidada'
+                  return (
+                    <tr key={v.id_venta} className={`transition ${liquidada ? 'opacity-50 bg-gray-50' : 'hover:bg-gray-50'}`}>
+                      <td className="hidden md:table-cell px-6 py-4 font-mono text-xs">
+                        {v.cuenta?.numero_cuenta
+                          ? <span className="font-semibold text-gray-700">{v.cuenta.numero_cuenta}</span>
+                          : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className={`px-4 md:px-6 py-4 font-medium ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{v.cliente?.nombre}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          liquidada ? 'bg-gray-100 text-gray-400' :
+                          v.tipo_venta === 'contado' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                        }`}>{v.tipo_venta}</span>
+                      </td>
+                      <td className={`px-6 py-4 text-xs ${liquidada ? 'text-gray-400' : 'text-gray-600'}`}>{v.plan_venta?.replace(/_/g, ' ')}</td>
+                      <td className="px-4 md:px-6 py-4">
+                        {!liquidada && parseFloat(v.precio_original_total) > parseFloat(v.precio_final_total) && (
+                          <p className="text-xs text-gray-400 line-through">{fmt(v.precio_original_total)}</p>
+                        )}
+                        <p className={`font-medium whitespace-nowrap ${liquidada ? 'text-gray-400' : 'text-gray-800'}`}>{fmt(v.precio_final_total)}</p>
+                      </td>
+                      <td className={`hidden md:table-cell px-6 py-4 ${liquidada ? 'text-gray-400' : 'text-gray-500'}`}>{new Date(v.fecha_venta).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</td>
+                      <td className="px-4 md:px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          v.estatus_venta === 'activa'    ? 'bg-green-100 text-green-700' :
+                          v.estatus_venta === 'liquidada' ? 'bg-gray-100 text-gray-400' :
+                          'bg-red-100 text-red-700'
+                        }`}>{v.estatus_venta}</span>
+                      </td>
+                      {puedeEditarVenta && (
+                        <td className="px-4 md:px-6 py-4 text-right">
+                          <button onClick={e => abrirEdicion(e, v)}
+                            className="text-xs px-3 min-h-[44px] md:min-h-0 md:py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition font-medium">
+                            Editar
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Modal editar venta */}
       {ventaEditando && (

@@ -600,54 +600,93 @@ function TabCobrador({ usuario }) {
             {resumen.detalle.length === 0 ? (
               <p className="p-6 text-sm text-gray-400 text-center">Sin pagos en este periodo</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-                    <tr>
-                      <th className="text-left px-4 py-3">Cliente</th>
-                      <th className="text-left px-4 py-3">No. cuenta</th>
-                      <th className="text-right px-4 py-3">Monto</th>
-                      <th className="text-left px-4 py-3">Método</th>
-                      <th className="text-right px-4 py-3">Saldo actual</th>
-                      <th className="text-left px-4 py-3">Fecha y hora</th>
-                      <th className="text-left px-4 py-3">Origen</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {ordenarPorNumeroCuenta(resumen.detalle).map(p => (
-                      <tr key={p.id_pago} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium">{p.cliente}</td>
-                        <td className="px-4 py-3 text-blue-600 font-mono text-xs">{p.numero_cuenta || '—'}</td>
-                        <td className="px-4 py-3 text-right">{fmt(p.monto)}</td>
-                        <td className="px-4 py-3 text-xs">
-                          {p.metodo_pago === 'deposito' ? (
-                            <span className="text-indigo-600 font-medium">
-                              💳 Depósito
-                              {p.tiene_comprobante && (
-                                <button onClick={() => verComprobante(p.id_pago)} className="ml-1 text-blue-600 underline">ver</button>
-                              )}
-                            </span>
-                          ) : <span className="text-gray-400">Efectivo</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-700">{fmt(p.saldo_nuevo)}</td>
-                        <td className="px-4 py-3 text-gray-500">{fmtFechaHora(p.fecha_pago)}</td>
-                        <td className="px-4 py-3 capitalize text-gray-500">{p.origen_pago}</td>
+              <>
+                {/* Cards — móvil */}
+                <div className="sm:hidden divide-y">
+                  {ordenarPorNumeroCuenta(resumen.detalle).map(p => (
+                    <div key={p.id_pago} className="p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-800 truncate">{p.cliente}</p>
+                          <p className="text-xs text-blue-600 font-mono">{p.numero_cuenta || '—'}</p>
+                        </div>
+                        <p className="font-semibold text-gray-800 shrink-0">{fmt(p.monto)}</p>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-xs">
+                        <div className="text-gray-500 capitalize">{p.origen_pago} · {fmtFechaHora(p.fecha_pago)}</div>
+                        {p.metodo_pago === 'deposito' ? (
+                          <span className="text-indigo-600 font-medium shrink-0">
+                            💳 Depósito
+                            {p.tiene_comprobante && (
+                              <button onClick={() => verComprobante(p.id_pago)} className="ml-1 text-blue-600 underline">ver</button>
+                            )}
+                          </span>
+                        ) : <span className="text-gray-400 shrink-0">Efectivo</span>}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">Saldo tras el pago: {fmt(p.saldo_nuevo)}</p>
+                    </div>
+                  ))}
+                  <div className="p-4 bg-gray-50 flex items-center justify-between text-sm font-semibold">
+                    <span className="text-gray-600">Total</span>
+                    <div className="text-right">
+                      <span className="text-gray-800">{fmt(resumen.total_cobrado)}</span>
+                      {resumen.total_deposito > 0 && (
+                        <p className="text-xs font-normal text-indigo-600">💳 {fmt(resumen.total_deposito)} · efvo {fmt(resumen.total_efectivo)}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tabla — desktop */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                      <tr>
+                        <th className="text-left px-4 py-3">Cliente</th>
+                        <th className="text-left px-4 py-3">No. cuenta</th>
+                        <th className="text-right px-4 py-3">Monto</th>
+                        <th className="text-left px-4 py-3">Método</th>
+                        <th className="text-right px-4 py-3">Saldo actual</th>
+                        <th className="text-left px-4 py-3">Fecha y hora</th>
+                        <th className="text-left px-4 py-3">Origen</th>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-gray-50 font-semibold">
-                    <tr>
-                      <td className="px-4 py-3">Total</td>
-                      <td className="px-4 py-3" />
-                      <td className="px-4 py-3 text-right">{fmt(resumen.total_cobrado)}</td>
-                      <td className="px-4 py-3 text-xs text-indigo-600">
-                        {resumen.total_deposito > 0 ? `💳 ${fmt(resumen.total_deposito)} · efvo ${fmt(resumen.total_efectivo)}` : ''}
-                      </td>
-                      <td colSpan={3} />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y">
+                      {ordenarPorNumeroCuenta(resumen.detalle).map(p => (
+                        <tr key={p.id_pago} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium">{p.cliente}</td>
+                          <td className="px-4 py-3 text-blue-600 font-mono text-xs">{p.numero_cuenta || '—'}</td>
+                          <td className="px-4 py-3 text-right">{fmt(p.monto)}</td>
+                          <td className="px-4 py-3 text-xs">
+                            {p.metodo_pago === 'deposito' ? (
+                              <span className="text-indigo-600 font-medium">
+                                💳 Depósito
+                                {p.tiene_comprobante && (
+                                  <button onClick={() => verComprobante(p.id_pago)} className="ml-1 text-blue-600 underline">ver</button>
+                                )}
+                              </span>
+                            ) : <span className="text-gray-400">Efectivo</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-700">{fmt(p.saldo_nuevo)}</td>
+                          <td className="px-4 py-3 text-gray-500">{fmtFechaHora(p.fecha_pago)}</td>
+                          <td className="px-4 py-3 capitalize text-gray-500">{p.origen_pago}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-gray-50 font-semibold">
+                      <tr>
+                        <td className="px-4 py-3">Total</td>
+                        <td className="px-4 py-3" />
+                        <td className="px-4 py-3 text-right">{fmt(resumen.total_cobrado)}</td>
+                        <td className="px-4 py-3 text-xs text-indigo-600">
+                          {resumen.total_deposito > 0 ? `💳 ${fmt(resumen.total_deposito)} · efvo ${fmt(resumen.total_efectivo)}` : ''}
+                        </td>
+                        <td colSpan={3} />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </>
             )}
           </div>
 
@@ -655,7 +694,58 @@ function TabCobrador({ usuario }) {
           {historial.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border">
               <h3 className="font-semibold text-gray-800 p-4 border-b">Historial de cortes</h3>
-              <div className="overflow-x-auto">
+
+              {/* Cards — móvil */}
+              <div className="sm:hidden divide-y">
+                {historial.map(c => (
+                  <div key={c.id_corte_cobrador} className={`p-4 ${c.estado_corte === 'en_revision' ? 'bg-amber-50/60' : ''}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-gray-700 font-medium">{fmtFecha(c.fecha_inicio)} – {fmtFecha(c.fecha_fin)}</p>
+                        {c.cerrado_por_el_cobrador && (
+                          <p className="text-[11px] text-amber-600">entregado por el cobrador</p>
+                        )}
+                      </div>
+                      <BadgeEstado estado={c.estado_corte} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-3 text-xs">
+                      <div className="text-gray-500">Total cobrado</div>
+                      <div className="text-right text-gray-800">{fmt(c.total_cobrado)}</div>
+                      {parseFloat(c.total_deposito) > 0 && (
+                        <>
+                          <div className="text-gray-500">Depósitos</div>
+                          <div className="text-right text-indigo-600">{fmt(c.total_deposito)}</div>
+                        </>
+                      )}
+                      <div className="text-gray-500">Entregado</div>
+                      <div className="text-right text-gray-800">{fmt(c.total_depositado)}</div>
+                      <div className="text-gray-500">Dif. efectivo</div>
+                      <div className={`text-right ${Math.abs(parseFloat(c.diferencia)) < 0.01 ? 'text-green-600' : parseFloat(c.diferencia) > 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                        {fmt(c.diferencia)}
+                      </div>
+                      <div className="text-gray-500">Comisión</div>
+                      <div className="text-right text-green-600">{fmt(c.comision_total)}</div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap mt-3">
+                      {puedeGestionar && c.estado_corte === 'en_revision' && (
+                        <button onClick={() => aprobarCorte(c)} className="text-green-700 hover:text-green-900 text-xs font-semibold whitespace-nowrap">✓ Aprobar</button>
+                      )}
+                      {puedeGestionar && ['en_revision', 'cerrado', 'revisado'].includes(c.estado_corte) && (
+                        <button onClick={() => reabrirCorte(c)} className="text-orange-600 hover:text-orange-800 text-xs whitespace-nowrap">↩ Reabrir</button>
+                      )}
+                      {c.detalles?.length > 0 && (
+                        <button onClick={() => descargarCorteHistorial(c)} className="text-blue-600 hover:text-blue-800 text-xs whitespace-nowrap">📄 Descargar</button>
+                      )}
+                      {'share' in navigator && (
+                        <button onClick={() => compartirCorteHistorialFn(c)} className="text-blue-600 hover:text-blue-800 text-xs whitespace-nowrap">📲 RawBT</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tabla — desktop */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                     <tr>
@@ -834,8 +924,28 @@ function TabVendedor() {
             </button>
           </div>
 
-          {/* Detalle recuperaciones */}
-          <div className="overflow-x-auto">
+          {/* Detalle recuperaciones — cards móvil */}
+          <div className="sm:hidden divide-y">
+            {v.recuperaciones.map(r => (
+              <div key={r.id_recuperacion} className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium text-gray-800 truncate">{r.cliente}</p>
+                  <p className="font-semibold text-green-600 shrink-0">{fmt(r.monto_neto_vendedor)}</p>
+                </div>
+                <div className="flex items-center justify-between mt-1 text-xs text-gray-500">
+                  <span>{r.jefe_camioneta || '—'}</span>
+                  <span>{fmtFecha(r.fecha_recuperacion)}</span>
+                </div>
+                <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                  <span>Recuperado: {fmt(r.monto_recuperado)}</span>
+                  <span className="text-orange-600">Com. cobrador: -{fmt(r.comision_cobrador)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Detalle recuperaciones — tabla desktop */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <tr>
@@ -868,7 +978,25 @@ function TabVendedor() {
       {Object.keys(historialPorVendedor).length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border">
           <h3 className="font-semibold text-gray-800 p-4 border-b">Historial de cortes pagados</h3>
-          <div className="overflow-x-auto">
+
+          {/* Cards — móvil */}
+          <div className="sm:hidden divide-y">
+            {Object.values(historialPorVendedor).flat().map(c => (
+              <div key={c.id_corte_vendedor} className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-800 truncate">{c.vendedor?.nombre}</p>
+                    <p className="text-xs text-gray-500">{fmtFecha(c.fecha_corte)} · <span className="capitalize">{c.tipo_corte}</span></p>
+                  </div>
+                  <BadgeEstado estado={c.estado_corte} />
+                </div>
+                <p className="text-right font-semibold text-green-600 mt-1">{fmt(c.total_pagado)}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Tabla — desktop */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <tr>
