@@ -4,7 +4,7 @@ import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Polyline } from '@react-
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
-import { encodePlusCode, decodePlusCode, isValidPlusCode, normalizePlusCode } from '../../utils/plusCode.js'
+import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
 import { encolarUbicacion } from '../../utils/offlineQueue.js'
 import { optimizarRuta, largoRutaKm } from '../../utils/ruta.js'
 
@@ -339,14 +339,18 @@ export default function Mapa() {
           cuenta: c,
           latitud: parseFloat(c.cliente.latitud),
           longitud: parseFloat(c.cliente.longitud),
-          sinPlusCode: !c.cliente?.plus_code
+          sinPlusCode: !normalizePlusCode(c.cliente?.plus_code)
         })
         continue
       }
-      // Prioridad 2: Plus Code solo si no hay coordenadas directas
-      const pc = c.cliente?.plus_code
-      if (pc && isValidPlusCode(pc)) {
-        const coords = decodePlusCode(pc)
+      // Prioridad 2: Plus Code solo si no hay coordenadas directas.
+      // normalizePlusCode (a diferencia de isValidPlusCode) recupera códigos
+      // cortos (contra el centro de Tuxtepec) y códigos con texto de localidad
+      // pegado — si no, un cliente con Plus Code corto o "sucio" aparecía sin
+      // marcador ("sin ubicación") a pesar de tener uno guardado en su expediente.
+      const code = normalizePlusCode(c.cliente?.plus_code)
+      if (code) {
+        const coords = decodePlusCode(code)
         if (coords) {
           resultado.push({
             cuenta: c,
@@ -435,7 +439,7 @@ export default function Mapa() {
     for (const c of cuentas) {
       if (filtroRuta && c.cliente?.ruta !== filtroRuta) continue
       if (filtroDia && c.cliente?.dia_cobranza !== filtroDia) continue
-      const tienePlus = c.cliente?.plus_code && isValidPlusCode(c.cliente.plus_code)
+      const tienePlus = !!normalizePlusCode(c.cliente?.plus_code)
       if (tienePlus) continue
       const tieneCoords = !!(c.cliente?.latitud && c.cliente?.longitud)
       items.push({ cuenta: c, tipo: tieneCoords ? 'aprox' : 'singeo' })
