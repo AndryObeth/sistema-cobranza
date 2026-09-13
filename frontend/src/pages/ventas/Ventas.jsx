@@ -402,14 +402,12 @@ export default function Ventas() {
 
   return (
     <Layout>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800">Ventas</h2>
-          <p className="text-gray-500 text-sm mt-1">
-            {ventasFiltradas.length} {vista === 'activa' ? 'activas' : vista === 'liquidada' ? 'liquidadas' : 'canceladas'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-800">Ventas</h2>
+        <p className="text-gray-500 text-sm mt-1">
+          {ventasFiltradas.length} {vista === 'activa' ? 'activas' : vista === 'liquidada' ? 'liquidadas' : 'canceladas'}
+        </p>
+        <div className="flex items-center gap-2 flex-wrap mt-3">
           <button onClick={() => setVista('activa')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               vista === 'activa' ? 'bg-green-100 text-green-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
