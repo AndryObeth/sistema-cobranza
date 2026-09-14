@@ -301,6 +301,7 @@ export default function Ventas() {
       estatus_venta:           v.estatus_venta,
       frecuencia_pago:         v.cuenta?.frecuencia_pago || 'semanal',
       numero_cuenta:           v.cuenta?.numero_cuenta || '',
+      diasFijosMes:            (v.cuenta?.dias_fijos_mes || []).join(', '),
       motivoCancelacion:       MOTIVOS_CANCELACION.includes(motivoSel) ? motivoSel : (motivoPrevio ? 'Otro' : ''),
       notasCancelacion:        MOTIVOS_CANCELACION.includes(motivoSel) ? resto.join(' — ') : motivoPrevio,
     })
@@ -341,6 +342,11 @@ export default function Ventas() {
           cuentaData.frecuencia_pago = formEdicion.frecuencia_pago
         if (formEdicion.numero_cuenta !== (ventaEditando.cuenta.numero_cuenta || ''))
           cuentaData.numero_cuenta = formEdicion.numero_cuenta
+        const diasFijosNuevo = (formEdicion.diasFijosMes || '')
+          .split(',').map(s => parseInt(s.trim())).filter(n => Number.isInteger(n) && n >= 1 && n <= 31)
+        const diasFijosPrevio = ventaEditando.cuenta.dias_fijos_mes || []
+        if (JSON.stringify(diasFijosNuevo) !== JSON.stringify(diasFijosPrevio))
+          cuentaData.dias_fijos_mes = diasFijosNuevo
         if (Object.keys(cuentaData).length > 0) {
           promesas.push(api.put(`/pagos/cuenta/${ventaEditando.cuenta.id_cuenta}/frecuencia`, cuentaData, { timeout: 10000 }))
         }
@@ -647,6 +653,20 @@ export default function Ventas() {
                         <option value="dos_meses">Cada 2 meses</option>
                       </select>
                     </div>
+                    {formEdicion.frecuencia_pago !== 'semanal' && (
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Días fijos del mes <span className="text-gray-400 font-normal">(opcional)</span>
+                        </label>
+                        <input type="text" value={formEdicion.diasFijosMes}
+                          onChange={e => setFormEdicion({...formEdicion, diasFijosMes: e.target.value})}
+                          placeholder="Ej: 2, 17 — vacío = calcular automático por su último pago"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <p className="text-xs text-gray-400 mt-1">
+                          Solo si el cliente pidió días específicos del mes. Si se deja vacío, la ruta semanal calcula cuándo le toca según la fecha de su último abono.
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Número de cuenta

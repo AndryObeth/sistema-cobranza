@@ -7,6 +7,7 @@ import { encolarPago, encolarVisita, encolarCambioDia, encolarUbicacion, getQueu
 import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
 import { sinAcentos } from '../../utils/texto.js'
 import { optimizarRuta } from '../../utils/ruta.js'
+import { diaQueLeToca, nombreDiaSemana, fechaISO, DIAS_SEMANA } from '../../utils/frecuenciaCobranza.js'
 import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
@@ -158,11 +159,33 @@ export default function Cobranza() {
     try { return JSON.parse(localStorage.getItem('cobranza_ruta_importada_meta')) } catch { return null }
   })
   const [pasoRuta, setPasoRuta] = useState(0)
-  const [paradasRuta, setParadasRuta] = useState({}) // { [id_cuenta]: 'pagado' | 'no_pago' }
+  const [paradasRuta, setParadasRuta] = useState({}) // { [id_cuenta]: 'pagado' | 'no_pago' } — global, no por día
+
+  // "Cargar mi semana": variante de modo ruta que arma de un jalón las
+  // paradas de los próximos 7 días (semanales completas + quincenales/
+  // mensuales/bimestrales que les toque), una lista por día. `rutaImportada`
+  // sigue siendo la lista que se muestra — al cambiar de pestaña de día se
+  // reemplaza por rutaSemanaDias[dia]. rutaMeta.tipo === 'semana' distingue
+  // este modo del de "Ruta del mapa" (un solo día importado de Mapa.jsx).
+  const [rutaSemanaDias, setRutaSemanaDias] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cobranza_ruta_semana_dias')) ?? {} } catch { return {} }
+  })
+  const [diaActivoSemana, setDiaActivoSemana] = useState(() => {
+    try { return localStorage.getItem('cobranza_ruta_semana_dia_activo') || null } catch { return null }
+  })
+  const [pasoPorDiaSemana, setPasoPorDiaSemana] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cobranza_ruta_semana_paso')) ?? {} } catch { return {} }
+  })
+  const [cargandoSemana, setCargandoSemana] = useState(false)
   const [verRutaCompleta, setVerRutaCompleta] = useState(false)
 
   useEffect(() => { localStorage.setItem('cobranza_modo', JSON.stringify(modoCobranza)) }, [modoCobranza])
   useEffect(() => { localStorage.setItem('cobranza_modo_ruta', JSON.stringify(modoRuta)) }, [modoRuta])
+  useEffect(() => { localStorage.setItem('cobranza_ruta_semana_dias', JSON.stringify(rutaSemanaDias)) }, [rutaSemanaDias])
+  useEffect(() => {
+    if (diaActivoSemana) localStorage.setItem('cobranza_ruta_semana_dia_activo', diaActivoSemana)
+  }, [diaActivoSemana])
+  useEffect(() => { localStorage.setItem('cobranza_ruta_semana_paso', JSON.stringify(pasoPorDiaSemana)) }, [pasoPorDiaSemana])
   useEffect(() => { localStorage.setItem('cobranza_visitados', JSON.stringify([...visitados])) }, [visitados])
   useEffect(() => { localStorage.setItem('cobranza_solo_pendientes', JSON.stringify(soloPendientes)) }, [soloPendientes])
   useEffect(() => { localStorage.setItem('cobranza_filtro_dia', JSON.stringify(filtroDia)) }, [filtroDia])
@@ -223,10 +246,15 @@ export default function Cobranza() {
       const faltantes = prev.filter(id => !nuevoOrdenIds.includes(id))
       const next = [...nuevoOrdenIds, ...faltantes]
       localStorage.setItem('cobranza_orden_manual_ruta_importada', JSON.stringify(next))
-      api.put('/usuarios/mi-orden', { orden: next, dia: 'ruta_importada' }, { timeout: 10000 }).catch(() => {})
+      if (rutaMeta?.tipo === 'semana' && diaActivoSemana) {
+        setRutaSemanaDias(prevDias => ({ ...prevDias, [diaActivoSemana]: next }))
+        api.put('/usuarios/mi-orden', { orden: next, dia: `ruta_semanal_${diaActivoSemana}` }, { timeout: 10000 }).catch(() => {})
+      } else {
+        api.put('/usuarios/mi-orden', { orden: next, dia: 'ruta_importada' }, { timeout: 10000 }).catch(() => {})
+      }
       return next
     })
-  }, [])
+  }, [rutaMeta, diaActivoSemana])
 
   const activarModoRuta = async () => {
     setModoCobranza(false)
@@ -247,7 +275,7 @@ export default function Cobranza() {
           // La ruta del servidor difiere de la local (se genero en otro equipo):
           // sintetizar una meta y empezar el progreso limpio. `firma` identifica
           // esta ruta para el progreso; `generada` queda null (no sabemos cuándo).
-          metaLocal = { firma: `srv-${res.data.orden.length}-${res.data.orden[0]}`, generada: null, total: res.data.orden.length, dia: null, ruta: null, km: null }
+          metaLocal = { tipo: 'mapa', firma: `srv-${res.data.orden.length}-${res.data.orden[0]}`, generada: null, total: res.data.orden.length, dia: null, ruta: null, km: null }
           localStorage.setItem('cobranza_ruta_importada_meta', JSON.stringify(metaLocal))
           setPasoRuta(0)
           setParadasRuta({})
@@ -258,6 +286,183 @@ export default function Cobranza() {
   }
 
   const salirModoRuta = () => setModoRuta(false)
+
+  // Ordena un grupo de ids de cuenta por proximidad geográfica a `origen`,
+  // dejando al final las que no tienen ubicación (igual que calcularRutaCobranza).
+  const ordenarPorProximidad = (ids, origen, datos) => {
+    const puntos = ids
+      .map(id => {
+        const c = datos.find(x => x.id_cuenta === id)
+        const u = c?.cliente?.ubicaciones?.[0]
+        const lat = u?.latitud ? parseFloat(u.latitud) : (c?.cliente?.latitud ? parseFloat(c.cliente.latitud) : null)
+        const lng = u?.longitud ? parseFloat(u.longitud) : (c?.cliente?.longitud ? parseFloat(c.cliente.longitud) : null)
+        if (!lat || !lng) return null
+        return { id_cuenta: id, lat, lng }
+      })
+      .filter(Boolean)
+    if (puntos.length === 0) return ids
+    const ordenados = optimizarRuta(puntos, origen).map(p => p.id_cuenta)
+    const sinUbicacion = ids.filter(id => !puntos.find(p => p.id_cuenta === id))
+    return [...ordenados, ...sinUbicacion]
+  }
+
+  // Arma las paradas de los próximos 7 días: semanales completas +
+  // quincenales/mensuales/cada 2 meses que les toque, respetando reagendos
+  // vigentes (promesa_pago). Ver frontend/src/utils/frecuenciaCobranza.js.
+  const construirSemana = async (origen) => {
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
+    const finSemana = new Date(hoy); finSemana.setDate(finSemana.getDate() + 6)
+
+    let reagendosPorCuenta = {}
+    try {
+      const res = await api.get('/visitas/todas-pendientes', { timeout: 10000 })
+      for (const v of res.data) {
+        if (v.tipo_seguimiento !== 'promesa_pago' || !v.fecha_programada || !v.id_cuenta) continue
+        const f = new Date(v.fecha_programada)
+        if (!reagendosPorCuenta[v.id_cuenta] || f < reagendosPorCuenta[v.id_cuenta]) {
+          reagendosPorCuenta[v.id_cuenta] = f
+        }
+      }
+    } catch {} // sin reagendos no se detiene la carga, solo no se aplican
+
+    const buckets = {}
+    for (const dia of DIAS_SEMANA) buckets[dia] = []
+    for (const c of cuentas) {
+      const dia = diaQueLeToca(c, hoy, finSemana, reagendosPorCuenta[c.id_cuenta])
+      if (dia) buckets[dia].push(c.id_cuenta)
+    }
+    for (const dia of DIAS_SEMANA) buckets[dia] = ordenarPorProximidad(buckets[dia], origen, cuentas)
+    return buckets
+  }
+
+  const cargarMiSemana = () => {
+    if (cuentas.length === 0) {
+      alert('Todavía no cargan tus cuentas — espera un momento e inténtalo de nuevo')
+      return
+    }
+    setCargandoSemana(true)
+    const proceder = (origen) => {
+      construirSemana(origen).then(buckets => {
+        setRutaSemanaDias(buckets)
+
+        const hoy = new Date()
+        const nombresDesdeHoy = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(hoy); d.setDate(d.getDate() + i)
+          return nombreDiaSemana(d)
+        })
+        const primerDiaConDatos = nombresDesdeHoy.find(d => buckets[d]?.length > 0) || nombresDesdeHoy[0]
+        const listaInicial = buckets[primerDiaConDatos] || []
+
+        const meta = {
+          tipo: 'semana',
+          firma: `semana-${fechaISO(hoy)}`,
+          generada: new Date().toISOString(),
+          semanaInicio: fechaISO(hoy),
+          total: Object.values(buckets).reduce((s, arr) => s + arr.length, 0),
+        }
+        setRutaMeta(meta)
+        localStorage.setItem('cobranza_ruta_importada_meta', JSON.stringify(meta))
+
+        setDiaActivoSemana(primerDiaConDatos)
+        setRutaImportada(listaInicial)
+        localStorage.setItem('cobranza_orden_manual_ruta_importada', JSON.stringify(listaInicial))
+
+        // Solo reiniciar el progreso (pagado/no_pago) si es una semana distinta
+        // a la que ya se traía cargada — recargar la MISMA semana (ej. para
+        // reflejar un reagendo o una cuenta nueva) no debe borrar lo ya marcado.
+        const mismaSemana = rutaMeta?.tipo === 'semana' && rutaMeta.semanaInicio === meta.semanaInicio
+        if (!mismaSemana) {
+          setPasoPorDiaSemana({})
+          setParadasRuta({})
+        }
+        setPasoRuta(0)
+
+        setModoCobranza(false)
+        setModoTarjetero(false)
+        setModoRuta(true)
+        setCargandoSemana(false)
+      }).catch(() => {
+        setAvisoRuta('No se pudo cargar tu semana, intenta de nuevo')
+        setTimeout(() => setAvisoRuta(''), 4000)
+        setCargandoSemana(false)
+      })
+    }
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => proceder({ lat: coords.latitude, lng: coords.longitude }),
+        () => proceder(CENTRO_TUXTEPEC),
+        { enableHighAccuracy: true, timeout: 5000 }
+      )
+    } else {
+      proceder(CENTRO_TUXTEPEC)
+    }
+  }
+
+  // Cambia el día que se está viendo dentro de la semana ya cargada, sin
+  // recalcular nada — guarda el paso del día que se deja y restaura el del
+  // día al que se entra (paradasRuta/estados es global, no hace falta tocarlo).
+  const cambiarDiaSemana = (dia) => {
+    setPasoPorDiaSemana(prev => ({ ...prev, [diaActivoSemana]: pasoRuta }))
+    const lista = rutaSemanaDias[dia] || []
+    setDiaActivoSemana(dia)
+    setRutaImportada(lista)
+    localStorage.setItem('cobranza_orden_manual_ruta_importada', JSON.stringify(lista))
+    setPasoRuta(pasoPorDiaSemana[dia] || 0)
+    setVerRutaCompleta(false)
+  }
+
+  // Reagendar una parada desde Modo Ruta cuando el cliente pide otro día
+  // ("pasa mañana", "pasa el jueves"). Registra la misma promesa_pago que ya
+  // usa Visitas (fecha_programada) — no inventa un mecanismo nuevo — y si
+  // estamos en modo semana y la fecha cae dentro de la semana ya cargada,
+  // mueve la tarjeta de un día a otro sin recalcular toda la ruta.
+  const reagendarParada = async (cuenta, fechaISOStr) => {
+    const datos = {
+      id_cliente:       cuenta.id_cliente,
+      id_cuenta:        cuenta.id_cuenta,
+      tipo_seguimiento: 'promesa_pago',
+      comentario:       'Reagendado desde Modo Ruta',
+      fecha_programada: fechaISOStr,
+      idempotency_key:  crypto.randomUUID(),
+    }
+    if (!navigator.onLine) {
+      encolarVisita(datos)
+    } else {
+      try {
+        await api.post('/visitas', datos, { timeout: 10000 })
+      } catch (err) {
+        if (err.response) {
+          setAvisoRuta('No se pudo reagendar: ' + (err.response.data?.error || 'error'))
+          setTimeout(() => setAvisoRuta(''), 4000)
+          return
+        }
+        encolarVisita(datos)
+      }
+    }
+
+    // Quitar la parada del día que se está viendo
+    const listaSinEsta = rutaImportada.filter(id => id !== cuenta.id_cuenta)
+    setRutaImportada(listaSinEsta)
+    localStorage.setItem('cobranza_orden_manual_ruta_importada', JSON.stringify(listaSinEsta))
+
+    if (rutaMeta?.tipo === 'semana') {
+      const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
+      const finSemana = new Date(hoy); finSemana.setDate(finSemana.getDate() + 6)
+      const fecha = new Date(fechaISOStr)
+      fecha.setHours(0, 0, 0, 0)
+      setRutaSemanaDias(prev => {
+        const next = { ...prev, [diaActivoSemana]: listaSinEsta }
+        if (fecha >= hoy && fecha <= finSemana) {
+          const diaDestino = nombreDiaSemana(fecha)
+          next[diaDestino] = [...(next[diaDestino] || []), cuenta.id_cuenta]
+        }
+        return next
+      })
+    }
+
+    setAvisoRuta(`📅 Reagendado para el ${new Date(fechaISOStr).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long', day: 'numeric', month: 'long' })}`)
+    setTimeout(() => setAvisoRuta(''), 4000)
+  }
 
   const calcularRutaCobranza = (origen, cuentasData) => {
     const datos = cuentasData ?? cuentas
@@ -453,7 +658,7 @@ export default function Cobranza() {
 
   // Edición de frecuencia de cobro
   const [editandoFrecuencia, setEditandoFrecuencia] = useState(false)
-  const [formFrecuencia, setFormFrecuencia] = useState({ frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '' })
+  const [formFrecuencia, setFormFrecuencia] = useState({ frecuencia_pago: 'semanal', fecha_primer_cobro: '', horario_preferido: '', dias_fijos_mes: '' })
   const [guardandoFrecuencia, setGuardandoFrecuencia] = useState(false)
 
   // Cambio de plan
@@ -670,6 +875,7 @@ export default function Cobranza() {
       frecuencia_pago:    detalle.frecuencia_pago    || 'semanal',
       fecha_primer_cobro: detalle.fecha_primer_cobro ? detalle.fecha_primer_cobro.split('T')[0] : '',
       horario_preferido:  detalle.horario_preferido  || '',
+      dias_fijos_mes:     (detalle.dias_fijos_mes || []).join(', '),
     })
     setModalAbierto(true)
   }
@@ -1426,10 +1632,13 @@ export default function Cobranza() {
   const handleGuardarFrecuencia = async () => {
     setGuardandoFrecuencia(true)
     try {
+      const dias_fijos_mes = (formFrecuencia.dias_fijos_mes || '')
+        .split(',').map(s => parseInt(s.trim())).filter(n => Number.isInteger(n) && n >= 1 && n <= 31)
       const res = await api.put(`/pagos/cuenta/${cuentaSeleccionada.id_cuenta}/frecuencia`, {
         frecuencia_pago:    formFrecuencia.frecuencia_pago,
         fecha_primer_cobro: formFrecuencia.fecha_primer_cobro || null,
         horario_preferido:  formFrecuencia.horario_preferido  || null,
+        dias_fijos_mes,
       }, { timeout: 10000 })
       setCuentaSeleccionada(prev => ({ ...prev, ...res.data.cuenta }))
       setEditandoFrecuencia(false)
@@ -1818,7 +2027,7 @@ export default function Cobranza() {
               {modoCobranza ? '✓ Salir modo cobranza' : '☑ Modo cobranza'}
             </button>
           )}
-          {!modoCobranza && !modoTarjetero && rutaImportada.length > 0 && (
+          {!modoCobranza && !modoTarjetero && rutaMeta?.tipo !== 'semana' && rutaImportada.length > 0 && (
             <button
               onClick={modoRuta ? salirModoRuta : activarModoRuta}
               className={`text-sm px-3 py-1.5 rounded-lg font-medium transition border ${
@@ -1828,6 +2037,21 @@ export default function Cobranza() {
               }`}
             >
               {modoRuta ? '✓ Salir de ruta del mapa' : '🧭 Ruta del mapa'}
+            </button>
+          )}
+          {!modoCobranza && !modoTarjetero && (
+            <button
+              onClick={(modoRuta && rutaMeta?.tipo === 'semana') ? salirModoRuta : cargarMiSemana}
+              disabled={cargandoSemana}
+              className={`text-sm px-3 py-1.5 rounded-lg font-medium transition border disabled:opacity-50 ${
+                (modoRuta && rutaMeta?.tipo === 'semana')
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+              }`}
+            >
+              {cargandoSemana
+                ? '⏳ Cargando...'
+                : (modoRuta && rutaMeta?.tipo === 'semana') ? '✓ Salir de mi semana' : '📅 Cargar mi semana'}
             </button>
           )}
         </div>
@@ -2019,26 +2243,57 @@ export default function Cobranza() {
       )}
 
       {modoRuta ? (
-        <PanelRutaMapa
-          paradas={rutaImportada.map(id => cuentas.find(c => c.id_cuenta === id)).filter(Boolean)}
-          totalImportadas={rutaImportada.length}
-          cargando={cargando}
-          errorCarga={errorCarga}
-          paso={pasoRuta}
-          setPaso={setPasoRuta}
-          estados={paradasRuta}
-          meta={rutaMeta}
-          fmt={fmt}
-          enlaceMapaCliente={enlaceMapaCliente}
-          onRegistrarPago={abrirModal}
-          onMarcar={marcarParada}
-          onCorregirUbicacion={abrirCorreccionUbicacionRuta}
-          onReordenar={reordenarRutaImportada}
-          aviso={avisoRuta}
-          verCompleta={verRutaCompleta}
-          setVerCompleta={setVerRutaCompleta}
-          onSalir={salirModoRuta}
-        />
+        <>
+          {rutaMeta?.tipo === 'semana' && (
+            <div className="mb-3 -mx-1 px-1 flex gap-1.5 overflow-x-auto pb-1">
+              {Array.from({ length: 7 }, (_, i) => {
+                const d = new Date(); d.setDate(d.getDate() + i)
+                const nombre = nombreDiaSemana(d)
+                const cuentaDia = rutaSemanaDias[nombre]?.length || 0
+                const activo = nombre === diaActivoSemana
+                return (
+                  <button
+                    key={nombre}
+                    onClick={() => cambiarDiaSemana(nombre)}
+                    className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition border ${
+                      activo
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : cuentaDia > 0
+                          ? 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                          : 'bg-gray-50 text-gray-300 border-gray-100'
+                    }`}
+                  >
+                    <span className="block capitalize">{i === 0 ? 'Hoy' : LABEL_DIA_COBRANZA[nombre]}</span>
+                    <span className="block text-[10px] opacity-80">
+                      {d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} · {cuentaDia}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          <PanelRutaMapa
+            paradas={rutaImportada.map(id => cuentas.find(c => c.id_cuenta === id)).filter(Boolean)}
+            totalImportadas={rutaImportada.length}
+            cargando={cargando}
+            errorCarga={errorCarga}
+            paso={pasoRuta}
+            setPaso={setPasoRuta}
+            estados={paradasRuta}
+            meta={rutaMeta}
+            fmt={fmt}
+            enlaceMapaCliente={enlaceMapaCliente}
+            onRegistrarPago={abrirModal}
+            onMarcar={marcarParada}
+            onCorregirUbicacion={abrirCorreccionUbicacionRuta}
+            onReordenar={reordenarRutaImportada}
+            onReagendar={reagendarParada}
+            aviso={avisoRuta}
+            verCompleta={verRutaCompleta}
+            setVerCompleta={setVerRutaCompleta}
+            onSalir={salirModoRuta}
+          />
+        </>
       ) : modoTarjetero ? (
         <div className="space-y-3">
           {/* Contador por día */}
@@ -2689,6 +2944,14 @@ export default function Cobranza() {
                     <p className="text-xs text-gray-400 mb-0.5">Horario preferido</p>
                     <p className="font-medium text-gray-700">{cuentaSeleccionada.horario_preferido || '—'}</p>
                   </div>
+                  {cuentaSeleccionada.frecuencia_pago !== 'semanal' && (
+                    <div className="col-span-3">
+                      <p className="text-xs text-gray-400 mb-0.5">Días fijos del mes</p>
+                      <p className="font-medium text-gray-700">
+                        {cuentaSeleccionada.dias_fijos_mes?.length ? cuentaSeleccionada.dias_fijos_mes.join(', ') : 'Automático (por su último pago)'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -2725,6 +2988,21 @@ export default function Cobranza() {
                         className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
+                    {formFrecuencia.frecuencia_pago !== 'semanal' && (
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Días fijos del mes <span className="text-gray-400 font-normal">(opcional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={formFrecuencia.dias_fijos_mes}
+                          onChange={e => setFormFrecuencia({ ...formFrecuencia, dias_fijos_mes: e.target.value })}
+                          placeholder="Ej: 2, 17 — vacío = calcular por su último pago"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-[11px] text-gray-400 mt-1">Solo si el cliente pidió días específicos. Se usa en "Cargar mi semana".</p>
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -3944,8 +4222,10 @@ function PanelCorreccionUbicacion({
 // generó en el Mapa. No reordena ni recalcula: sigue el orden importado tal cual.
 function PanelRutaMapa({
   paradas, totalImportadas, cargando, errorCarga, paso, setPaso, estados, meta, fmt, enlaceMapaCliente,
-  onRegistrarPago, onMarcar, onCorregirUbicacion, onReordenar, aviso, verCompleta, setVerCompleta, onSalir,
+  onRegistrarPago, onMarcar, onCorregirUbicacion, onReordenar, onReagendar, aviso, verCompleta, setVerCompleta, onSalir,
 }) {
+  const [mostrarReagendo, setMostrarReagendo] = useState(false)
+  const [fechaReagendoManual, setFechaReagendoManual] = useState('')
   const total = paradas.length
   const faltantes = Math.max((totalImportadas ?? total) - total, 0)
   const resueltas = paradas.filter(c => estados[c.id_cuenta]).length
@@ -3972,6 +4252,8 @@ function PanelRutaMapa({
             <p className="text-gray-500">📴 Sin conexión y sin cuentas guardadas — la ruta no se puede mostrar todavía.</p>
             <p className="text-xs text-gray-400">Vuelve a intentar cuando tengas señal; el modo ruta sigue disponible.</p>
           </>
+        ) : meta?.tipo === 'semana' ? (
+          <p className="text-gray-500">🎉 No tienes cuentas programadas este día. Revisa las pestañas de arriba para ver otro día de la semana.</p>
         ) : (
           <>
             <p className="text-gray-500">La ruta importada no coincide con ninguna de tus cuentas actuales.</p>
@@ -3998,7 +4280,19 @@ function PanelRutaMapa({
 
   const marcarYAvanzar = (id, estado) => {
     onMarcar(id, estado)
+    setMostrarReagendo(false)
     setPaso(Math.min(idxActual + 1, total - 1))
+  }
+
+  const irAParada = (idx) => {
+    setMostrarReagendo(false)
+    setPaso(Math.max(Math.min(idx, total - 1), 0))
+  }
+
+  const reagendarYCerrar = (fecha) => {
+    setMostrarReagendo(false)
+    setFechaReagendoManual('')
+    onReagendar(actual, fecha)
   }
 
   // Mover la parada `desde` a la posición `hacia` (dentro de `paradas`), guardar
@@ -4158,6 +4452,50 @@ function PanelRutaMapa({
             📍 Corregir ubicación{esAproximada(actual) ? ' (está aproximada)' : ''}
           </button>
 
+          {onReagendar && (
+            <div className="mt-2">
+              <button
+                onClick={() => setMostrarReagendo(v => !v)}
+                className="w-full py-2.5 rounded-xl text-sm font-medium transition border bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+              >
+                📅 {mostrarReagendo ? 'Cancelar reagendo' : 'El cliente pidió otro día'}
+              </button>
+              {mostrarReagendo && (
+                <div className="mt-2 bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => { const f = new Date(); f.setDate(f.getDate() + 1); reagendarYCerrar(f.toISOString().split('T')[0]) }}
+                      className="bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 py-2 rounded-lg text-xs font-medium"
+                    >
+                      Mañana
+                    </button>
+                    <button
+                      onClick={() => { const f = new Date(); f.setDate(f.getDate() + 2); reagendarYCerrar(f.toISOString().split('T')[0]) }}
+                      className="bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 py-2 rounded-lg text-xs font-medium"
+                    >
+                      Pasado mañana
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={fechaReagendoManual}
+                      onChange={e => setFechaReagendoManual(e.target.value)}
+                      className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+                    />
+                    <button
+                      onClick={() => fechaReagendoManual && reagendarYCerrar(fechaReagendoManual)}
+                      disabled={!fechaReagendoManual}
+                      className="px-3 py-1.5 bg-indigo-600 disabled:bg-gray-300 text-white text-xs font-medium rounded-lg"
+                    >
+                      Elegir
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <button onClick={() => onRegistrarPago(actual)} className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition">💵 Registrar pago</button>
 
           <div className="grid grid-cols-2 gap-2 mt-2">
@@ -4166,9 +4504,9 @@ function PanelRutaMapa({
           </div>
 
           <div className="flex items-center justify-between mt-4 text-sm">
-            <button onClick={() => setPaso(Math.max(idxActual - 1, 0))} disabled={idxActual === 0} className="text-gray-500 hover:text-gray-700 disabled:opacity-30">◀ Anterior</button>
+            <button onClick={() => irAParada(idxActual - 1)} disabled={idxActual === 0} className="text-gray-500 hover:text-gray-700 disabled:opacity-30">◀ Anterior</button>
             {eActual && <span className="text-xs text-gray-400">ya atendida</span>}
-            <button onClick={() => setPaso(Math.min(idxActual + 1, total - 1))} disabled={idxActual === total - 1} className="text-blue-600 font-semibold hover:text-blue-800 disabled:opacity-30">Siguiente ▶</button>
+            <button onClick={() => irAParada(idxActual + 1)} disabled={idxActual === total - 1} className="text-blue-600 font-semibold hover:text-blue-800 disabled:opacity-30">Siguiente ▶</button>
           </div>
       </div>
 
@@ -4197,7 +4535,7 @@ function PanelRutaMapa({
                 className={`flex items-center gap-2 px-3 py-2.5 transition ${i === idxActual ? 'bg-blue-50' : ''}`}
               >
                 <button
-                  onClick={() => setPaso(i)}
+                  onClick={() => irAParada(i)}
                   className="flex items-center gap-3 text-left min-w-0 flex-1"
                 >
                   <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold shrink-0 ${

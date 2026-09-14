@@ -279,6 +279,11 @@ model Cuenta {
   horario_preferido    String?
   abono_semanal        Decimal?  @db.Decimal(10, 2)
   observaciones        String?
+  // Días del mes (1-31) en que el cliente pide que se le cobre — para
+  // quincenal/mensual/cada 2 meses cuando el cliente pidió días fijos
+  // (ej. "los días 2 y 17") en vez de calcularlo por fecha_ultimo_pago.
+  // Vacío = se calcula automático. Ver frontend/src/utils/frecuenciaCobranza.js
+  dias_fijos_mes       Int[]     @default([])
   updated_at           DateTime @updatedAt
 
   // Relaciones
