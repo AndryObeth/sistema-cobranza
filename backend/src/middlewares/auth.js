@@ -40,6 +40,9 @@ module.exports = async (req, res, next) => {
     next()
   } catch (error) {
     console.log('Error JWT:', error.message)
-    return res.status(403).json({ error: 'Token inválido', detalle: error.message })
+    // 401 (no autenticado), no 403 (no autorizado) — un token vencido o
+    // corrupto es un problema de sesión, no de permisos, y el interceptor
+    // del frontend usa justo ese código para decidir si cierra la sesión.
+    return res.status(401).json({ error: 'Token inválido', detalle: error.message })
   }
 }

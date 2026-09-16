@@ -17,8 +17,13 @@ api.interceptors.response.use(
   err => {
     // Un 401 del propio login es "contraseña incorrecta", no "sesión expirada"
     // (no hay sesión que expirar) — no debe redirigir y pisar ese mensaje.
+    // Solo 401 cierra sesión (token ausente/vencido/inválido, o usuario
+    // desactivado — auth.js). Un 403 es "sí sé quién eres, pero esto no te
+    // toca" (ej. un rol sin permiso para cierta acción) y NO debe cerrar la
+    // sesión — cada pantalla ya muestra su propio mensaje de error con el
+    // texto que manda el backend.
     const esLogin = err.config?.url?.includes('/auth/login')
-    if (!esLogin && (err.response?.status === 401 || err.response?.status === 403)) {
+    if (!esLogin && err.response?.status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('usuario')
       window.location.href = '/login?sesion=expirada'
