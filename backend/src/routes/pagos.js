@@ -69,8 +69,12 @@ router.get('/todas-cuentas', auth, async (req, res) => {
     // segundo visto bueno del admin no se muestran aquí (ni a cobradores ni a
     // nadie más) — solo aparecen en la cola dedicada de /cuentas/verificacion.
     const where = { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] }, estado_verificacion: 'aprobada' }
-    if (req.usuario.rol === 'cobrador' && req.usuario.rutas_asignadas?.length) {
-      where.cliente = { ruta: { in: req.usuario.rutas_asignadas } }
+    // El supervisor solo hace primera visita (ver /cuentas/verificacion) — no
+    // debe ver la cartera general. Si no tiene rutas asignadas, no ve nada
+    // (antes, sin rutas, veía TODO por el && rutas.length; ahora el filtro se
+    // aplica siempre para estos dos roles y un arreglo vacío no matchea nada).
+    if (['cobrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      where.cliente = { ruta: { in: req.usuario.rutas_asignadas || [] } }
     }
     const cuentas = await prisma.cuenta.findMany({
       where,

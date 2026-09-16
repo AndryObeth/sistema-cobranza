@@ -79,8 +79,10 @@ router.get('/todas-pendientes', auth, async (req, res) => {
     hoy.setHours(0, 0, 0, 0)
 
     const where = { fecha_programada: { gte: hoy } }
-    if (req.usuario.rol === 'cobrador' && req.usuario.rutas_asignadas?.length) {
-      where.cliente = { ruta: { in: req.usuario.rutas_asignadas } }
+    // Mismo criterio que /pagos/todas-cuentas: el supervisor sin rutas
+    // asignadas no debe ver la agenda general, solo su cola de primera visita.
+    if (['cobrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      where.cliente = { ruta: { in: req.usuario.rutas_asignadas || [] } }
     }
 
     const visitas = await prisma.seguimientoCliente.findMany({
@@ -102,7 +104,7 @@ router.get('/todas-pendientes', auth, async (req, res) => {
 router.get('/cobros-sugeridos', auth, async (req, res) => {
   try {
     const where = { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] }, estado_verificacion: 'aprobada' }
-    if (req.usuario.rol === 'cobrador') {
+    if (['cobrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
       where.venta = { id_cobrador: req.usuario.id }
     }
 
