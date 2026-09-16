@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
@@ -11,6 +12,12 @@ const LABEL_DIA = { lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', j
 const LABEL_PLAN = { un_mes: '1 mes', dos_meses: '2 meses', tres_meses: '3 meses', largo_plazo: 'Largo plazo' }
 
 export default function Verificacion() {
+  const { usuario } = useAuth()
+  // El supervisor es el primer filtro (primera visita); el segundo visto
+  // bueno es exclusivo del administrador — ni el botón ni los datos de esa
+  // cola se cargan para el supervisor.
+  const esAdmin = usuario?.rol === 'administrador'
+
   const [tab, setTab] = useState('visita') // 'visita' | 'aprobacion'
   const [pendientesVisita, setPendientesVisita] = useState([])
   const [pendientesAprobacion, setPendientesAprobacion] = useState([])
@@ -22,13 +29,13 @@ export default function Verificacion() {
     try {
       const [rv, ra] = await Promise.all([
         api.get('/cuentas/verificacion/pendientes-visita', { timeout: 10000 }),
-        api.get('/cuentas/verificacion/pendientes-aprobacion', { timeout: 10000 }),
+        esAdmin ? api.get('/cuentas/verificacion/pendientes-aprobacion', { timeout: 10000 }) : Promise.resolve({ data: [] }),
       ])
       setPendientesVisita(rv.data)
       setPendientesAprobacion(ra.data)
     } catch { /* la lista se queda como estaba, el usuario puede reintentar */ }
     setCargando(false)
-  }, [])
+  }, [esAdmin])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -54,12 +61,14 @@ export default function Verificacion() {
             }`}>
             🔍 Por visitar{pendientesVisita.length > 0 && ` (${pendientesVisita.length})`}
           </button>
-          <button onClick={() => setTab('aprobacion')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-              tab === 'aprobacion' ? 'bg-green-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-            }`}>
-            ✅ Por aprobar{pendientesAprobacion.length > 0 && ` (${pendientesAprobacion.length})`}
-          </button>
+          {esAdmin && (
+            <button onClick={() => setTab('aprobacion')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                tab === 'aprobacion' ? 'bg-green-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+              }`}>
+              ✅ Por aprobar{pendientesAprobacion.length > 0 && ` (${pendientesAprobacion.length})`}
+            </button>
+          )}
         </div>
       </div>
 

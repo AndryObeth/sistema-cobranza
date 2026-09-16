@@ -818,7 +818,12 @@ router.post('/:id/cancelar', auth, async (req, res) => {
 // igual que POST /cuentas/:id/cancelar.
 // ─────────────────────────────────────────────────────────────────────────
 
-const puedeVerificar = (rol) => ['administrador', 'supervisor_cobranza'].includes(rol)
+// El supervisor es el PRIMER filtro (primera visita); el segundo visto bueno
+// (activar la cuenta o regresarla) es exclusivo del administrador — antes
+// ambos endpoints aceptaban a los dos roles y el supervisor podía darse a sí
+// mismo el segundo visto bueno, saltándose el filtro doble.
+const puedeVisitar      = (rol) => ['administrador', 'supervisor_cobranza'].includes(rol)
+const puedeAprobarFinal = (rol) => rol === 'administrador'
 
 // abono_semanal siempre guarda la base SEMANAL (así lo trata calcPagoPeriodico
 // en Cobranza.jsx) — para comparar contra lo que de verdad se cobra por
@@ -867,11 +872,13 @@ const INCLUDE_VERIFICACION = {
 // GET /api/cuentas/verificacion/conteo — para el badge del menú (liviano, sin alertas)
 router.get('/verificacion/conteo', auth, async (req, res) => {
   try {
-    if (!puedeVerificar(req.usuario.rol)) return res.json({ pendientes_visita: 0, pendientes_aprobacion: 0 })
-    const [pendientes_visita, pendientes_aprobacion] = await Promise.all([
-      prisma.cuenta.count({ where: { estado_verificacion: 'pendiente_visita' } }),
-      prisma.cuenta.count({ where: { estado_verificacion: 'en_revision_admin' } }),
-    ])
+    if (!puedeVisitar(req.usuario.rol)) return res.json({ pendientes_visita: 0, pendientes_aprobacion: 0 })
+    const pendientes_visita = await prisma.cuenta.count({ where: { estado_verificacion: 'pendiente_visita' } })
+    // El conteo de "por aprobar" es del segundo filtro, exclusivo del admin —
+    // el supervisor solo ve su propia cola (primera visita).
+    const pendientes_aprobacion = puedeAprobarFinal(req.usuario.rol)
+      ? await prisma.cuenta.count({ where: { estado_verificacion: 'en_revision_admin' } })
+      : 0
     res.json({ pendientes_visita, pendientes_aprobacion })
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener el conteo', detalle: error.message })
@@ -881,7 +888,7 @@ router.get('/verificacion/conteo', auth, async (req, res) => {
 // GET /api/cuentas/verificacion/pendientes-visita — cola del supervisor
 router.get('/verificacion/pendientes-visita', auth, async (req, res) => {
   try {
-    if (!puedeVerificar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
+    if (!puedeVisitar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
     const cuentas = await prisma.cuenta.findMany({
       where: { estado_verificacion: 'pendiente_visita' },
       include: INCLUDE_VERIFICACION,
@@ -897,7 +904,7 @@ router.get('/verificacion/pendientes-visita', auth, async (req, res) => {
 // GET /api/cuentas/verificacion/pendientes-aprobacion — cola del segundo visto bueno
 router.get('/verificacion/pendientes-aprobacion', auth, async (req, res) => {
   try {
-    if (!puedeVerificar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
+    if (!puedeAprobarFinal(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
     const cuentas = await prisma.cuenta.findMany({
       where: { estado_verificacion: 'en_revision_admin' },
       include: INCLUDE_VERIFICACION,
@@ -913,7 +920,7 @@ router.get('/verificacion/pendientes-aprobacion', auth, async (req, res) => {
 // POST /api/cuentas/:id/verificacion/visitar — primer filtro (supervisor)
 router.post('/:id/verificacion/visitar', auth, async (req, res) => {
   try {
-    if (!puedeVerificar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
+    if (!puedeVisitar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
     const id_cuenta = parseInt(req.params.id)
     const { aprobar, notas } = req.body
 
@@ -967,7 +974,7 @@ router.post('/:id/verificacion/visitar', auth, async (req, res) => {
 // POST /api/cuentas/:id/verificacion/aprobar-final — segundo visto bueno (admin)
 router.post('/:id/verificacion/aprobar-final', auth, async (req, res) => {
   try {
-    if (!puedeVerificar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
+    if (!puedeAprobarFinal(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
     const id_cuenta = parseInt(req.params.id)
     const { aprobar, notas } = req.body
 
@@ -1021,7 +1028,7 @@ router.post('/:id/verificacion/aprobar-final', auth, async (req, res) => {
 // POST /api/cuentas/:id/verificacion/regresar — admin la regresa al supervisor
 router.post('/:id/verificacion/regresar', auth, async (req, res) => {
   try {
-    if (!puedeVerificar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
+    if (!puedeAprobarFinal(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
     const id_cuenta = parseInt(req.params.id)
     const cuenta = await prisma.cuenta.findUnique({ where: { id_cuenta } })
     if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
