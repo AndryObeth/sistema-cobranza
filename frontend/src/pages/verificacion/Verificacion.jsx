@@ -439,35 +439,37 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
           {error && <p className="text-red-500 text-sm bg-red-50 rounded-lg px-3 py-2">{error}</p>}
         </div>
 
-        <div className="p-5 border-t flex flex-wrap gap-2 sticky bottom-0 bg-white">
+        <div className="p-5 border-t sticky bottom-0 bg-white space-y-2">
           {!modoRechazo ? (
             <>
-              <button onClick={() => setModoRechazo(true)} disabled={guardando}
-                className="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition disabled:opacity-50">
-                🚫 Rechazar
-              </button>
               {tab === 'aprobacion' && (
                 <button onClick={regresarAlSupervisor} disabled={guardando}
-                  className="px-4 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                  className="w-full px-4 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium transition disabled:opacity-50">
                   ↩ Regresar al supervisor
                 </button>
               )}
-              <button onClick={() => enviar(true)} disabled={guardando}
-                className="ml-auto px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50">
-                {guardando ? 'Guardando...' : tab === 'visita' ? '✅ Aprobar y enviar a revisión final' : '✅ Dar visto bueno — activar cuenta'}
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => setModoRechazo(true)} disabled={guardando}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                  🚫 Rechazar
+                </button>
+                <button onClick={() => enviar(true)} disabled={guardando}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50">
+                  {guardando ? 'Guardando...' : tab === 'visita' ? '✅ Aprobar y enviar' : '✅ Dar visto bueno'}
+                </button>
+              </div>
             </>
           ) : (
-            <>
+            <div className="flex gap-2">
               <button onClick={() => { setModoRechazo(false); setError('') }} disabled={guardando}
-                className="px-4 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                className="flex-1 flex items-center justify-center px-4 py-2.5 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium transition disabled:opacity-50">
                 Volver
               </button>
               <button onClick={() => enviar(false)} disabled={guardando}
-                className="ml-auto px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50">
-                {guardando ? 'Rechazando...' : '🚫 Confirmar rechazo y cancelar'}
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50">
+                {guardando ? 'Rechazando...' : '🚫 Confirmar rechazo'}
               </button>
-            </>
+            </div>
           )}
         </div>
       </div>
