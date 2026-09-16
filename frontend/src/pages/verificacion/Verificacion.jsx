@@ -5,7 +5,6 @@ import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/p
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
-const fmtFechaHora = f => f ? new Date(f).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'
 
 const DIAS_COBRANZA = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
 const LABEL_DIA = { lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo' }
@@ -101,7 +100,7 @@ function TarjetaCuenta({ cuenta: c, tab, onClick }) {
       </p>
       <p className="text-xs text-gray-500">Vendedor: {c.venta?.vendedor?.nombre || '—'}</p>
       <p className="text-xs text-gray-400">
-        {tab === 'visita' ? `Vendida el ${fmtFecha(c.fecha_inicio)}` : `Visitada el ${fmtFecha(c.fecha_primera_visita)} por ${c.supervisor_visita?.nombre || '—'}`}
+        {tab === 'visita' ? `Vendida el ${fmtFecha(c.venta?.fecha_venta)}` : `Visitada el ${fmtFecha(c.fecha_primera_visita)} por ${c.supervisor_visita?.nombre || '—'}`}
       </p>
       {(a.cliente_con_varias_cuentas || a.abono_bajo) && (
         <div className="flex flex-wrap gap-1 mt-2">
@@ -156,6 +155,36 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
   const faltaTelefono = !c.cliente?.telefono?.trim()
   const faltaReferencias = !c.cliente?.referencias?.trim()
   const faltaDia = !c.cliente?.dia_cobranza
+
+  // Fecha primer cobro: si no se capturó al vender, se sugiere una a partir
+  // de la fecha de venta + el intervalo típico de su frecuencia, para que el
+  // supervisor solo tenga que confirmarla o ajustarla, no capturarla de cero.
+  const INTERVALO_DIAS = { semanal: 7, quincenal: 15, mensual: 30, dos_meses: 60 }
+  const sugerirFechaPrimerCobro = () => {
+    const base = c.venta?.fecha_venta ? new Date(c.venta.fecha_venta) : new Date()
+    base.setDate(base.getDate() + (INTERVALO_DIAS[c.frecuencia_pago] || 7))
+    return base.toISOString().split('T')[0]
+  }
+  const [fechaPrimerCobro, setFechaPrimerCobro] = useState(
+    c.fecha_primer_cobro ? c.fecha_primer_cobro.split('T')[0] : sugerirFechaPrimerCobro()
+  )
+  const fechaPrimerCobroEraSugerida = !c.fecha_primer_cobro
+  const [guardandoFecha, setGuardandoFecha] = useState(false)
+  const [fechaGuardada, setFechaGuardada] = useState(false)
+
+  const guardarFechaPrimerCobro = async () => {
+    setGuardandoFecha(true)
+    setError('')
+    try {
+      await api.put(`/pagos/cuenta/${c.id_cuenta}/frecuencia`, { fecha_primer_cobro: fechaPrimerCobro }, { timeout: 10000 })
+      setFechaGuardada(true)
+      setTimeout(() => setFechaGuardada(false), 3000)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al guardar la fecha de primer cobro')
+    } finally {
+      setGuardandoFecha(false)
+    }
+  }
 
   const guardarCliente = async () => {
     setGuardandoCliente(true)
@@ -285,13 +314,28 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
             <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
               <p><strong>Productos:</strong> {c.venta?.detalles?.map(d => `${d.producto} x${d.cantidad}`).join(', ') || '—'}</p>
               <div className="grid grid-cols-2 gap-2 mt-1">
+                <p><strong>Vendida el:</strong> {fmtFecha(c.venta?.fecha_venta)}</p>
                 <p><strong>Plan:</strong> {LABEL_PLAN[c.plan_actual] || c.plan_actual}</p>
                 <p><strong>Precio:</strong> {fmt(c.precio_plan_actual)}</p>
                 <p><strong>Enganche recibido:</strong> {fmt(c.abono_inicial)}</p>
                 <p><strong>Saldo actual:</strong> {fmt(c.saldo_actual)}</p>
                 <p><strong>Frecuencia:</strong> {(c.frecuencia_pago || 'semanal').replace(/_/g, ' ')}</p>
-                <p><strong>Abono capturado:</strong> {fmt(a.abono_actual)}</p>
+                <p><strong>Abono por periodo:</strong> {fmt(a.abono_actual)}</p>
               </div>
+            </div>
+            <div className="flex items-end gap-2 mt-2">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Fecha primer cobro {fechaPrimerCobroEraSugerida && <span className="text-amber-500">(sugerida, confirma o ajusta)</span>}
+                </label>
+                <input type="date" value={fechaPrimerCobro} onChange={e => setFechaPrimerCobro(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <button type="button" onClick={guardarFechaPrimerCobro} disabled={guardandoFecha}
+                className="text-xs px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium disabled:opacity-50">
+                {guardandoFecha ? 'Guardando...' : '💾 Guardar'}
+              </button>
+              {fechaGuardada && <span className="text-xs text-green-600 self-center">✓</span>}
             </div>
           </div>
 

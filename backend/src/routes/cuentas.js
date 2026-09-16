@@ -820,9 +820,15 @@ router.post('/:id/cancelar', auth, async (req, res) => {
 
 const puedeVerificar = (rol) => ['administrador', 'supervisor_cobranza'].includes(rol)
 
+// abono_semanal siempre guarda la base SEMANAL (así lo trata calcPagoPeriodico
+// en Cobranza.jsx) — para comparar contra lo que de verdad se cobra por
+// periodo hay que multiplicarlo según la frecuencia, igual que allá.
+const MULTIPLICADOR_FRECUENCIA = { semanal: 1, quincenal: 2, mensual: 4, dos_meses: 8 }
+
 // Calcula las alertas automáticas de una cuenta: cuántas otras cuentas
 // activas tiene el mismo cliente, y si el abono quedó por debajo de lo
-// sugerido (mismo cálculo que abono_semanal_sugerido en Ventas.jsx).
+// sugerido (mismo cálculo que abono_semanal_sugerido en Ventas.jsx),
+// ambos ya expresados en el monto real por periodo, no semanal.
 async function calcularAlertas(cuenta) {
   const otrasCuentasActivas = await prisma.cuenta.count({
     where: {
@@ -832,8 +838,11 @@ async function calcularAlertas(cuenta) {
     }
   })
   const semanas = cuenta.semanas_plazo || 1
-  const abono_sugerido = Math.max(100, Math.ceil(parseFloat(cuenta.precio_plan_actual) / semanas))
-  const abono_actual   = cuenta.abono_semanal ? parseFloat(cuenta.abono_semanal) : abono_sugerido
+  const multiplicador = MULTIPLICADOR_FRECUENCIA[cuenta.frecuencia_pago] || 1
+  const abonoSemanalSugerido = Math.max(100, Math.ceil(parseFloat(cuenta.precio_plan_actual) / semanas))
+  const abonoSemanalCapturado = cuenta.abono_semanal ? parseFloat(cuenta.abono_semanal) : abonoSemanalSugerido
+  const abono_sugerido = abonoSemanalSugerido * multiplicador
+  const abono_actual   = abonoSemanalCapturado * multiplicador
   return {
     otras_cuentas_activas: otrasCuentasActivas,
     cliente_con_varias_cuentas: otrasCuentasActivas > 0,
