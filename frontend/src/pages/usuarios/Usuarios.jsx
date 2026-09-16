@@ -5,6 +5,7 @@ import { incluyeTexto } from '../../utils/texto.js'
 
 const ROLES = [
   { value: 'administrador',  label: 'Administrador' },
+  { value: 'supervisor_cobranza', label: 'Supervisor' },
   { value: 'secretaria',     label: 'Secretaria' },
   { value: 'vendedor',       label: 'Vendedor' },
   { value: 'cobrador',       label: 'Cobrador' },
@@ -13,6 +14,7 @@ const ROLES = [
 
 const rolColor = {
   administrador:  'bg-purple-100 text-purple-700',
+  supervisor_cobranza: 'bg-indigo-100 text-indigo-700',
   secretaria:     'bg-blue-100 text-blue-700',
   vendedor:       'bg-green-100 text-green-700',
   cobrador:       'bg-orange-100 text-orange-700',
@@ -21,6 +23,7 @@ const rolColor = {
 
 const rolLabel = {
   administrador:  'Administrador',
+  supervisor_cobranza: 'Supervisor',
   secretaria:     'Secretaria',
   vendedor:       'Vendedor',
   cobrador:       'Cobrador',

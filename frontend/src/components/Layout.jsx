@@ -4,19 +4,23 @@ import { useAuth } from '../context/AuthContext'
 import { queueCount, queueErrorCount, sincronizarCola } from '../utils/offlineQueue'
 import api from '../api'
 
+// El supervisor_cobranza ve exactamente lo mismo que un cobrador (Cobranza,
+// Agenda, Mapa, Lista Negra, Cortes) más el apartado de Primera visita —
+// ya no tiene el resto del acceso de administrador (Dashboard, Clientes,
+// Productos, Ventas, Listado, Usuarios).
 const menu = [
-  { path: '/',          label: 'Dashboard',  icono: '📊', roles: ['administrador', 'supervisor_cobranza'] },
-  { path: '/clientes',  label: 'Clientes',   icono: '👥', roles: ['administrador', 'supervisor_cobranza', 'secretaria', 'vendedor', 'jefe_camioneta'] },
-  { path: '/productos', label: 'Productos',  icono: '📦', roles: ['administrador', 'supervisor_cobranza', 'secretaria', 'vendedor', 'jefe_camioneta'] },
-  { path: '/ventas',    label: 'Ventas',     icono: '🧾', roles: ['administrador', 'supervisor_cobranza', 'secretaria', 'vendedor', 'jefe_camioneta'] },
+  { path: '/',          label: 'Dashboard',  icono: '📊', roles: ['administrador'] },
+  { path: '/clientes',  label: 'Clientes',   icono: '👥', roles: ['administrador', 'secretaria', 'vendedor', 'jefe_camioneta'] },
+  { path: '/productos', label: 'Productos',  icono: '📦', roles: ['administrador', 'secretaria', 'vendedor', 'jefe_camioneta'] },
+  { path: '/ventas',    label: 'Ventas',     icono: '🧾', roles: ['administrador', 'secretaria', 'vendedor', 'jefe_camioneta'] },
   { path: '/cobranza',  label: 'Cobranza',   icono: '💰', roles: ['cobrador', 'administrador', 'supervisor_cobranza'] },
   { path: '/visitas',   label: 'Agenda',     icono: '📅', roles: ['cobrador', 'administrador', 'supervisor_cobranza'] },
   { path: '/mapa',      label: 'Mapa',       icono: '🗺️',  roles: ['cobrador', 'jefe_camioneta', 'administrador', 'supervisor_cobranza'] },
-  { path: '/listado',   label: 'Listado',    icono: '📋', roles: ['administrador', 'supervisor_cobranza'] },
+  { path: '/listado',   label: 'Listado',    icono: '📋', roles: ['administrador'] },
   { path: '/primera-visita', label: 'Primera visita', icono: '🔍', roles: ['administrador', 'supervisor_cobranza'] },
   { path: '/lista-negra', label: 'Lista Negra', icono: '⛔', roles: null },
   { path: '/cortes',      label: 'Cortes',      icono: '✂️',  roles: ['administrador', 'supervisor_cobranza', 'cobrador'] },
-  { path: '/usuarios',    label: 'Usuarios',    icono: '👤', roles: ['administrador', 'supervisor_cobranza'] },
+  { path: '/usuarios',    label: 'Usuarios',    icono: '👤', roles: ['administrador'] },
 ]
 
 export default function Layout({ children }) {
@@ -118,9 +122,10 @@ export default function Layout({ children }) {
     }
   }, [])
 
-  // Comentarios de cobranza sin leer (badge en el menú)
+  // Comentarios de cobranza sin leer (badge en el menú) — panel vive en
+  // Dashboard, que el supervisor ya no ve (ver comentario junto a `menu`).
   useEffect(() => {
-    if (!['administrador', 'supervisor_cobranza'].includes(usuario?.rol)) return
+    if (usuario?.rol !== 'administrador') return
 
     const consultarComentarios = () => {
       api.get('/pagos/comentarios').then(r => {
