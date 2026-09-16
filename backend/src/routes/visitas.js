@@ -101,7 +101,7 @@ router.get('/todas-pendientes', auth, async (req, res) => {
 // GET /api/visitas/cobros-sugeridos — cuentas activas con info de frecuencia y cobrador
 router.get('/cobros-sugeridos', auth, async (req, res) => {
   try {
-    const where = { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] } }
+    const where = { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] }, estado_verificacion: 'aprobada' }
     if (req.usuario.rol === 'cobrador') {
       where.venta = { id_cobrador: req.usuario.id }
     }

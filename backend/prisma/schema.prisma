@@ -36,6 +36,8 @@ model Usuario {
   cortes_cobrador       CorteCobrador[]
   cortes_vendedor       CorteVendedor[]
   utilidades_contado    UtilidadContado[]
+  cuentas_visitadas     Cuenta[]             @relation("SupervisorVisitaCuenta")
+  cuentas_aprobadas     Cuenta[]             @relation("AdminAprobacionCuenta")
 
   @@map("usuarios")
 }
@@ -286,12 +288,37 @@ model Cuenta {
   dias_fijos_mes       Int[]     @default([])
   updated_at           DateTime @updatedAt
 
+  // Primera visita del supervisor (control de calidad antes de pasarle la
+  // cuenta al cobrador) — ver sección "Primera visita" en CLAUDE.md.
+  // pendiente_visita: recién creada, esperando que el supervisor la visite.
+  // en_revision_admin: el supervisor ya la visitó y la mandó al segundo visto bueno.
+  // aprobada: admin dio el visto bueno final, la cuenta ya es visible/cobrable
+  //           para el cobrador (filtro en GET /pagos/todas-cuentas).
+  // rechazada: el supervisor o el admin la rechazaron — se cancela junto con
+  //            la venta (mismo flujo que /cuentas/:id/cancelar).
+  estado_verificacion    EstadoVerificacionCuenta @default(pendiente_visita)
+  notas_primera_visita   String?
+  id_supervisor_visita   Int?
+  fecha_primera_visita   DateTime?
+  notas_aprobacion_admin String?
+  id_admin_aprobacion    Int?
+  fecha_aprobacion       DateTime?
+
   // Relaciones
-  venta    Venta  @relation(fields: [id_venta], references: [id_venta])
-  cliente  Cliente @relation(fields: [id_cliente], references: [id_cliente])
-  pagos    Pago[]
+  venta             Venta    @relation(fields: [id_venta], references: [id_venta])
+  cliente           Cliente  @relation(fields: [id_cliente], references: [id_cliente])
+  pagos             Pago[]
+  supervisor_visita Usuario? @relation("SupervisorVisitaCuenta", fields: [id_supervisor_visita], references: [id_usuario])
+  admin_aprobacion  Usuario? @relation("AdminAprobacionCuenta", fields: [id_admin_aprobacion], references: [id_usuario])
 
   @@map("cuentas")
+}
+
+enum EstadoVerificacionCuenta {
+  pendiente_visita
+  en_revision_admin
+  aprobada
+  rechazada
 }
 
 enum FrecuenciaPago {

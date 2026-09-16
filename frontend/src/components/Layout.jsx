@@ -13,6 +13,7 @@ const menu = [
   { path: '/visitas',   label: 'Agenda',     icono: '📅', roles: ['cobrador', 'administrador', 'supervisor_cobranza'] },
   { path: '/mapa',      label: 'Mapa',       icono: '🗺️',  roles: ['cobrador', 'jefe_camioneta', 'administrador', 'supervisor_cobranza'] },
   { path: '/listado',   label: 'Listado',    icono: '📋', roles: ['administrador', 'supervisor_cobranza'] },
+  { path: '/primera-visita', label: 'Primera visita', icono: '🔍', roles: ['administrador', 'supervisor_cobranza'] },
   { path: '/lista-negra', label: 'Lista Negra', icono: '⛔', roles: null },
   { path: '/cortes',      label: 'Cortes',      icono: '✂️',  roles: ['administrador', 'supervisor_cobranza', 'cobrador'] },
   { path: '/usuarios',    label: 'Usuarios',    icono: '👤', roles: ['administrador', 'supervisor_cobranza'] },
@@ -32,6 +33,7 @@ export default function Layout({ children }) {
   const [conErrores, setConErrores] = useState(queueErrorCount())
   const [toast, setToast]           = useState(null)
   const [comentariosNoLeidos, setComentariosNoLeidos] = useState(0)
+  const [pendientesVerificacion, setPendientesVerificacion] = useState(0)
   const [sincProgreso, setSincProgreso] = useState(null) // { hecho, total } | null
 
   const mostrarToast = (mensaje, tipo = 'info') => {
@@ -133,6 +135,26 @@ export default function Layout({ children }) {
     return () => {
       clearInterval(intervalo)
       window.removeEventListener('comentarios-actualizados', consultarComentarios)
+    }
+  }, [usuario?.rol])
+
+  // Cuentas nuevas pendientes de primera visita / aprobación final (badge)
+  useEffect(() => {
+    if (!['administrador', 'supervisor_cobranza'].includes(usuario?.rol)) return
+
+    const consultarPendientes = () => {
+      api.get('/cuentas/verificacion/conteo').then(r => {
+        setPendientesVerificacion((r.data.pendientes_visita || 0) + (r.data.pendientes_aprobacion || 0))
+      }).catch(() => {})
+    }
+
+    consultarPendientes()
+    const intervalo = setInterval(consultarPendientes, 60000)
+    window.addEventListener('verificacion-actualizada', consultarPendientes)
+
+    return () => {
+      clearInterval(intervalo)
+      window.removeEventListener('verificacion-actualizada', consultarPendientes)
     }
   }, [usuario?.rol])
 
@@ -252,6 +274,11 @@ export default function Layout({ children }) {
                     {comentariosNoLeidos > 9 ? '9+' : comentariosNoLeidos}
                   </span>
                 )}
+                {item.path === '/primera-visita' && pendientesVerificacion > 0 && (
+                  <span className="absolute -top-1.5 -right-2 bg-amber-500 text-white text-[9px] leading-none min-w-[14px] h-[14px] rounded-full flex items-center justify-center px-0.5">
+                    {pendientesVerificacion > 9 ? '9+' : pendientesVerificacion}
+                  </span>
+                )}
               </span>
               {!colapsado && (
                 <span className="flex items-center gap-1.5">
@@ -259,6 +286,11 @@ export default function Layout({ children }) {
                   {item.path === '/' && comentariosNoLeidos > 0 && (
                     <span className="bg-red-500 text-white text-[10px] leading-none min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-1">
                       {comentariosNoLeidos > 9 ? '9+' : comentariosNoLeidos}
+                    </span>
+                  )}
+                  {item.path === '/primera-visita' && pendientesVerificacion > 0 && (
+                    <span className="bg-amber-500 text-white text-[10px] leading-none min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-1">
+                      {pendientesVerificacion > 9 ? '9+' : pendientesVerificacion}
                     </span>
                   )}
                 </span>

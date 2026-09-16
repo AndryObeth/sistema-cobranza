@@ -18,6 +18,7 @@ const Cortes      = lazy(() => import('./pages/cortes/Cortes.jsx'))
 const Mapa        = lazy(() => import('./pages/mapa/Mapa.jsx'))
 const Listado     = lazy(() => import('./pages/listado/Listado.jsx'))
 const ListaNegra  = lazy(() => import('./pages/listaNegra/ListaNegra.jsx'))
+const Verificacion = lazy(() => import('./pages/verificacion/Verificacion.jsx'))
 
 function CargandoPagina() {
   return (
@@ -54,6 +55,7 @@ function AppRoutes() {
         <Route path="/cortes"   element={<RutaProtegida roles={['administrador', 'supervisor_cobranza', 'cobrador']}><Cortes /></RutaProtegida>} />
         <Route path="/mapa"     element={<RutaProtegida roles={['cobrador', 'jefe_camioneta', 'administrador', 'supervisor_cobranza']}><Mapa /></RutaProtegida>} />
         <Route path="/listado"     element={<RutaProtegida roles={['administrador', 'supervisor_cobranza']}><Listado /></RutaProtegida>} />
+        <Route path="/primera-visita" element={<RutaProtegida roles={['administrador', 'supervisor_cobranza']}><Verificacion /></RutaProtegida>} />
         <Route path="/lista-negra" element={<RutaProtegida><ListaNegra /></RutaProtegida>} />
       </Routes>
     </Suspense>

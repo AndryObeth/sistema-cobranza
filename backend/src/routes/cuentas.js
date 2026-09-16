@@ -810,4 +810,223 @@ router.post('/:id/cancelar', auth, async (req, res) => {
   }
 })
 
+// ─────────────────────────────────────────────────────────────────────────
+// Primera visita del supervisor: control de calidad antes de que una cuenta
+// nueva sea visible/cobrable para el cobrador. Dos filtros en cadena:
+//   pendiente_visita -> (supervisor) -> en_revision_admin -> (admin) -> aprobada
+// Rechazar en cualquiera de los dos pasos cancela la cuenta y la venta,
+// igual que POST /cuentas/:id/cancelar.
+// ─────────────────────────────────────────────────────────────────────────
+
+const puedeVerificar = (rol) => ['administrador', 'supervisor_cobranza'].includes(rol)
+
+// Calcula las alertas automáticas de una cuenta: cuántas otras cuentas
+// activas tiene el mismo cliente, y si el abono quedó por debajo de lo
+// sugerido (mismo cálculo que abono_semanal_sugerido en Ventas.jsx).
+async function calcularAlertas(cuenta) {
+  const otrasCuentasActivas = await prisma.cuenta.count({
+    where: {
+      id_cliente: cuenta.id_cliente,
+      id_cuenta:  { not: cuenta.id_cuenta },
+      estado_cuenta: { in: ['activa', 'atraso', 'moroso'] },
+    }
+  })
+  const semanas = cuenta.semanas_plazo || 1
+  const abono_sugerido = Math.max(100, Math.ceil(parseFloat(cuenta.precio_plan_actual) / semanas))
+  const abono_actual   = cuenta.abono_semanal ? parseFloat(cuenta.abono_semanal) : abono_sugerido
+  return {
+    otras_cuentas_activas: otrasCuentasActivas,
+    cliente_con_varias_cuentas: otrasCuentasActivas > 0,
+    abono_sugerido,
+    abono_actual,
+    abono_bajo: abono_actual < abono_sugerido * 0.85,
+  }
+}
+
+const INCLUDE_VERIFICACION = {
+  cliente: true,
+  venta: {
+    include: {
+      vendedor: { select: { nombre: true } },
+      detalles: { select: { producto: true, cantidad: true, precio_final_unitario: true } },
+    }
+  },
+  supervisor_visita: { select: { nombre: true } },
+  admin_aprobacion:  { select: { nombre: true } },
+}
+
+// GET /api/cuentas/verificacion/conteo — para el badge del menú (liviano, sin alertas)
+router.get('/verificacion/conteo', auth, async (req, res) => {
+  try {
+    if (!puedeVerificar(req.usuario.rol)) return res.json({ pendientes_visita: 0, pendientes_aprobacion: 0 })
+    const [pendientes_visita, pendientes_aprobacion] = await Promise.all([
+      prisma.cuenta.count({ where: { estado_verificacion: 'pendiente_visita' } }),
+      prisma.cuenta.count({ where: { estado_verificacion: 'en_revision_admin' } }),
+    ])
+    res.json({ pendientes_visita, pendientes_aprobacion })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener el conteo', detalle: error.message })
+  }
+})
+
+// GET /api/cuentas/verificacion/pendientes-visita — cola del supervisor
+router.get('/verificacion/pendientes-visita', auth, async (req, res) => {
+  try {
+    if (!puedeVerificar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
+    const cuentas = await prisma.cuenta.findMany({
+      where: { estado_verificacion: 'pendiente_visita' },
+      include: INCLUDE_VERIFICACION,
+      orderBy: { fecha_inicio: 'asc' },
+    })
+    const conAlertas = await Promise.all(cuentas.map(async c => ({ ...c, alertas: await calcularAlertas(c) })))
+    res.json(conAlertas)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener cuentas pendientes de visita', detalle: error.message })
+  }
+})
+
+// GET /api/cuentas/verificacion/pendientes-aprobacion — cola del segundo visto bueno
+router.get('/verificacion/pendientes-aprobacion', auth, async (req, res) => {
+  try {
+    if (!puedeVerificar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
+    const cuentas = await prisma.cuenta.findMany({
+      where: { estado_verificacion: 'en_revision_admin' },
+      include: INCLUDE_VERIFICACION,
+      orderBy: { fecha_primera_visita: 'asc' },
+    })
+    const conAlertas = await Promise.all(cuentas.map(async c => ({ ...c, alertas: await calcularAlertas(c) })))
+    res.json(conAlertas)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener cuentas pendientes de aprobación', detalle: error.message })
+  }
+})
+
+// POST /api/cuentas/:id/verificacion/visitar — primer filtro (supervisor)
+router.post('/:id/verificacion/visitar', auth, async (req, res) => {
+  try {
+    if (!puedeVerificar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
+    const id_cuenta = parseInt(req.params.id)
+    const { aprobar, notas } = req.body
+
+    const cuenta = await prisma.cuenta.findUnique({ where: { id_cuenta } })
+    if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
+    if (cuenta.estado_verificacion !== 'pendiente_visita') {
+      return res.status(400).json({ error: 'Esta cuenta ya no está pendiente de primera visita' })
+    }
+
+    if (aprobar) {
+      const actualizada = await prisma.cuenta.update({
+        where: { id_cuenta },
+        data: {
+          estado_verificacion:  'en_revision_admin',
+          notas_primera_visita: notas || null,
+          id_supervisor_visita: req.usuario.id,
+          fecha_primera_visita: new Date(),
+        }
+      })
+      return res.json({ mensaje: 'Visita registrada — enviada a aprobación final', cuenta: actualizada })
+    }
+
+    if (!notas?.trim()) return res.status(400).json({ error: 'Se requiere el motivo del rechazo' })
+    const hoyStr = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })
+    const nota = `Rechazada en primera visita el ${hoyStr} por: ${notas.trim()}`
+    const obsActualizada = cuenta.observaciones ? `${cuenta.observaciones} | ${nota}` : nota
+
+    await prisma.$transaction([
+      prisma.cuenta.update({
+        where: { id_cuenta },
+        data: {
+          estado_cuenta: 'cancelada',
+          estado_verificacion: 'rechazada',
+          observaciones: obsActualizada,
+          notas_primera_visita: notas.trim(),
+          id_supervisor_visita: req.usuario.id,
+          fecha_primera_visita: new Date(),
+        }
+      }),
+      prisma.venta.update({
+        where: { id_venta: cuenta.id_venta },
+        data:  { estatus_venta: 'cancelada', motivo_cancelacion: nota },
+      }),
+    ])
+    res.json({ mensaje: 'Cuenta rechazada y cancelada' })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al registrar la visita', detalle: error.message })
+  }
+})
+
+// POST /api/cuentas/:id/verificacion/aprobar-final — segundo visto bueno (admin)
+router.post('/:id/verificacion/aprobar-final', auth, async (req, res) => {
+  try {
+    if (!puedeVerificar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
+    const id_cuenta = parseInt(req.params.id)
+    const { aprobar, notas } = req.body
+
+    const cuenta = await prisma.cuenta.findUnique({ where: { id_cuenta } })
+    if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
+    if (cuenta.estado_verificacion !== 'en_revision_admin') {
+      return res.status(400).json({ error: 'Esta cuenta no está pendiente de aprobación final' })
+    }
+
+    if (aprobar) {
+      const actualizada = await prisma.cuenta.update({
+        where: { id_cuenta },
+        data: {
+          estado_verificacion:    'aprobada',
+          notas_aprobacion_admin: notas || null,
+          id_admin_aprobacion:    req.usuario.id,
+          fecha_aprobacion:       new Date(),
+        }
+      })
+      return res.json({ mensaje: 'Cuenta aprobada — ya es visible para el cobrador', cuenta: actualizada })
+    }
+
+    if (!notas?.trim()) return res.status(400).json({ error: 'Se requiere el motivo del rechazo' })
+    const hoyStr = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })
+    const nota = `Rechazada en aprobación final el ${hoyStr} por: ${notas.trim()}`
+    const obsActualizada = cuenta.observaciones ? `${cuenta.observaciones} | ${nota}` : nota
+
+    await prisma.$transaction([
+      prisma.cuenta.update({
+        where: { id_cuenta },
+        data: {
+          estado_cuenta: 'cancelada',
+          estado_verificacion: 'rechazada',
+          observaciones: obsActualizada,
+          notas_aprobacion_admin: notas.trim(),
+          id_admin_aprobacion: req.usuario.id,
+          fecha_aprobacion: new Date(),
+        }
+      }),
+      prisma.venta.update({
+        where: { id_venta: cuenta.id_venta },
+        data:  { estatus_venta: 'cancelada', motivo_cancelacion: nota },
+      }),
+    ])
+    res.json({ mensaje: 'Cuenta rechazada y cancelada' })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al registrar la aprobación', detalle: error.message })
+  }
+})
+
+// POST /api/cuentas/:id/verificacion/regresar — admin la regresa al supervisor
+router.post('/:id/verificacion/regresar', auth, async (req, res) => {
+  try {
+    if (!puedeVerificar(req.usuario.rol)) return res.status(403).json({ error: 'No autorizado' })
+    const id_cuenta = parseInt(req.params.id)
+    const cuenta = await prisma.cuenta.findUnique({ where: { id_cuenta } })
+    if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
+    if (cuenta.estado_verificacion !== 'en_revision_admin') {
+      return res.status(400).json({ error: 'Esta cuenta no está pendiente de aprobación final' })
+    }
+    const actualizada = await prisma.cuenta.update({
+      where: { id_cuenta },
+      data:  { estado_verificacion: 'pendiente_visita' },
+    })
+    res.json({ mensaje: 'Cuenta regresada al supervisor', cuenta: actualizada })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al regresar la cuenta', detalle: error.message })
+  }
+})
+
 module.exports = router

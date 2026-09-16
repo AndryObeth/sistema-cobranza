@@ -11,6 +11,7 @@ router.get('/cartera/:id_cobrador', auth, async (req, res) => {
     const cuentas = await prisma.cuenta.findMany({
       where: {
         estado_cuenta: { in: ['activa', 'atraso', 'moroso'] },
+        estado_verificacion: 'aprobada',
         venta: { id_cobrador: parseInt(req.params.id_cobrador) }
       },
       include: {
@@ -64,7 +65,10 @@ router.get('/cuenta/:id_cuenta', auth, async (req, res) => {
 // GET /api/pagos/todas-cuentas — todas las cuentas activas (para admin/cobrador)
 router.get('/todas-cuentas', auth, async (req, res) => {
   try {
-    const where = { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] } }
+    // Cuentas nuevas que todavía no pasan la primera visita del supervisor +
+    // segundo visto bueno del admin no se muestran aquí (ni a cobradores ni a
+    // nadie más) — solo aparecen en la cola dedicada de /cuentas/verificacion.
+    const where = { estado_cuenta: { in: ['activa', 'atraso', 'moroso'] }, estado_verificacion: 'aprobada' }
     if (req.usuario.rol === 'cobrador' && req.usuario.rutas_asignadas?.length) {
       where.cliente = { ruta: { in: req.usuario.rutas_asignadas } }
     }
