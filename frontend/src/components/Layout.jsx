@@ -174,6 +174,7 @@ export default function Layout({ children }) {
   const CACHES_DE_DATOS = [
     'api-cuentas', 'api-clientes', 'api-cuenta-detalle', 'api-ventas',
     'api-visitas-cuenta', 'api-visitas-agenda', 'api-ubicaciones-cliente',
+    'api-verificacion',
   ]
 
   const handleForzarActualizacion = async () => {

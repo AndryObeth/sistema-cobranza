@@ -117,6 +117,19 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          {
+            // GET /api/cuentas/verificacion/* — Primera visita (pendientes-visita,
+            // pendientes-aprobacion, conteo). El supervisor puede estar en la
+            // misma zona sin señal que los cobradores.
+            urlPattern: ({ url }) => url.pathname.includes('/api/cuentas/verificacion/'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-verificacion',
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 12 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
       },
     }),

@@ -117,6 +117,55 @@ export function encolarUbicacionNombrada(datos) {
   return operacion
 }
 
+// Completar datos del cliente (teléfono, referencias, día de cobro...) desde
+// Primera visita — PUT /clientes/:id espera el objeto completo, no un parche.
+export function encolarClienteCompleto(datos) {
+  const queue = getQueue()
+  const operacion = {
+    id:           crypto.randomUUID(),
+    tipo:         'PUT_CLIENTE_COMPLETO',
+    datos, // { id_cliente, form }
+    timestamp:    Date.now(),
+    sincronizado: false,
+    error:        null,
+  }
+  queue.push(operacion)
+  saveQueue(queue)
+  return operacion
+}
+
+// Frecuencia/fecha de primer cobro de una cuenta (Primera visita y Cobranza).
+export function encolarFrecuencia(datos) {
+  const queue = getQueue()
+  const operacion = {
+    id:           crypto.randomUUID(),
+    tipo:         'PUT_FRECUENCIA',
+    datos, // { id_cuenta, cambios }
+    timestamp:    Date.now(),
+    sincronizado: false,
+    error:        null,
+  }
+  queue.push(operacion)
+  saveQueue(queue)
+  return operacion
+}
+
+// Primer filtro / segundo visto bueno / regresar de Primera visita.
+export function encolarVerificacion(datos) {
+  const queue = getQueue()
+  const operacion = {
+    id:           crypto.randomUUID(),
+    tipo:         'POST_VERIFICACION',
+    datos, // { id_cuenta, accion: 'visitar' | 'aprobar-final' | 'regresar', aprobar, notas }
+    timestamp:    Date.now(),
+    sincronizado: false,
+    error:        null,
+  }
+  queue.push(operacion)
+  saveQueue(queue)
+  return operacion
+}
+
 // ── Sincronizar la cola completa ──────────────────────────────────────────────
 
 // Envía UNA operación de la cola. Devuelve { sincronizado, error, errorEsDeRed }.
@@ -139,6 +188,13 @@ async function enviarOperacion(op) {
       } else {
         await api.post(`/clientes/${idCliente}/ubicaciones`, payload, { timeout: 20000 })
       }
+    } else if (op.tipo === 'PUT_CLIENTE_COMPLETO') {
+      await api.put(`/clientes/${op.datos.id_cliente}`, op.datos.form, { timeout: 20000 })
+    } else if (op.tipo === 'PUT_FRECUENCIA') {
+      await api.put(`/pagos/cuenta/${op.datos.id_cuenta}/frecuencia`, op.datos.cambios, { timeout: 20000 })
+    } else if (op.tipo === 'POST_VERIFICACION') {
+      const { id_cuenta, accion, aprobar, notas } = op.datos
+      await api.post(`/cuentas/${id_cuenta}/verificacion/${accion}`, { aprobar, notas }, { timeout: 20000 })
     }
     return { sincronizado: true, error: null, errorEsDeRed: false }
   } catch (err) {

@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
 import { generarTicket, compartirTicket } from '../../utils/ticket.js'
 import { comprimirImagen } from '../../utils/imagen.js'
+import { encolarPago, encolarClienteCompleto, encolarUbicacion, encolarFrecuencia, encolarVerificacion } from '../../utils/offlineQueue.js'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
@@ -26,6 +27,7 @@ export default function Verificacion() {
   const [cargando, setCargando] = useState(true)
   const [seleccionada, setSeleccionada] = useState(null)
   const [filtroRuta, setFiltroRuta] = useState('')
+  const [aviso, setAviso] = useState('')
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -48,14 +50,30 @@ export default function Verificacion() {
   const pendientesAprobacionFiltrado = filtrarPorRuta(pendientesAprobacion)
   const listaActiva = tab === 'visita' ? pendientesVisitaFiltrado : pendientesAprobacionFiltrado
 
-  const alTerminar = () => {
+  // idCuentaOffline: cuando la acción se encoló sin conexión no hay forma de
+  // confirmar contra el servidor todavía — se quita de la lista local nada
+  // más para reflejar que ya se actuó, en vez de recargar (que con caché
+  // vieja podría "regresar" la tarjeta y parecer que no funcionó).
+  const alTerminar = (idCuentaOffline) => {
     setSeleccionada(null)
-    cargar()
+    if (idCuentaOffline) {
+      setPendientesVisita(prev => prev.filter(c => c.id_cuenta !== idCuentaOffline))
+      setPendientesAprobacion(prev => prev.filter(c => c.id_cuenta !== idCuentaOffline))
+      setAviso('📴 Guardado sin conexión — se enviará solo cuando haya señal')
+      setTimeout(() => setAviso(''), 5000)
+    } else {
+      cargar()
+    }
     window.dispatchEvent(new Event('verificacion-actualizada'))
   }
 
   return (
     <Layout>
+      {aviso && (
+        <div className="mb-4 bg-amber-50 border border-amber-300 text-amber-800 text-sm rounded-xl px-4 py-2.5">
+          {aviso}
+        </div>
+      )}
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Primera visita</h2>
         <p className="text-gray-500 text-sm mt-1">
@@ -238,12 +256,20 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
   const guardarFechaPrimerCobro = async () => {
     setGuardandoFecha(true)
     setError('')
+    const cambios = { fecha_primer_cobro: fechaPrimerCobro }
+    const encolarYMostrar = () => {
+      encolarFrecuencia({ id_cuenta: c.id_cuenta, cambios })
+      setFechaGuardada(true)
+      setTimeout(() => setFechaGuardada(false), 3000)
+    }
+    if (!navigator.onLine) { encolarYMostrar(); setGuardandoFecha(false); return }
     try {
-      await api.put(`/pagos/cuenta/${c.id_cuenta}/frecuencia`, { fecha_primer_cobro: fechaPrimerCobro }, { timeout: 10000 })
+      await api.put(`/pagos/cuenta/${c.id_cuenta}/frecuencia`, cambios, { timeout: 10000 })
       setFechaGuardada(true)
       setTimeout(() => setFechaGuardada(false), 3000)
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al guardar la fecha de primer cobro')
+      if (err.response) setError(err.response.data?.error || 'Error al guardar la fecha de primer cobro')
+      else encolarYMostrar()
     } finally {
       setGuardandoFecha(false)
     }
@@ -266,19 +292,58 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
     if (monto > parseFloat(c.saldo_actual)) { setErrorPago(`El monto no puede ser mayor al saldo ($${fmt(c.saldo_actual)})`); return }
     setGuardandoPago(true)
     setErrorPago('')
-    try {
-      const res = await api.post('/pagos', {
-        id_cuenta: c.id_cuenta,
+
+    const payloadPago = {
+      id_cuenta: c.id_cuenta,
+      monto_pago: monto,
+      tipo_pago: 'abono',
+      origen_pago: 'domicilio',
+      metodo_pago: formPago.metodo_pago,
+      observaciones: formPago.observaciones,
+      ...(formPago.metodo_pago === 'deposito' && comprobanteDeposito ? { comprobante_base64: comprobanteDeposito } : {}),
+      // Misma clave en todos los reintentos (directo, cola offline, resincronización).
+      idempotency_key: crypto.randomUUID(),
+    }
+
+    const datosTicketBase = {
+      cliente_nombre: c.cliente?.nombre,
+      numero_expediente: c.cliente?.numero_expediente,
+      numero_cuenta: c.numero_cuenta,
+      folio_cuenta: c.folio_cuenta,
+      plan_actual: c.plan_actual,
+      cobrador_nombre: usuario?.nombre || 'Supervisor',
+      precio_original_total: c.venta?.precio_original_total,
+      precio_final_total: c.venta?.precio_final_total,
+      productos: (c.venta?.detalles || []).map(d => ({ nombre: d.producto, cantidad: d.cantidad })),
+    }
+
+    const encolarYMostrarProvisional = () => {
+      encolarPago(payloadPago)
+      const saldoAntes = parseFloat(c.saldo_actual)
+      setDatosPagoRegistrado({
+        ...datosTicketBase,
+        id_pago: 'PENDIENTE',
+        fecha_pago: new Date().toISOString(),
         monto_pago: monto,
+        saldo_anterior: saldoAntes,
+        saldo_nuevo: Math.max(0, saldoAntes - monto),
         tipo_pago: 'abono',
         origen_pago: 'domicilio',
         metodo_pago: formPago.metodo_pago,
-        observaciones: formPago.observaciones,
-        ...(formPago.metodo_pago === 'deposito' && comprobanteDeposito ? { comprobante_base64: comprobanteDeposito } : {}),
-        idempotency_key: crypto.randomUUID(),
-      }, { timeout: 10000 })
+        pendienteSync: true,
+      })
+      setFormPago({ monto_pago: '', metodo_pago: 'efectivo', observaciones: '' })
+      setComprobanteDeposito(null)
+      setMostrarPago(false)
+    }
+
+    if (!navigator.onLine) { encolarYMostrarProvisional(); setGuardandoPago(false); return }
+
+    try {
+      const res = await api.post('/pagos', payloadPago, { timeout: 10000 })
       const p = res.data.pago
       setDatosPagoRegistrado({
+        ...datosTicketBase,
         id_pago: p.id_pago,
         fecha_pago: p.fecha_pago,
         monto_pago: p.monto_pago,
@@ -287,21 +352,18 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
         tipo_pago: p.tipo_pago,
         origen_pago: p.origen_pago,
         metodo_pago: p.metodo_pago,
-        cliente_nombre: c.cliente?.nombre,
-        numero_expediente: c.cliente?.numero_expediente,
-        numero_cuenta: c.numero_cuenta,
-        folio_cuenta: c.folio_cuenta,
-        plan_actual: c.plan_actual,
-        cobrador_nombre: usuario?.nombre || 'Supervisor',
-        precio_original_total: c.venta?.precio_original_total,
-        precio_final_total: c.venta?.precio_final_total,
-        productos: (c.venta?.detalles || []).map(d => ({ nombre: d.producto, cantidad: d.cantidad })),
       })
       setFormPago({ monto_pago: '', metodo_pago: 'efectivo', observaciones: '' })
       setComprobanteDeposito(null)
       setMostrarPago(false)
     } catch (err) {
-      setErrorPago(err.response?.data?.error || 'Error al registrar el pago')
+      if (err.response) {
+        setErrorPago(err.response.data?.error || 'Error al registrar el pago')
+      } else {
+        // Sin respuesta del servidor (señal mala o se agotó el tiempo): se
+        // encola en vez de perder el pago.
+        encolarYMostrarProvisional()
+      }
     } finally {
       setGuardandoPago(false)
     }
@@ -320,12 +382,19 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
   const guardarCliente = async () => {
     setGuardandoCliente(true)
     setError('')
+    const encolarYMostrar = () => {
+      encolarClienteCompleto({ id_cliente: c.cliente.id_cliente, form })
+      setClienteGuardado(true)
+      setTimeout(() => setClienteGuardado(false), 3000)
+    }
+    if (!navigator.onLine) { encolarYMostrar(); setGuardandoCliente(false); return }
     try {
       await api.put(`/clientes/${c.cliente.id_cliente}`, form, { timeout: 10000 })
       setClienteGuardado(true)
       setTimeout(() => setClienteGuardado(false), 3000)
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al guardar los datos del cliente')
+      if (err.response) setError(err.response.data?.error || 'Error al guardar los datos del cliente')
+      else encolarYMostrar()
     } finally {
       setGuardandoCliente(false)
     }
@@ -358,41 +427,69 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
     if (!ubicPendiente) return
     setGuardandoUbic(true)
     setError('')
+    const payloadUbic = { id_cliente: c.cliente.id_cliente, latitud: ubicPendiente.lat, longitud: ubicPendiente.lng, plus_code: ubicPendiente.plus_code }
+    const encolarYMostrar = () => {
+      encolarUbicacion(payloadUbic)
+      setUbicGuardada(true)
+      setTimeout(() => setUbicGuardada(false), 3000)
+    }
+    if (!navigator.onLine) { encolarYMostrar(); setGuardandoUbic(false); return }
     try {
       await api.put(`/clientes/${c.cliente.id_cliente}/coordenadas`, ubicPendiente, { timeout: 10000 })
       setUbicGuardada(true)
       setTimeout(() => setUbicGuardada(false), 3000)
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al guardar la ubicación')
+      if (err.response) setError(err.response.data?.error || 'Error al guardar la ubicación')
+      else encolarYMostrar()
     } finally {
       setGuardandoUbic(false)
     }
   }
 
-  const endpoint = tab === 'visita' ? `/cuentas/${c.id_cuenta}/verificacion/visitar` : `/cuentas/${c.id_cuenta}/verificacion/aprobar-final`
+  const accion = tab === 'visita' ? 'visitar' : 'aprobar-final'
+  const endpoint = `/cuentas/${c.id_cuenta}/verificacion/${accion}`
 
   const enviar = async (aprobar) => {
     if (!aprobar && !motivoRechazo.trim()) { setError('Escribe el motivo del rechazo'); return }
     setGuardando(true)
     setError('')
+    const notasFinales = aprobar ? notas : motivoRechazo
+    const encolarYSalir = () => {
+      encolarVerificacion({ id_cuenta: c.id_cuenta, accion, aprobar, notas: notasFinales })
+      onListo(c.id_cuenta)
+    }
+    if (!navigator.onLine) { encolarYSalir(); return }
     try {
-      await api.post(endpoint, { aprobar, notas: aprobar ? notas : motivoRechazo }, { timeout: 10000 })
+      await api.post(endpoint, { aprobar, notas: notasFinales }, { timeout: 10000 })
       onListo()
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al guardar')
-      setGuardando(false)
+      if (err.response) {
+        setError(err.response.data?.error || 'Error al guardar')
+        setGuardando(false)
+      } else {
+        encolarYSalir()
+      }
     }
   }
 
   const regresarAlSupervisor = async () => {
     setGuardando(true)
     setError('')
+    const encolarYSalir = () => {
+      encolarVerificacion({ id_cuenta: c.id_cuenta, accion: 'regresar' })
+      onListo(c.id_cuenta)
+    }
+    if (!navigator.onLine) { encolarYSalir(); return }
     try {
       await api.post(`/cuentas/${c.id_cuenta}/verificacion/regresar`, {}, { timeout: 10000 })
       onListo()
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al regresar la cuenta')
-      setGuardando(false)
+      if (err.response) {
+        setError(err.response.data?.error || 'Error al regresar la cuenta')
+        setGuardando(false)
+      } else {
+        encolarYSalir()
+      }
     }
   }
 
