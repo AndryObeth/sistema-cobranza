@@ -29,8 +29,8 @@ export default function Verificacion() {
   const [filtroRuta, setFiltroRuta] = useState('')
   const [aviso, setAviso] = useState('')
 
-  const cargar = useCallback(async () => {
-    setCargando(true)
+  const cargar = useCallback(async (silencioso) => {
+    if (!silencioso) setCargando(true)
     try {
       const [rv, ra] = await Promise.all([
         api.get('/cuentas/verificacion/pendientes-visita', { timeout: 10000 }),
@@ -39,10 +39,19 @@ export default function Verificacion() {
       setPendientesVisita(rv.data)
       setPendientesAprobacion(ra.data)
     } catch { /* la lista se queda como estaba, el usuario puede reintentar */ }
-    setCargando(false)
+    if (!silencioso) setCargando(false)
   }, [esAdmin])
 
   useEffect(() => { cargar() }, [cargar])
+
+  // Refresco periódico en segundo plano (sin el "Cargando…" de pantalla
+  // completa): la lista solo se actualizaba una vez al entrar, así que una
+  // venta nueva, o una cuenta que otro admin/supervisor regresó o reenvió,
+  // no aparecía hasta recargar la página a mano.
+  useEffect(() => {
+    const intervalo = setInterval(() => cargar(true), 60000)
+    return () => clearInterval(intervalo)
+  }, [cargar])
 
   const rutasDisponibles = [...new Set([...pendientesVisita, ...pendientesAprobacion].map(c => c.cliente?.ruta).filter(Boolean))].sort()
   const filtrarPorRuta = lista => filtroRuta ? lista.filter(c => c.cliente?.ruta === filtroRuta) : lista
@@ -285,12 +294,18 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
   const [guardandoPago, setGuardandoPago] = useState(false)
   const [errorPago, setErrorPago] = useState('')
   const [datosPagoRegistrado, setDatosPagoRegistrado] = useState(null)
+  // c.saldo_actual es el saldo de cuando se abrió la ficha — no se refresca
+  // solo. Si se cobra más de un abono en la misma visita ("+ Registrar otro
+  // pago"), hay que llevar la cuenta localmente o el segundo abono valida
+  // contra un saldo que ya no es el real (deja cobrar de más, o rechaza de
+  // menos de lo que en realidad se puede).
+  const [saldoVigente, setSaldoVigente] = useState(parseFloat(c.saldo_actual))
 
   const registrarPago = async (e) => {
     e.preventDefault()
     const monto = parseFloat(formPago.monto_pago)
     if (!formPago.monto_pago || monto <= 0) { setErrorPago('Ingresa un monto válido'); return }
-    if (monto > parseFloat(c.saldo_actual)) { setErrorPago(`El monto no puede ser mayor al saldo ($${fmt(c.saldo_actual)})`); return }
+    if (monto > saldoVigente) { setErrorPago(`El monto no puede ser mayor al saldo ($${fmt(saldoVigente)})`); return }
     setGuardandoPago(true)
     setErrorPago('')
 
@@ -320,19 +335,21 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
 
     const encolarYMostrarProvisional = () => {
       encolarPago(payloadPago)
-      const saldoAntes = parseFloat(c.saldo_actual)
+      const saldoAntes = saldoVigente
+      const saldoDespues = Math.max(0, saldoAntes - monto)
       setDatosPagoRegistrado({
         ...datosTicketBase,
         id_pago: 'PENDIENTE',
         fecha_pago: new Date().toISOString(),
         monto_pago: monto,
         saldo_anterior: saldoAntes,
-        saldo_nuevo: Math.max(0, saldoAntes - monto),
+        saldo_nuevo: saldoDespues,
         tipo_pago: 'abono',
         origen_pago: 'domicilio',
         metodo_pago: formPago.metodo_pago,
         pendienteSync: true,
       })
+      setSaldoVigente(saldoDespues)
       setFormPago({ monto_pago: '', metodo_pago: 'efectivo', observaciones: '' })
       setComprobanteDeposito(null)
       setMostrarPago(false)
@@ -354,6 +371,7 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
         origen_pago: p.origen_pago,
         metodo_pago: p.metodo_pago,
       })
+      setSaldoVigente(parseFloat(p.saldo_nuevo))
       setFormPago({ monto_pago: '', metodo_pago: 'efectivo', observaciones: '' })
       setComprobanteDeposito(null)
       setMostrarPago(false)
@@ -592,7 +610,7 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
                 <p><strong>Plan:</strong> {LABEL_PLAN[c.plan_actual] || c.plan_actual}</p>
                 <p><strong>Precio:</strong> {fmt(c.precio_plan_actual)}</p>
                 <p><strong>Enganche recibido:</strong> {fmt(c.abono_inicial)}</p>
-                <p><strong>Saldo actual:</strong> {fmt(c.saldo_actual)}</p>
+                <p><strong>Saldo actual:</strong> {fmt(saldoVigente)}</p>
                 <p><strong>Frecuencia:</strong> {(c.frecuencia_pago || 'semanal').replace(/_/g, ' ')}</p>
                 <p><strong>Abono por periodo:</strong> {fmt(a.abono_actual)}</p>
               </div>
@@ -646,7 +664,7 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
               <form onSubmit={registrarPago} className="border border-blue-200 bg-blue-50 rounded-xl p-3 space-y-2">
                 <p className="text-xs font-semibold text-blue-800">💵 Cobrar primer pago</p>
                 <div>
-                  <input type="number" step="0.01" min="0.01" max={c.saldo_actual} required
+                  <input type="number" step="0.01" min="0.01" max={saldoVigente} required
                     value={formPago.monto_pago}
                     onChange={e => setFormPago({ ...formPago, monto_pago: e.target.value })}
                     placeholder="0.00"

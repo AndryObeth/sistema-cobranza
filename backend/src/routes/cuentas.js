@@ -927,6 +927,15 @@ router.post('/:id/verificacion/visitar', auth, async (req, res) => {
     const cuenta = await prisma.cuenta.findUnique({ where: { id_cuenta } })
     if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
     if (cuenta.estado_verificacion !== 'pendiente_visita') {
+      // No hay idempotency_key aquí (a diferencia de /pagos y /visitas) — con
+      // señal mala, la respuesta se puede perder después de guardar y el
+      // cliente reintenta creyendo que falló. Si el estado actual es
+      // justo el que ESTA llamada habría producido, es casi seguro ese
+      // reintento: se responde 200 en vez de 400 para no ensuciar la cola
+      // offline con un "error" que en realidad ya se guardó bien.
+      const yaQuedoIgual = (aprobar && cuenta.estado_verificacion === 'en_revision_admin')
+        || (!aprobar && cuenta.estado_verificacion === 'rechazada')
+      if (yaQuedoIgual) return res.json({ mensaje: 'Esta visita ya se había registrado', cuenta })
       return res.status(400).json({ error: 'Esta cuenta ya no está pendiente de primera visita' })
     }
 
@@ -981,6 +990,12 @@ router.post('/:id/verificacion/aprobar-final', auth, async (req, res) => {
     const cuenta = await prisma.cuenta.findUnique({ where: { id_cuenta } })
     if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
     if (cuenta.estado_verificacion !== 'en_revision_admin') {
+      // Mismo criterio que en /visitar: un reintento sin idempotency_key por
+      // respuesta perdida no debe verse como error si el estado ya es el
+      // que esta llamada habría dejado.
+      const yaQuedoIgual = (aprobar && cuenta.estado_verificacion === 'aprobada')
+        || (!aprobar && cuenta.estado_verificacion === 'rechazada')
+      if (yaQuedoIgual) return res.json({ mensaje: 'Esta aprobación ya se había registrado', cuenta })
       return res.status(400).json({ error: 'Esta cuenta no está pendiente de aprobación final' })
     }
 
@@ -1033,6 +1048,9 @@ router.post('/:id/verificacion/regresar', auth, async (req, res) => {
     const cuenta = await prisma.cuenta.findUnique({ where: { id_cuenta } })
     if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
     if (cuenta.estado_verificacion !== 'en_revision_admin') {
+      if (cuenta.estado_verificacion === 'pendiente_visita') {
+        return res.json({ mensaje: 'Esta cuenta ya se había regresado al supervisor', cuenta })
+      }
       return res.status(400).json({ error: 'Esta cuenta no está pendiente de aprobación final' })
     }
     const actualizada = await prisma.cuenta.update({
