@@ -3,6 +3,8 @@ import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
+import { generarTicket, compartirTicket } from '../../utils/ticket.js'
+import { comprimirImagen } from '../../utils/imagen.js'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
@@ -141,6 +143,7 @@ function TarjetaCuenta({ cuenta: c, tab, onClick }) {
 }
 
 function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
+  const { usuario } = useAuth()
   const a = c.alertas || {}
   const [notas, setNotas] = useState('')
   const [modoRechazo, setModoRechazo] = useState(false)
@@ -206,6 +209,74 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
     } finally {
       setGuardandoFecha(false)
     }
+  }
+
+  // Cobrar el primer abono en la propia visita — mismo endpoint y mismo
+  // ticket que usa Cobranza.jsx, para que sea el comprobante de siempre.
+  const [mostrarPago, setMostrarPago] = useState(false)
+  const [formPago, setFormPago] = useState({ monto_pago: '', metodo_pago: 'efectivo', observaciones: '' })
+  const [comprobanteDeposito, setComprobanteDeposito] = useState(null)
+  const [procesandoComprobante, setProcesandoComprobante] = useState(false)
+  const [guardandoPago, setGuardandoPago] = useState(false)
+  const [errorPago, setErrorPago] = useState('')
+  const [datosPagoRegistrado, setDatosPagoRegistrado] = useState(null)
+
+  const registrarPago = async (e) => {
+    e.preventDefault()
+    const monto = parseFloat(formPago.monto_pago)
+    if (!formPago.monto_pago || monto <= 0) { setErrorPago('Ingresa un monto válido'); return }
+    if (monto > parseFloat(c.saldo_actual)) { setErrorPago(`El monto no puede ser mayor al saldo ($${fmt(c.saldo_actual)})`); return }
+    setGuardandoPago(true)
+    setErrorPago('')
+    try {
+      const res = await api.post('/pagos', {
+        id_cuenta: c.id_cuenta,
+        monto_pago: monto,
+        tipo_pago: 'abono',
+        origen_pago: 'domicilio',
+        metodo_pago: formPago.metodo_pago,
+        observaciones: formPago.observaciones,
+        ...(formPago.metodo_pago === 'deposito' && comprobanteDeposito ? { comprobante_base64: comprobanteDeposito } : {}),
+        idempotency_key: crypto.randomUUID(),
+      }, { timeout: 10000 })
+      const p = res.data.pago
+      setDatosPagoRegistrado({
+        id_pago: p.id_pago,
+        fecha_pago: p.fecha_pago,
+        monto_pago: p.monto_pago,
+        saldo_anterior: p.saldo_anterior,
+        saldo_nuevo: p.saldo_nuevo,
+        tipo_pago: p.tipo_pago,
+        origen_pago: p.origen_pago,
+        metodo_pago: p.metodo_pago,
+        cliente_nombre: c.cliente?.nombre,
+        numero_expediente: c.cliente?.numero_expediente,
+        numero_cuenta: c.numero_cuenta,
+        folio_cuenta: c.folio_cuenta,
+        plan_actual: c.plan_actual,
+        cobrador_nombre: usuario?.nombre || 'Supervisor',
+        precio_original_total: c.venta?.precio_original_total,
+        precio_final_total: c.venta?.precio_final_total,
+        productos: (c.venta?.detalles || []).map(d => ({ nombre: d.producto, cantidad: d.cantidad })),
+      })
+      setFormPago({ monto_pago: '', metodo_pago: 'efectivo', observaciones: '' })
+      setComprobanteDeposito(null)
+      setMostrarPago(false)
+    } catch (err) {
+      setErrorPago(err.response?.data?.error || 'Error al registrar el pago')
+    } finally {
+      setGuardandoPago(false)
+    }
+  }
+
+  const procesarComprobante = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setProcesandoComprobante(true)
+    try { setComprobanteDeposito(await comprimirImagen(file)) }
+    catch { alert('No se pudo procesar la imagen') }
+    finally { setProcesandoComprobante(false) }
   }
 
   const guardarCliente = async () => {
@@ -359,6 +430,91 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
               </button>
               {fechaGuardada && <span className="text-xs text-green-600 self-center">✓</span>}
             </div>
+          </div>
+
+          {/* Cobrar el primer abono en la propia visita */}
+          <div>
+            {datosPagoRegistrado ? (
+              <div className="bg-green-50 border border-green-300 rounded-xl p-3 space-y-2">
+                <p className="text-sm text-green-800 font-medium">
+                  ✅ Pago de {fmt(datosPagoRegistrado.monto_pago)} registrado — saldo restante {fmt(datosPagoRegistrado.saldo_nuevo)}
+                </p>
+                <div className="flex gap-2">
+                  <button type="button"
+                    onClick={() => generarTicket(datosPagoRegistrado).catch(() => alert('El navegador bloqueó la ventana emergente. Habilítala para ver el comprobante.'))}
+                    className="flex-1 text-xs px-3 py-2 bg-white border border-green-300 hover:bg-green-100 text-green-800 rounded-lg font-medium">
+                    🖨️ Ver comprobante
+                  </button>
+                  {'share' in navigator && (
+                    <button type="button" onClick={() => compartirTicket(datosPagoRegistrado)}
+                      className="flex-1 text-xs px-3 py-2 bg-white border border-green-300 hover:bg-green-100 text-green-800 rounded-lg font-medium">
+                      📲 Compartir
+                    </button>
+                  )}
+                </div>
+                <button type="button" onClick={() => setDatosPagoRegistrado(null)} className="text-xs text-gray-500 hover:text-gray-700">
+                  + Registrar otro pago
+                </button>
+              </div>
+            ) : !mostrarPago ? (
+              <button type="button" onClick={() => setMostrarPago(true)}
+                className="w-full py-2.5 rounded-xl text-sm font-medium transition border bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100">
+                💵 Cobrar primer pago
+              </button>
+            ) : (
+              <form onSubmit={registrarPago} className="border border-blue-200 bg-blue-50 rounded-xl p-3 space-y-2">
+                <p className="text-xs font-semibold text-blue-800">💵 Cobrar primer pago</p>
+                <div>
+                  <input type="number" step="0.01" min="0.01" max={c.saldo_actual} required
+                    value={formPago.monto_pago}
+                    onChange={e => setFormPago({ ...formPago, monto_pago: e.target.value })}
+                    placeholder="0.00"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <select value={formPago.metodo_pago}
+                  onChange={e => { const m = e.target.value; setFormPago({ ...formPago, metodo_pago: m }); if (m !== 'deposito') setComprobanteDeposito(null) }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="efectivo">Efectivo</option>
+                  <option value="deposito">Depósito</option>
+                </select>
+                {formPago.metodo_pago === 'deposito' && (
+                  <div className="border border-indigo-200 bg-indigo-50 rounded-lg p-2 space-y-2">
+                    {comprobanteDeposito ? (
+                      <div className="flex items-center gap-3">
+                        <img src={comprobanteDeposito} alt="Comprobante" className="w-16 h-16 object-cover rounded-lg border border-indigo-200" />
+                        <button type="button" onClick={() => setComprobanteDeposito(null)} className="text-xs text-red-600 hover:text-red-800 font-medium">Quitar foto</button>
+                      </div>
+                    ) : (
+                      <div className={`grid grid-cols-2 gap-2 ${procesandoComprobante ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <label className="flex items-center justify-center gap-1.5 bg-white border border-indigo-300 rounded-lg px-3 py-2 text-xs font-medium text-indigo-700 cursor-pointer hover:bg-indigo-100 transition">
+                          {procesandoComprobante ? 'Procesando…' : '📷 Tomar foto'}
+                          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={procesarComprobante} />
+                        </label>
+                        <label className="flex items-center justify-center gap-1.5 bg-white border border-indigo-300 rounded-lg px-3 py-2 text-xs font-medium text-indigo-700 cursor-pointer hover:bg-indigo-100 transition">
+                          🖼️ De galería
+                          <input type="file" accept="image/*" className="hidden" onChange={procesarComprobante} />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <input type="text" value={formPago.observaciones}
+                  onChange={e => setFormPago({ ...formPago, observaciones: e.target.value })}
+                  placeholder="Observaciones (opcional)"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                {errorPago && <p className="text-red-600 text-xs">{errorPago}</p>}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { setMostrarPago(false); setErrorPago('') }} disabled={guardandoPago}
+                    className="flex-1 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                    Cancelar
+                  </button>
+                  <button type="submit" disabled={guardandoPago}
+                    className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50">
+                    {guardandoPago ? 'Guardando...' : 'Registrar pago'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
 
           {/* Datos del cliente */}

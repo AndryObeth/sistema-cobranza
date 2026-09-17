@@ -8,6 +8,8 @@ import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/p
 import { sinAcentos } from '../../utils/texto.js'
 import { optimizarRuta } from '../../utils/ruta.js'
 import { diaQueLeToca, nombreDiaSemana, fechaISO, DIAS_SEMANA } from '../../utils/frecuenciaCobranza.js'
+import { generarTicket, compartirTicket } from '../../utils/ticket.js'
+import { comprimirImagen } from '../../utils/imagen.js'
 import UbicacionesPanel from '../../components/UbicacionesPanel.jsx'
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
@@ -54,29 +56,11 @@ const TIPOS_SIN_PAGO = [
 const FORM_PAGO_VACIO   = { monto_pago: '', tipo_pago: 'abono', origen_pago: 'domicilio', metodo_pago: 'efectivo', observaciones: '' }
 const FORM_VISITA_VACIO = { tipo_seguimiento: 'no_localizado', comentario: '', fecha_programada: '' }
 
-// Comprime una imagen (File) a JPEG ~1000px para que quepa en la cola offline
-// y no pese al subir. Devuelve un data URI base64.
-function comprimirImagen(file, maxLado = 1000, calidad = 0.7) {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      URL.revokeObjectURL(url)
-      const escala = Math.min(1, maxLado / Math.max(img.width, img.height))
-      const w = Math.round(img.width * escala)
-      const h = Math.round(img.height * escala)
-      const canvas = document.createElement('canvas')
-      canvas.width = w; canvas.height = h
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h)
-      resolve(canvas.toDataURL('image/jpeg', calidad))
-    }
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen')) }
-    img.src = url
-  })
-}
-
-const TELEFONO_EMPRESA = '5646430474'
-const TELEFONO_EMPRESA_FMT = TELEFONO_EMPRESA.replace(/(\d{2})(\d{4})(\d{4})/, '$1 $2 $3')
+// comprimirImagen, TELEFONO_EMPRESA y todo lo del ticket (buildTicketHtml,
+// formatearTextoTicket, cargarRecursosTicket, generarTicket, compartirTicket)
+// se movieron a utils/imagen.js y utils/ticket.js para que Verificacion.jsx
+// (primera visita del supervisor) pueda cobrar y emitir el mismo ticket sin
+// duplicar el código — ver imports arriba.
 
 const LABEL_PLAN = {
   un_mes: '1 mes', dos_meses: '2 meses', tres_meses: '3 meses', largo_plazo: 'Largo plazo'
@@ -627,34 +611,6 @@ export default function Cobranza() {
   // Datos del último pago registrado (para el ticket)
   const [datosPago, setDatosPago] = useState(null)
 
-  // Recursos del ticket (logo + fuente Comic Neue) precargados como blob URLs.
-  // El popup del ticket es about:blank y NO pasa por el service worker, así que
-  // se descargan aquí (donde el SW sí responde, incluso sin señal) una sola vez.
-  const recursosTicketRef = useRef(null)
-  const cargarRecursosTicket = async () => {
-    if (recursosTicketRef.current) return recursosTicketRef.current
-    const origen = window.location.origin
-    const fallback = {
-      logo:  `${origen}/logo.png`,
-      f400:  `${origen}/fonts/comic-neue-400.woff2`,
-      f700:  `${origen}/fonts/comic-neue-700.woff2`,
-    }
-    try {
-      const [logo, f400, f700] = await Promise.all([
-        fetch(fallback.logo).then(r => r.blob()),
-        fetch(fallback.f400).then(r => r.blob()),
-        fetch(fallback.f700).then(r => r.blob()),
-      ])
-      recursosTicketRef.current = {
-        logo: URL.createObjectURL(logo),
-        f400: URL.createObjectURL(f400),
-        f700: URL.createObjectURL(f700),
-      }
-    } catch {
-      return fallback // sin señal y sin caché: se usan URLs directas (el ticket igual se genera)
-    }
-    return recursosTicketRef.current
-  }
 
   // Edición de frecuencia de cobro
   const [editandoFrecuencia, setEditandoFrecuencia] = useState(false)
@@ -1183,211 +1139,6 @@ export default function Cobranza() {
     setError('')
     setExito('')
     setDatosPago(null)
-  }
-
-  const formatearTextoTicket = (datos) => {
-    const W = 32
-    const sep = '================================'
-    const das = '--------------------------------'
-    const fmt = (n) => `$${parseFloat(n || 0).toFixed(2)}`
-    const fecha = new Date(datos.fecha_pago)
-    const fechaStr = fecha.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Mexico_City' })
-    const horaStr  = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })
-    const folio    = `TICKET-${String(datos.id_pago).padStart(6, '0')}`
-    const center   = (s) => { const p = Math.max(0, Math.floor((W - s.length) / 2)); return ' '.repeat(p) + s }
-    const row      = (l, r) => { const sp = Math.max(1, W - l.length - r.length); return l + ' '.repeat(sp) + r }
-    const nombre   = (datos.cliente_nombre || '').substring(0, 20)
-    const tipoStr  = { abono: 'Abono', liquidacion: 'Liquidacion', pago_extra: 'Pago extra', recuperacion_enganche: 'Rec. enganche' }[datos.tipo_pago] || datos.tipo_pago || ''
-    const wrap     = (s) => (s.match(/.{1,32}/g) || [s]) // parte lineas > 32 chars
-    const lineasProd = (datos.productos || [])
-      .filter(p => p?.nombre)
-      .flatMap(p => wrap(`${p.cantidad > 1 ? p.cantidad + 'x ' : ''}${p.nombre}`))
-
-    return [
-      sep,
-      center('NOVEDADES CANCUN'),
-      center('Comprobante de Pago'),
-      center(folio),
-      center(`${fechaStr}  ${horaStr}`),
-      ...(datos.pendienteSync ? [center('*** PROVISIONAL, PENDIENTE ***'), center('DE SINCRONIZAR')] : []),
-      sep,
-      row('Cliente:', nombre),
-      row('Expediente:', datos.numero_expediente || ''),
-      ...(datos.numero_cuenta ? [row('No. cuenta:', datos.numero_cuenta)] : []),
-      row('Plan:', (datos.plan_actual || '').replace(/_/g, ' ')),
-      ...(lineasProd.length ? [das, center('PRODUCTO(S)'), ...lineasProd] : []),
-      das,
-      center('MONTO ABONADO'),
-      center(fmt(datos.monto_pago)),
-      row('Tipo:', tipoStr),
-      row('Metodo:', datos.metodo_pago === 'deposito' ? 'DEPOSITO' : 'Efectivo'),
-      das,
-      row('Saldo anterior:', fmt(datos.saldo_anterior)),
-      row('Saldo restante:', fmt(datos.saldo_nuevo)),
-      das,
-      center(`Para liquidar: ${fmt(datos.saldo_nuevo)}`),
-      das,
-      row('Cobrador:', datos.cobrador_nombre || ''),
-      sep,
-      center('Conserve este comprobante'),
-      center(`Dudas: ${TELEFONO_EMPRESA_FMT}`),
-      '', '', '',
-    ].join('\n')
-  }
-
-  const buildTicketHtml = (datos, recursos) => {
-    const { logo: logoSrc, f400, f700 } = recursos || {}
-    const {
-      id_pago, fecha_pago, monto_pago, saldo_anterior, saldo_nuevo,
-      tipo_pago, origen_pago, metodo_pago,
-      cliente_nombre, numero_expediente, numero_cuenta, folio_cuenta, plan_actual,
-      cobrador_nombre,
-      precio_original_total, precio_final_total,
-      productos,
-      pendienteSync,
-    } = datos
-
-    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
-    const filasProductos = (productos || [])
-      .filter(p => p?.nombre)
-      .map(p => `<div class="row"><span>${esc(p.nombre)}</span><span>${p.cantidad > 1 ? '&times;' + p.cantidad : ''}</span></div>`)
-      .join('')
-
-    const precioOrig  = parseFloat(precio_original_total || 0)
-    const precioFinal = parseFloat(precio_final_total || 0)
-    const ahorro      = precioOrig > precioFinal ? precioOrig - precioFinal : 0
-
-    const fmtMXN = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
-    const fecha  = new Date(fecha_pago)
-    const fechaStr = fecha.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Mexico_City' })
-    const horaStr  = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })
-    const folioPago = `TICKET-${String(id_pago).padStart(6, '0')}`
-    const origenStr = { domicilio: 'Domicilio', calle: 'Calle', oficina: 'Oficina' }[origen_pago] || origen_pago
-    const tipoStr   = { abono: 'Abono', liquidacion: 'Liquidación', pago_extra: 'Pago extra', recuperacion_enganche: 'Rec. enganche' }[tipo_pago] || tipo_pago
-
-    return `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Comprobante ${folioPago}</title>
-  <style>
-    @font-face {
-      font-family: 'Comic Neue';
-      font-style: normal; font-weight: 400; font-display: swap;
-      src: url('${f400 || window.location.origin + '/fonts/comic-neue-400.woff2'}') format('woff2');
-    }
-    @font-face {
-      font-family: 'Comic Neue';
-      font-style: normal; font-weight: 700; font-display: swap;
-      src: url('${f700 || window.location.origin + '/fonts/comic-neue-700.woff2'}') format('woff2');
-    }
-    @page { size: 58mm auto; margin: 2mm 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Comic Neue', 'Comic Sans MS', 'Comic Sans', 'Chalkboard SE', cursive;
-      font-size: 11px;
-      width: 58mm;
-      max-width: 58mm;
-      margin: 0 auto;
-      padding: 3mm 3mm;
-      background: #fff;
-      color: #000;
-    }
-    .center  { text-align: center; }
-    .right   { text-align: right; }
-    .bold    { font-weight: bold; }
-    .row     { display: flex; justify-content: space-between; margin: 2px 0; font-size: 10px; }
-    .sep-sol { border-top: 1px solid #000; margin: 4px 0; }
-    .sep-das { border-top: 1px dashed #666; margin: 4px 0; }
-    .titulo  { font-size: 10px; color: #444; margin-top: 2px; }
-    .folio   { font-size: 9px; color: #555; margin-top: 3px; }
-    .monto-principal { font-size: 22px; font-weight: bold; text-align: center; letter-spacing: 1px; margin: 5px 0 3px; }
-    .monto-label { font-size: 9px; text-align: center; color: #555; }
-    .liquidar-box { border: 1px dashed #000; padding: 3px 4px; margin: 4px 0; text-align: center; font-size: 10px; }
-    .pie { font-size: 9px; text-align: center; color: #444; }
-    .btn-imprimir {
-      display: block; width: 100%; padding: 8px; margin-top: 12px;
-      background: #1d4ed8; color: #fff; border: none; border-radius: 4px;
-      font-size: 13px; cursor: pointer; font-family: inherit;
-    }
-    @media print { .btn-imprimir { display: none; } body { padding: 0 2mm; } }
-  </style>
-</head>
-<body>
-  <div class="center">
-    ${logoSrc ? `<img src="${logoSrc}" alt="Novedades Cancún" style="width:38mm;max-width:38mm;display:block;margin:0 auto 2mm;">` : '<div style="font-size:13px;font-weight:bold;letter-spacing:1px;">NOVEDADES CANCUN</div>'}
-    <div class="titulo">Comprobante de Pago</div>
-    <div class="folio">${folioPago}</div>
-    <div class="folio">${fechaStr} &nbsp; ${horaStr}</div>
-    ${pendienteSync ? '<div style="margin-top:2mm;border:1px dashed #92400e;background:#fef3c7;color:#92400e;font-size:9px;font-weight:bold;padding:2px;">⏳ PROVISIONAL — PENDIENTE DE SINCRONIZAR</div>' : ''}
-  </div>
-
-  <div class="sep-sol"></div>
-
-  <div class="row"><span>Cliente:</span><span class="bold">${cliente_nombre}</span></div>
-  <div class="row"><span>Expediente:</span><span>${numero_expediente}</span></div>
-  ${numero_cuenta ? `<div class="row"><span>No. cuenta:</span><span class="bold">${numero_cuenta}</span></div>` : ''}
-  <div class="row"><span>Folio sistema:</span><span>${folio_cuenta}</span></div>
-  <div class="row"><span>Plan:</span><span>${plan_actual.replace(/_/g, ' ')}</span></div>
-
-  ${filasProductos ? `
-  <div class="sep-das"></div>
-  <div class="monto-label" style="font-size:9px;">PRODUCTO(S)</div>
-  ${filasProductos}
-  ` : ''}
-
-  ${precioOrig > 0 ? `
-  <div class="sep-das"></div>
-  <div class="row"><span>Precio original:</span><span style="text-decoration:line-through; color:#999">${fmtMXN(precioOrig)}</span></div>
-  <div class="row"><span>Precio del plan:</span><span class="bold">${fmtMXN(precioFinal)}</span></div>
-  ${ahorro > 0 ? `<div class="row" style="color:#16a34a; font-weight:bold"><span>Ahorro del cliente:</span><span>${fmtMXN(ahorro)}</span></div>` : ''}
-  ` : ''}
-
-  <div class="sep-das"></div>
-  <div class="monto-label">MONTO ABONADO</div>
-  <div class="monto-principal">${fmtMXN(monto_pago)}</div>
-  <div class="row"><span>Tipo:</span><span>${tipoStr}</span></div>
-  <div class="row"><span>Método:</span><span${metodo_pago === 'deposito' ? ' class="bold"' : ''}>${metodo_pago === 'deposito' ? '💳 Depósito' : 'Efectivo'}</span></div>
-  <div class="sep-das"></div>
-  <div class="row"><span>Saldo anterior:</span><span>${fmtMXN(saldo_anterior)}</span></div>
-  <div class="row"><span>Saldo restante:</span><span class="bold">${fmtMXN(saldo_nuevo)}</span></div>
-
-  <div class="liquidar-box">Para liquidar hoy: <strong>${fmtMXN(saldo_nuevo)}</strong></div>
-
-  <div class="sep-das"></div>
-  <div class="row"><span>Cobrador:</span><span>${cobrador_nombre}</span></div>
-  <div class="row"><span>Origen:</span><span>${origenStr}</span></div>
-
-  <div class="sep-sol"></div>
-  <div class="pie">Conserve este comprobante</div>
-  <div class="pie" style="margin-top:2px;">Dudas o aclaraciones: <a href="tel:${TELEFONO_EMPRESA}" style="color:#000;">${TELEFONO_EMPRESA_FMT}</a></div>
-  <div class="pie" style="margin-top:3px; font-size:9px;">${folioPago}</div>
-
-  <button class="btn-imprimir" onclick="window.print()">Imprimir</button>
-  <script>window.onload = function() { window.print(); }</script>
-</body>
-</html>`
-  }
-
-  const compartirTicket = async (datos) => {
-    const folio = `TICKET-${String(datos.id_pago).padStart(6, '0')}`
-    try {
-      await navigator.share({ title: folio, text: formatearTextoTicket(datos) })
-    } catch (e) {
-      if (e.name !== 'AbortError') alert('No se pudo compartir: ' + e.message)
-    }
-  }
-
-
-
-  const generarTicket = async (datos) => {
-    // window.open debe ser sincrono dentro del gesto del usuario o el popup se bloquea
-    const ventana = window.open('', '_blank', 'width=350,height=650')
-    if (!ventana) throw new Error('Popup bloqueado')
-    const recursos = await cargarRecursosTicket()
-    ventana.document.write(buildTicketHtml(datos, recursos))
-    ventana.document.close()
   }
 
   // Reimpresión de un ticket ya registrado — admin/supervisor, por si al
