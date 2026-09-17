@@ -819,6 +819,16 @@ export default function Cobranza() {
     } catch {
       setHistorialVisitas([])
     }
+    // Otras cuentas del mismo cliente (si tiene más de una activa) — antes
+    // solo se cargaba al abrir "Fusionar cuentas" (admin), pero cualquier
+    // cobrador necesita poder ver que existen y su historial para entender
+    // si el cliente ya trae otra deuda encima.
+    try {
+      const resOtras = await api.get(`/cuentas/cliente/${detalle.id_cliente}`, { timeout: 10000 })
+      setCuentasCliente(resOtras.data.filter(c => c.id_cuenta !== cuenta.id_cuenta))
+    } catch {
+      setCuentasCliente([])
+    }
     setNoHuboPago(false)
     setRegistrarVisitaTambien(false)
     setFormPago(FORM_PAGO_VACIO)
@@ -850,6 +860,7 @@ export default function Cobranza() {
     setDatosPago(null)
     setHistorialPagos([])
     setHistorialVisitas([])
+    setCuentasCliente([])
     setPagoHistorico(false)
     setFechaPagoHistorico('')
     setPanelUbicacion(false)
@@ -1406,17 +1417,12 @@ export default function Cobranza() {
     !['liquidada', 'cancelada'].includes(c.estado_cuenta) &&
     c.plan_actual !== 'largo_plazo'
 
-  const abrirFusion = async () => {
-    try {
-      const res = await api.get(`/cuentas/cliente/${cuentaSeleccionada.id_cliente}`, { timeout: 10000 })
-      const otras = res.data.filter(c => c.id_cuenta !== cuentaSeleccionada.id_cuenta)
-      setCuentasCliente(otras)
-      setCuentasSecSel([])
-      setErrorFusion('')
-      setModalFusion(true)
-    } catch {
-      setErrorFusion('Error al cargar cuentas del cliente')
-    }
+  // cuentasCliente ya se cargó al abrir el detalle (ver abrirModal) — no hace
+  // falta pedirlo otra vez solo para fusionar.
+  const abrirFusion = () => {
+    setCuentasSecSel([])
+    setErrorFusion('')
+    setModalFusion(true)
   }
 
   const toggleCuentaSec = (id) => {
@@ -2589,6 +2595,33 @@ export default function Cobranza() {
                   </span>
                 </div>
               </div>
+
+              {/* Otras cuentas del mismo cliente — visible para cualquier rol,
+                  no solo admin, para poder revisar su historial cuando el
+                  cliente trae más de una cuenta encimada. */}
+              {cuentasCliente.length > 0 && (
+                <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <p className="text-xs font-semibold text-amber-800 mb-2">
+                    ⚠️ Este cliente tiene {cuentasCliente.length} cuenta{cuentasCliente.length > 1 ? 's' : ''} más
+                  </p>
+                  <div className="space-y-1.5">
+                    {cuentasCliente.map(oc => (
+                      <button
+                        key={oc.id_cuenta}
+                        type="button"
+                        onClick={() => abrirModal({ id_cuenta: oc.id_cuenta, id_cliente: cuentaSeleccionada.id_cliente })}
+                        className="w-full flex items-center justify-between gap-2 bg-white rounded-lg px-3 py-2 text-xs hover:bg-amber-100 transition"
+                      >
+                        <span className="font-mono text-blue-600">{oc.numero_cuenta || oc.folio_cuenta}</span>
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${estadoColor[oc.estado_cuenta] || 'bg-gray-100 text-gray-600'}`}>
+                          {oc.estado_cuenta}
+                        </span>
+                        <span className="font-semibold text-gray-700">{fmt(oc.saldo_actual)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Acciones admin: Fusionar y Cancelar */}
               {['administrador', 'supervisor_cobranza'].includes(usuario?.rol) && (
