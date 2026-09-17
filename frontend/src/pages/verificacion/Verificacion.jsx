@@ -176,6 +176,44 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
   const [guardandoUbic, setGuardandoUbic] = useState(false)
   const [ubicGuardada, setUbicGuardada] = useState(false)
 
+  // Otras cuentas del cliente (alerta "cliente con varias cuentas") — el
+  // supervisor solo puede REVISAR el historial para juzgar si está
+  // sobre-endeudado, nunca cobrar ahí: esa acción vive solo para la cuenta
+  // nueva que está verificando (arriba, "Cobrar primer pago").
+  const [otrasCuentas, setOtrasCuentas] = useState(null) // null = no cargadas todavía
+  const [cargandoOtras, setCargandoOtras] = useState(false)
+  const [historialAbierto, setHistorialAbierto] = useState(null) // id_cuenta con historial expandido
+  const [historialPorCuenta, setHistorialPorCuenta] = useState({}) // { [id_cuenta]: pagos[] }
+  const [cargandoHistorial, setCargandoHistorial] = useState(null) // id_cuenta en carga
+
+  const cargarOtrasCuentas = async () => {
+    if (otrasCuentas !== null) { setOtrasCuentas(null); return } // toggle: ocultar si ya estaban
+    setCargandoOtras(true)
+    try {
+      const res = await api.get(`/cuentas/cliente/${c.id_cliente}`, { timeout: 10000 })
+      setOtrasCuentas(res.data.filter(oc => oc.id_cuenta !== c.id_cuenta))
+    } catch {
+      setOtrasCuentas([])
+    } finally {
+      setCargandoOtras(false)
+    }
+  }
+
+  const verHistorialSibling = async (id_cuenta) => {
+    if (historialAbierto === id_cuenta) { setHistorialAbierto(null); return }
+    setHistorialAbierto(id_cuenta)
+    if (historialPorCuenta[id_cuenta]) return // ya se cargó antes
+    setCargandoHistorial(id_cuenta)
+    try {
+      const res = await api.get(`/pagos/cuenta/${id_cuenta}`, { timeout: 10000 })
+      setHistorialPorCuenta(prev => ({ ...prev, [id_cuenta]: res.data.pagos || [] }))
+    } catch {
+      setHistorialPorCuenta(prev => ({ ...prev, [id_cuenta]: [] }))
+    } finally {
+      setCargandoHistorial(null)
+    }
+  }
+
   const tieneUbicacion = !!(c.cliente?.latitud && c.cliente?.longitud) || !!c.cliente?.plus_code
   const faltaTelefono = !c.cliente?.telefono?.trim()
   const faltaReferencias = !c.cliente?.referencias?.trim()
@@ -385,7 +423,51 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
           {(a.cliente_con_varias_cuentas || a.abono_bajo) && (
             <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 space-y-1 text-sm text-amber-800">
               {a.cliente_con_varias_cuentas && (
-                <p>⚠️ Este cliente ya tiene <strong>{a.otras_cuentas_activas}</strong> cuenta{a.otras_cuentas_activas > 1 ? 's' : ''} activa{a.otras_cuentas_activas > 1 ? 's' : ''} más — revisar si no está sobre-endeudado.</p>
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <p>⚠️ Este cliente ya tiene <strong>{a.otras_cuentas_activas}</strong> cuenta{a.otras_cuentas_activas > 1 ? 's' : ''} activa{a.otras_cuentas_activas > 1 ? 's' : ''} más — revisar si no está sobre-endeudado.</p>
+                    <button type="button" onClick={cargarOtrasCuentas} disabled={cargandoOtras}
+                      className="shrink-0 text-xs font-semibold text-amber-900 underline disabled:opacity-50">
+                      {cargandoOtras ? 'Cargando...' : otrasCuentas !== null ? 'Ocultar' : 'Ver historial'}
+                    </button>
+                  </div>
+                  {otrasCuentas !== null && (
+                    <div className="space-y-1.5 pt-1">
+                      {otrasCuentas.map(oc => (
+                        <div key={oc.id_cuenta} className="bg-white rounded-lg p-2 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-blue-600">{oc.numero_cuenta || oc.folio_cuenta}</span>
+                            <span className="text-gray-600">{oc.estado_cuenta}</span>
+                            <span className="font-semibold text-gray-700">{fmt(oc.saldo_actual)}</span>
+                            <button type="button" onClick={() => verHistorialSibling(oc.id_cuenta)}
+                              className="text-blue-600 hover:underline shrink-0">
+                              {historialAbierto === oc.id_cuenta ? 'Ocultar' : 'Ver pagos'}
+                            </button>
+                          </div>
+                          {historialAbierto === oc.id_cuenta && (
+                            <div className="mt-1.5 pt-1.5 border-t border-gray-100">
+                              {cargandoHistorial === oc.id_cuenta ? (
+                                <p className="text-gray-400">Cargando...</p>
+                              ) : (historialPorCuenta[oc.id_cuenta] || []).length === 0 ? (
+                                <p className="text-gray-400">Sin pagos registrados</p>
+                              ) : (
+                                <ul className="space-y-0.5">
+                                  {historialPorCuenta[oc.id_cuenta].map(p => (
+                                    <li key={p.id_pago} className="flex justify-between text-gray-600">
+                                      <span>{fmtFecha(p.fecha_pago)}</span>
+                                      <span>{fmt(p.monto_pago)}</span>
+                                      <span className="text-gray-400">saldo {fmt(p.saldo_nuevo)}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
               {a.abono_bajo && (
                 <p>⚠️ El abono capturado (<strong>{fmt(a.abono_actual)}</strong>) está por debajo del sugerido para este plan (<strong>{fmt(a.abono_sugerido)}</strong>).</p>
