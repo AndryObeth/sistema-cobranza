@@ -23,6 +23,7 @@ export default function Verificacion() {
   const [pendientesAprobacion, setPendientesAprobacion] = useState([])
   const [cargando, setCargando] = useState(true)
   const [seleccionada, setSeleccionada] = useState(null)
+  const [filtroRuta, setFiltroRuta] = useState('')
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -39,7 +40,11 @@ export default function Verificacion() {
 
   useEffect(() => { cargar() }, [cargar])
 
-  const listaActiva = tab === 'visita' ? pendientesVisita : pendientesAprobacion
+  const rutasDisponibles = [...new Set([...pendientesVisita, ...pendientesAprobacion].map(c => c.cliente?.ruta).filter(Boolean))].sort()
+  const filtrarPorRuta = lista => filtroRuta ? lista.filter(c => c.cliente?.ruta === filtroRuta) : lista
+  const pendientesVisitaFiltrado = filtrarPorRuta(pendientesVisita)
+  const pendientesAprobacionFiltrado = filtrarPorRuta(pendientesAprobacion)
+  const listaActiva = tab === 'visita' ? pendientesVisitaFiltrado : pendientesAprobacionFiltrado
 
   const alTerminar = () => {
     setSeleccionada(null)
@@ -59,15 +64,22 @@ export default function Verificacion() {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               tab === 'visita' ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
             }`}>
-            🔍 Por visitar{pendientesVisita.length > 0 && ` (${pendientesVisita.length})`}
+            🔍 Por visitar{pendientesVisitaFiltrado.length > 0 && ` (${pendientesVisitaFiltrado.length})`}
           </button>
           {esAdmin && (
             <button onClick={() => setTab('aprobacion')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                 tab === 'aprobacion' ? 'bg-green-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
               }`}>
-              ✅ Por aprobar{pendientesAprobacion.length > 0 && ` (${pendientesAprobacion.length})`}
+              ✅ Por aprobar{pendientesAprobacionFiltrado.length > 0 && ` (${pendientesAprobacionFiltrado.length})`}
             </button>
+          )}
+          {rutasDisponibles.length > 0 && (
+            <select value={filtroRuta} onChange={e => setFiltroRuta(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ml-auto">
+              <option value="">Todas las rutas</option>
+              {rutasDisponibles.map(r => <option key={r} value={r}>Ruta {r}</option>)}
+            </select>
           )}
         </div>
       </div>
@@ -77,6 +89,7 @@ export default function Verificacion() {
       ) : listaActiva.length === 0 ? (
         <div className="bg-white rounded-2xl shadow p-12 text-center text-gray-400">
           {tab === 'visita' ? '🎉 No hay ventas nuevas pendientes de visitar' : '🎉 No hay cuentas pendientes de aprobación final'}
+          {filtroRuta && ` en la ruta ${filtroRuta}`}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
