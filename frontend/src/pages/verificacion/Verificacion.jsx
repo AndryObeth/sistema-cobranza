@@ -50,19 +50,20 @@ export default function Verificacion() {
   const pendientesAprobacionFiltrado = filtrarPorRuta(pendientesAprobacion)
   const listaActiva = tab === 'visita' ? pendientesVisitaFiltrado : pendientesAprobacionFiltrado
 
-  // idCuentaOffline: cuando la acción se encoló sin conexión no hay forma de
-  // confirmar contra el servidor todavía — se quita de la lista local nada
-  // más para reflejar que ya se actuó, en vez de recargar (que con caché
-  // vieja podría "regresar" la tarjeta y parecer que no funcionó).
-  const alTerminar = (idCuentaOffline) => {
+  // Se quita la cuenta de la lista local en vez de recargar del servidor:
+  // recargar competía contra el caché offline (NetworkFirst) — con señal
+  // lenta pero viva, el timeout del caché ganaba la carrera y volvía a
+  // mostrar la versión vieja con la cuenta que se acababa de resolver
+  // todavía ahí ("a veces no desaparece, o tarda"). Como la acción ya se
+  // confirmó (o se encoló, si no había conexión), no hace falta preguntarle
+  // al servidor qué pasó con ESA cuenta — ya lo sabemos.
+  const alTerminar = (idCuenta, offline) => {
     setSeleccionada(null)
-    if (idCuentaOffline) {
-      setPendientesVisita(prev => prev.filter(c => c.id_cuenta !== idCuentaOffline))
-      setPendientesAprobacion(prev => prev.filter(c => c.id_cuenta !== idCuentaOffline))
+    setPendientesVisita(prev => prev.filter(c => c.id_cuenta !== idCuenta))
+    setPendientesAprobacion(prev => prev.filter(c => c.id_cuenta !== idCuenta))
+    if (offline) {
       setAviso('📴 Guardado sin conexión — se enviará solo cuando haya señal')
       setTimeout(() => setAviso(''), 5000)
-    } else {
-      cargar()
     }
     window.dispatchEvent(new Event('verificacion-actualizada'))
   }
@@ -413,13 +414,14 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
 
   const verificarPlusCode = () => {
     if (!plusCodeInput.trim()) return
-    const ref = c.cliente?.latitud && c.cliente?.longitud
-      ? { lat: parseFloat(c.cliente.latitud), lng: parseFloat(c.cliente.longitud) }
-      : null
-    const code = normalizePlusCode(plusCodeInput, ref)
+    // Sin ref propia del cliente: son justo las coordenadas que se están
+    // corrigiendo por estar mal (ver la misma nota en Cobranza/Mapa) —
+    // normalizePlusCode usa el centro de Tuxtepec por defecto.
+    const code = normalizePlusCode(plusCodeInput)
     if (!code) { alert('Plus Code no válido. Ej: 76QX2FXQ+QF'); return }
-    const { lat, lng } = decodePlusCode(code)
-    setUbicPendiente({ lat, lng, plus_code: code })
+    const coords = decodePlusCode(code)
+    if (!coords) { alert('No se pudo leer ese Plus Code. Revisa que esté completo y vuelve a intentar.'); return }
+    setUbicPendiente({ lat: coords.lat, lng: coords.lng, plus_code: code })
     setPlusCodeInput(code)
   }
 
@@ -456,12 +458,12 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
     const notasFinales = aprobar ? notas : motivoRechazo
     const encolarYSalir = () => {
       encolarVerificacion({ id_cuenta: c.id_cuenta, accion, aprobar, notas: notasFinales })
-      onListo(c.id_cuenta)
+      onListo(c.id_cuenta, true)
     }
     if (!navigator.onLine) { encolarYSalir(); return }
     try {
       await api.post(endpoint, { aprobar, notas: notasFinales }, { timeout: 10000 })
-      onListo()
+      onListo(c.id_cuenta)
     } catch (err) {
       if (err.response) {
         setError(err.response.data?.error || 'Error al guardar')
@@ -477,12 +479,12 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
     setError('')
     const encolarYSalir = () => {
       encolarVerificacion({ id_cuenta: c.id_cuenta, accion: 'regresar' })
-      onListo(c.id_cuenta)
+      onListo(c.id_cuenta, true)
     }
     if (!navigator.onLine) { encolarYSalir(); return }
     try {
       await api.post(`/cuentas/${c.id_cuenta}/verificacion/regresar`, {}, { timeout: 10000 })
-      onListo()
+      onListo(c.id_cuenta)
     } catch (err) {
       if (err.response) {
         setError(err.response.data?.error || 'Error al regresar la cuenta')

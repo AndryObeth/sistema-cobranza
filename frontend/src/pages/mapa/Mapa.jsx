@@ -205,8 +205,9 @@ export default function Mapa() {
     // toda la cartera).
     const code = normalizePlusCode(ubicInputMapa, miUbicacion || null)
     if (!code) { mostrarToast('Plus Code no válido'); return }
-    const { lat, lng } = decodePlusCode(code)
-    setUbicPendienteMapa({ lat, lng, plus_code: code })
+    const coords = decodePlusCode(code)
+    if (!coords) { mostrarToast('No se pudo leer ese Plus Code'); return }
+    setUbicPendienteMapa({ lat: coords.lat, lng: coords.lng, plus_code: code })
     setModoCorrecMapa('confirmar')
   }
 

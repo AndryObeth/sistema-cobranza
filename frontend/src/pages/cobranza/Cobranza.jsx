@@ -957,8 +957,9 @@ export default function Cobranza() {
     // corto hacia esa misma ubicación equivocada.
     const code = normalizePlusCode(ubicInput)
     if (!code) { alert('Plus Code no válido o incompleto. Pega el código completo (ej: 76QX2FXQ+QF) o usa «Usar mi ubicación actual».'); return }
-    const { lat, lng } = decodePlusCode(code)
-    setUbicPendiente({ lat, lng, plus_code: code })
+    const coords = decodePlusCode(code)
+    if (!coords) { alert('No se pudo leer ese Plus Code. Revisa que esté completo y vuelve a intentar.'); return }
+    setUbicPendiente({ lat: coords.lat, lng: coords.lng, plus_code: code })
     setModoUbicacion('confirmar')
   }
 
@@ -1101,8 +1102,9 @@ export default function Cobranza() {
     // guardadas del cliente como referencia, son justo las que se corrigen.
     const code = normalizePlusCode(ubicInputDet)
     if (!code) { alert('Plus Code no válido. Ej: 76C97H6P+QF'); return }
-    const { lat, lng } = decodePlusCode(code)
-    setUbicPendDet({ lat, lng, plus_code: code })
+    const coords = decodePlusCode(code)
+    if (!coords) { alert('No se pudo leer ese Plus Code. Revisa que esté completo y vuelve a intentar.'); return }
+    setUbicPendDet({ lat: coords.lat, lng: coords.lng, plus_code: code })
     setModoUbicDet('confirmar')
   }
 
