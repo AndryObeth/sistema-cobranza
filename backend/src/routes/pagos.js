@@ -343,6 +343,15 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ error: 'No se puede registrar un pago en una cuenta cancelada' })
     }
 
+    // El supervisor solo cobra el primer abono de una cuenta NUEVA (todavía
+    // en el flujo de primera visita) — no debe poder cobrar en cuentas que ya
+    // pasaron verificación y son del cobrador asignado. Esto no depende de
+    // qué pantalla lo llame ni de si tiene rutas asignadas: se bloquea aquí
+    // para que no haya forma de saltárselo.
+    if (req.usuario.rol === 'supervisor_cobranza' && cuenta.estado_verificacion === 'aprobada') {
+      return res.status(403).json({ error: 'El supervisor solo puede registrar pagos en cuentas nuevas pendientes de verificación' })
+    }
+
     const saldo_anterior = parseFloat(cuenta.saldo_actual)
 
     // Validación: monto no puede superar el saldo actual
