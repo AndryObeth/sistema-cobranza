@@ -642,7 +642,14 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo, onOcultar }) {
     }
     if (!navigator.onLine) { encolarYMostrar(); setGuardandoUbic(false); return }
     try {
-      await api.put(`/clientes/${c.cliente.id_cliente}/coordenadas`, ubicPendiente, { timeout: 10000 })
+      // El backend espera { latitud, longitud, plus_code } — ubicPendiente
+      // usa { lat, lng, plus_code } (mismo nombre que usa el resto del
+      // código para coordenadas en memoria). Mandar ubicPendiente tal cual
+      // hacía que el servidor recibiera latitud/longitud undefined y
+      // rechazara el guardado con "Se requieren latitud y longitud" en
+      // TODOS los casos con señal (el camino offline sí armaba el objeto
+      // bien, por eso solo fallaba con conexión).
+      await api.put(`/clientes/${c.cliente.id_cliente}/coordenadas`, payloadUbic, { timeout: 10000 })
       setUbicGuardada(true)
       setTimeout(() => setUbicGuardada(false), 3000)
     } catch (err) {
