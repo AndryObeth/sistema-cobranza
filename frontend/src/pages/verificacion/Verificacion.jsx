@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
 import { generarTicket, compartirTicket } from '../../utils/ticket.js'
 import { comprimirImagen } from '../../utils/imagen.js'
-import { encolarPago, encolarClienteCompleto, encolarUbicacion, encolarFrecuencia, encolarVerificacion } from '../../utils/offlineQueue.js'
+import { encolarPago, encolarClienteCompleto, encolarUbicacion, encolarFrecuencia, encolarVerificacion, encolarVisita } from '../../utils/offlineQueue.js'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
@@ -13,6 +13,24 @@ const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'A
 const DIAS_COBRANZA = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
 const LABEL_DIA = { lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo' }
 const LABEL_PLAN = { un_mes: '1 mes', dos_meses: '2 meses', tres_meses: '3 meses', largo_plazo: 'Largo plazo' }
+const hoyISO = () => new Date().toISOString().split('T')[0]
+
+// "Cliente no estuvo → ocultar por hoy": la cuenta sigue pendiente de
+// verdad (no se toca el backend), solo se deja de mostrar en ESTE
+// dispositivo hasta la fecha indicada, para que no estorbe visualmente
+// entre las que sí se pueden atender hoy. Es puramente local (localStorage),
+// por eso se auto-limpia solo comparando fechas al leer, sin necesitar
+// sincronizarlo con nadie.
+const OCULTAS_KEY = 'verificacion_ocultas_hasta'
+const cargarOcultas = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OCULTAS_KEY) || '{}')
+    const hoy = hoyISO()
+    const vigentes = {}
+    Object.entries(raw).forEach(([id, fecha]) => { if (fecha > hoy) vigentes[id] = fecha })
+    return vigentes
+  } catch { return {} }
+}
 
 export default function Verificacion() {
   const { usuario } = useAuth()
@@ -28,6 +46,15 @@ export default function Verificacion() {
   const [seleccionada, setSeleccionada] = useState(null)
   const [filtroRuta, setFiltroRuta] = useState('')
   const [aviso, setAviso] = useState('')
+  const [ocultasHasta, setOcultasHasta] = useState(() => cargarOcultas())
+
+  useEffect(() => {
+    try { localStorage.setItem(OCULTAS_KEY, JSON.stringify(ocultasHasta)) } catch { /* almacenamiento lleno o bloqueado: no es crítico */ }
+  }, [ocultasHasta])
+
+  const ocultarHasta = (idCuenta, fechaISOStr) => {
+    setOcultasHasta(prev => ({ ...prev, [idCuenta]: fechaISOStr }))
+  }
 
   const cargar = useCallback(async (silencioso) => {
     if (!silencioso) setCargando(true)
@@ -55,7 +82,9 @@ export default function Verificacion() {
 
   const rutasDisponibles = [...new Set([...pendientesVisita, ...pendientesAprobacion].map(c => c.cliente?.ruta).filter(Boolean))].sort()
   const filtrarPorRuta = lista => filtroRuta ? lista.filter(c => c.cliente?.ruta === filtroRuta) : lista
-  const pendientesVisitaFiltrado = filtrarPorRuta(pendientesVisita)
+  const estaOculta = idCuenta => ocultasHasta[idCuenta] && ocultasHasta[idCuenta] > hoyISO()
+  const ocultasCount = pendientesVisita.filter(cu => estaOculta(cu.id_cuenta)).length
+  const pendientesVisitaFiltrado = filtrarPorRuta(pendientesVisita).filter(cu => !estaOculta(cu.id_cuenta))
   const pendientesAprobacionFiltrado = filtrarPorRuta(pendientesAprobacion)
   const listaActiva = tab === 'visita' ? pendientesVisitaFiltrado : pendientesAprobacionFiltrado
 
@@ -112,6 +141,11 @@ export default function Verificacion() {
             </select>
           )}
         </div>
+        {tab === 'visita' && ocultasCount > 0 && (
+          <button onClick={() => setOcultasHasta({})} className="mt-2 text-xs text-gray-500 hover:text-gray-700 underline">
+            👁️ Mostrar {ocultasCount} oculta{ocultasCount > 1 ? 's' : ''} por hoy
+          </button>
+        )}
       </div>
 
       {cargando ? (
@@ -130,7 +164,7 @@ export default function Verificacion() {
       )}
 
       {seleccionada && (
-        <ModalDetalle cuenta={seleccionada} tab={tab} onClose={() => setSeleccionada(null)} onListo={alTerminar} />
+        <ModalDetalle cuenta={seleccionada} tab={tab} onClose={() => setSeleccionada(null)} onListo={alTerminar} onOcultar={ocultarHasta} />
       )}
     </Layout>
   )
@@ -170,7 +204,7 @@ function TarjetaCuenta({ cuenta: c, tab, onClick }) {
   )
 }
 
-function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
+function ModalDetalle({ cuenta: c, tab, onClose, onListo, onOcultar }) {
   const { usuario } = useAuth()
   const a = c.alertas || {}
   const [notas, setNotas] = useState('')
@@ -178,6 +212,59 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
   const [motivoRechazo, setMotivoRechazo] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+
+  // "Cliente no estuvo": una salida que no obliga a aprobar ni rechazar —
+  // o se oculta la tarjeta solo por hoy (sigue pendiente, nada cambia en el
+  // servidor) o se reagenda la visita para otro día (queda registrado como
+  // seguimiento, igual que hace Cobranza con sus reagendos).
+  const [modoNoEstuvo, setModoNoEstuvo] = useState(false)
+  const [comentarioNoEstuvo, setComentarioNoEstuvo] = useState('')
+  const [fechaReagendoNoEstuvo, setFechaReagendoNoEstuvo] = useState('')
+  const [guardandoNoEstuvo, setGuardandoNoEstuvo] = useState(false)
+  const [errorNoEstuvo, setErrorNoEstuvo] = useState('')
+
+  const sumarDias = n => {
+    const d = new Date()
+    d.setDate(d.getDate() + n)
+    return d.toISOString().split('T')[0]
+  }
+
+  const ocultarPorHoy = () => {
+    onOcultar(c.id_cuenta, sumarDias(1))
+    onClose()
+  }
+
+  const reagendarNoEstuvo = async (fechaISOStr) => {
+    if (!fechaISOStr) { setErrorNoEstuvo('Elige una fecha'); return }
+    setGuardandoNoEstuvo(true)
+    setErrorNoEstuvo('')
+    const datos = {
+      id_cliente:       c.cliente.id_cliente,
+      id_cuenta:        c.id_cuenta,
+      tipo_seguimiento: 'no_localizado',
+      comentario:       comentarioNoEstuvo || 'Cliente no estuvo — primera visita',
+      fecha_programada: fechaISOStr,
+      idempotency_key:  crypto.randomUUID(),
+    }
+    const encolarYCerrar = () => {
+      encolarVisita(datos)
+      onOcultar(c.id_cuenta, fechaISOStr)
+      onClose()
+    }
+    if (!navigator.onLine) { encolarYCerrar(); return }
+    try {
+      await api.post('/visitas', datos, { timeout: 10000 })
+      onOcultar(c.id_cuenta, fechaISOStr)
+      onClose()
+    } catch (err) {
+      if (err.response) {
+        setErrorNoEstuvo(err.response.data?.error || 'Error al reagendar')
+        setGuardandoNoEstuvo(false)
+      } else {
+        encolarYCerrar()
+      }
+    }
+  }
 
   // Datos del cliente — se editan completos porque PUT /clientes/:id espera el objeto entero
   const [form, setForm] = useState({
@@ -808,12 +895,53 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo }) {
         </div>
 
         <div className="p-5 border-t sticky bottom-0 bg-white space-y-2">
-          {!modoRechazo ? (
+          {modoNoEstuvo ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+              <p className="text-sm font-medium text-amber-800">🚪 Cliente no estuvo</p>
+              <p className="text-xs text-amber-700">Ocúltala solo por hoy (sigue pendiente, no se pierde) o reagenda la visita para otro día.</p>
+              <input type="text" value={comentarioNoEstuvo} onChange={e => setComentarioNoEstuvo(e.target.value)}
+                placeholder="Comentario (opcional)" className={INPUT} disabled={guardandoNoEstuvo} />
+              {errorNoEstuvo && <p className="text-red-600 text-xs">{errorNoEstuvo}</p>}
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={ocultarPorHoy} disabled={guardandoNoEstuvo}
+                  className="px-3 py-2 bg-white border border-amber-300 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-medium disabled:opacity-50">
+                  🙈 Ocultar solo por hoy
+                </button>
+                <button type="button" onClick={() => reagendarNoEstuvo(sumarDias(1))} disabled={guardandoNoEstuvo}
+                  className="px-3 py-2 bg-white border border-amber-300 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-medium disabled:opacity-50">
+                  📅 Reagendar mañana
+                </button>
+                <button type="button" onClick={() => reagendarNoEstuvo(sumarDias(2))} disabled={guardandoNoEstuvo}
+                  className="px-3 py-2 bg-white border border-amber-300 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-medium disabled:opacity-50">
+                  📅 Pasado mañana
+                </button>
+                <div className="flex gap-1">
+                  <input type="date" value={fechaReagendoNoEstuvo} onChange={e => setFechaReagendoNoEstuvo(e.target.value)}
+                    disabled={guardandoNoEstuvo}
+                    className="flex-1 min-w-0 border border-amber-300 rounded-lg px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                  <button type="button" onClick={() => reagendarNoEstuvo(fechaReagendoNoEstuvo)} disabled={guardandoNoEstuvo || !fechaReagendoNoEstuvo}
+                    className="shrink-0 px-2 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium disabled:opacity-50">
+                    Ir
+                  </button>
+                </div>
+              </div>
+              <button type="button" onClick={() => { setModoNoEstuvo(false); setErrorNoEstuvo('') }} disabled={guardandoNoEstuvo}
+                className="w-full px-4 py-2 text-gray-500 hover:text-gray-700 text-xs font-medium disabled:opacity-50">
+                Volver
+              </button>
+            </div>
+          ) : !modoRechazo ? (
             <>
               {tab === 'aprobacion' && (
                 <button onClick={regresarAlSupervisor} disabled={guardando}
                   className="w-full px-4 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium transition disabled:opacity-50">
                   ↩ Regresar al supervisor
+                </button>
+              )}
+              {tab === 'visita' && (
+                <button onClick={() => setModoNoEstuvo(true)} disabled={guardando}
+                  className="w-full px-4 py-2 border border-amber-300 text-amber-700 hover:bg-amber-50 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                  🚪 Cliente no estuvo
                 </button>
               )}
               <div className="flex gap-2">
