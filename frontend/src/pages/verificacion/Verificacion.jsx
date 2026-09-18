@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
+import { encodePlusCode, decodePlusCode, normalizePlusCode, CENTRO_TUXTEPEC } from '../../utils/plusCode.js'
 import { generarTicket, compartirTicket } from '../../utils/ticket.js'
 import { comprimirImagen } from '../../utils/imagen.js'
 import { encolarPago, encolarClienteCompleto, encolarUbicacion, encolarFrecuencia, encolarVerificacion, encolarVisita } from '../../utils/offlineQueue.js'
+import { optimizarRuta } from '../../utils/ruta.js'
 
 const fmt = n => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
@@ -56,6 +57,52 @@ export default function Verificacion() {
     setOcultasHasta(prev => ({ ...prev, [idCuenta]: fechaISOStr }))
   }
 
+  // Enrutamiento: el supervisor pidió una forma de saber a quién ir a ver
+  // primero cuando tiene varias visitas pendientes ese día. Reutiliza el
+  // mismo optimizador de ruta que ya usa Cobranza (Cargar mi semana / Ruta
+  // del mapa) — todo el cálculo es local (Haversine + 2-opt/Or-opt), no pide
+  // nada al servidor más que la ubicación GPS del dispositivo, así que
+  // funciona igual con o sin señal mientras la lista ya esté cargada.
+  const [ordenRuta, setOrdenRuta] = useState(null) // null = sin ordenar; si no, array de id_cuenta en el orden a visitar
+  const [ordenandoRuta, setOrdenandoRuta] = useState(false)
+
+  const ordenarPorRuta = () => {
+    const candidatos = pendientesVisitaFiltrado.map(cu => {
+      let lat = cu.cliente?.latitud ? parseFloat(cu.cliente.latitud) : null
+      let lng = cu.cliente?.longitud ? parseFloat(cu.cliente.longitud) : null
+      if ((!lat || !lng) && cu.cliente?.plus_code) {
+        const code = normalizePlusCode(cu.cliente.plus_code)
+        const coords = code ? decodePlusCode(code) : null
+        if (coords) { lat = coords.lat; lng = coords.lng }
+      }
+      return { id_cuenta: cu.id_cuenta, lat, lng }
+    })
+    const conUbicacion = candidatos.filter(p => p.lat && p.lng)
+    const sinUbicacion = candidatos.filter(p => !(p.lat && p.lng)).map(p => p.id_cuenta)
+
+    if (conUbicacion.length === 0) {
+      setAviso('Ninguna de las cuentas pendientes tiene ubicación guardada todavía')
+      setTimeout(() => setAviso(''), 4000)
+      return
+    }
+
+    const calcular = (origen) => {
+      const ordenados = conUbicacion.length > 1 ? optimizarRuta(conUbicacion, origen).map(p => p.id_cuenta) : conUbicacion.map(p => p.id_cuenta)
+      setOrdenRuta([...ordenados, ...sinUbicacion])
+      setOrdenandoRuta(false)
+    }
+
+    setOrdenandoRuta(true)
+    if (!navigator.geolocation) { calcular(CENTRO_TUXTEPEC); return }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => calcular({ lat: coords.latitude, lng: coords.longitude }),
+      () => calcular(CENTRO_TUXTEPEC), // sin permiso/señal GPS: usa el centro de Tuxtepec como referencia
+      { enableHighAccuracy: true, timeout: 8000 }
+    )
+  }
+
+  const salirDeRuta = () => setOrdenRuta(null)
+
   const cargar = useCallback(async (silencioso) => {
     if (!silencioso) setCargando(true)
     try {
@@ -86,7 +133,17 @@ export default function Verificacion() {
   const ocultasCount = pendientesVisita.filter(cu => estaOculta(cu.id_cuenta)).length
   const pendientesVisitaFiltrado = filtrarPorRuta(pendientesVisita).filter(cu => !estaOculta(cu.id_cuenta))
   const pendientesAprobacionFiltrado = filtrarPorRuta(pendientesAprobacion)
-  const listaActiva = tab === 'visita' ? pendientesVisitaFiltrado : pendientesAprobacionFiltrado
+  // Si hay un orden de ruta calculado, se respeta (uniéndolo con la lista
+  // real: una cuenta que ya se resolvió o se ocultó desaparece sola porque
+  // ya no está en pendientesVisitaFiltrado, sin tener que tocar ordenRuta).
+  const pendientesVisitaOrdenado = ordenRuta
+    ? [...pendientesVisitaFiltrado].sort((x, y) => {
+        const ix = ordenRuta.indexOf(x.id_cuenta)
+        const iy = ordenRuta.indexOf(y.id_cuenta)
+        return (ix === -1 ? 999 : ix) - (iy === -1 ? 999 : iy)
+      })
+    : pendientesVisitaFiltrado
+  const listaActiva = tab === 'visita' ? pendientesVisitaOrdenado : pendientesAprobacionFiltrado
 
   // Se quita la cuenta de la lista local en vez de recargar del servidor:
   // recargar competía contra el caché offline (NetworkFirst) — con señal
@@ -133,6 +190,19 @@ export default function Verificacion() {
               ✅ Por aprobar{pendientesAprobacionFiltrado.length > 0 && ` (${pendientesAprobacionFiltrado.length})`}
             </button>
           )}
+          {tab === 'visita' && (
+            ordenRuta ? (
+              <button onClick={salirDeRuta}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition">
+                ✓ Salir de ruta
+              </button>
+            ) : (
+              <button onClick={ordenarPorRuta} disabled={ordenandoRuta}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition disabled:opacity-50">
+                {ordenandoRuta ? 'Calculando ruta...' : '🧭 Ordenar por ruta'}
+              </button>
+            )
+          )}
           {rutasDisponibles.length > 0 && (
             <select value={filtroRuta} onChange={e => setFiltroRuta(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ml-auto">
@@ -141,6 +211,11 @@ export default function Verificacion() {
             </select>
           )}
         </div>
+        {tab === 'visita' && ordenRuta && (
+          <p className="mt-2 text-xs text-indigo-600">
+            🧭 Ordenadas para visitar en este orden (1 = primera parada). Las que no tienen ubicación quedan al final.
+          </p>
+        )}
         {tab === 'visita' && ocultasCount > 0 && (
           <button onClick={() => setOcultasHasta({})} className="mt-2 text-xs text-gray-500 hover:text-gray-700 underline">
             👁️ Mostrar {ocultasCount} oculta{ocultasCount > 1 ? 's' : ''} por hoy
@@ -157,8 +232,10 @@ export default function Verificacion() {
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {listaActiva.map(c => (
-            <TarjetaCuenta key={c.id_cuenta} cuenta={c} tab={tab} onClick={() => setSeleccionada(c)} />
+          {listaActiva.map((c, i) => (
+            <TarjetaCuenta key={c.id_cuenta} cuenta={c} tab={tab}
+              numero={tab === 'visita' && ordenRuta ? i + 1 : null}
+              onClick={() => setSeleccionada(c)} />
           ))}
         </div>
       )}
@@ -170,14 +247,23 @@ export default function Verificacion() {
   )
 }
 
-function TarjetaCuenta({ cuenta: c, tab, onClick }) {
+function TarjetaCuenta({ cuenta: c, tab, numero, onClick }) {
   const a = c.alertas || {}
+  const sinUbicacionEnRuta = numero && !(c.cliente?.latitud && c.cliente?.longitud) && !c.cliente?.plus_code
   return (
     <button onClick={onClick} className="text-left bg-white rounded-2xl shadow p-4 hover:shadow-md transition">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-medium text-gray-800 truncate">{c.cliente?.nombre}</p>
-          <p className="text-xs text-gray-400">{c.numero_cuenta ? `Cta. ${c.numero_cuenta}` : c.folio_cuenta} · Ruta {c.cliente?.ruta || '—'}</p>
+        <div className="min-w-0 flex items-start gap-2">
+          {numero && (
+            <span className="shrink-0 w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center mt-0.5">
+              {numero}
+            </span>
+          )}
+          <div className="min-w-0">
+            <p className="font-medium text-gray-800 truncate">{c.cliente?.nombre}</p>
+            <p className="text-xs text-gray-400">{c.numero_cuenta ? `Cta. ${c.numero_cuenta}` : c.folio_cuenta} · Ruta {c.cliente?.ruta || '—'}</p>
+            {sinUbicacionEnRuta && <p className="text-[11px] text-amber-600">📍 Sin ubicación — no se pudo ordenar</p>}
+          </div>
         </div>
         <p className="font-bold text-gray-800 shrink-0">{fmt(c.precio_plan_actual)}</p>
       </div>
