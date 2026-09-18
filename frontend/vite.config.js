@@ -121,16 +121,20 @@ export default defineConfig({
             // GET /api/cuentas/verificacion/* — Primera visita (pendientes-visita,
             // pendientes-aprobacion, conteo). El supervisor puede estar en la
             // misma zona sin señal que los cobradores.
-            // networkTimeoutSeconds a 10 (no 5) por la misma razón que
-            // api-cuentas: esta lista se refresca justo después de aprobar o
-            // rechazar, y con señal lenta (no caída) 5s no alcanzaba —
-            // mostraba la versión vieja (con la cuenta ya resuelta todavía
-            // en la lista) hasta el siguiente refresco.
+            // networkTimeoutSeconds a 20 (subido de 10): admin/supervisor
+            // reportaron tener que recargar la página para que aparecieran
+            // cuentas que sí existían — al entrar a esta pantalla se disparan
+            // varias peticiones a la vez (badges, Dashboard, esta lista) y en
+            // Render (free/hobby) un arranque en frío del backend puede tardar
+            // más de 10s; con el timeout corto, el Service Worker se rendía
+            // antes de tiempo y servía una versión vieja del caché (a veces
+            // vacía) como si fuera buena. Ver también limpiarCachesDeDatos en
+            // Layout.jsx, que borra este caché apenas se confirma señal.
             urlPattern: ({ url }) => url.pathname.includes('/api/cuentas/verificacion/'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-verificacion',
-              networkTimeoutSeconds: 10,
+              networkTimeoutSeconds: 20,
               expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 12 },
               cacheableResponse: { statuses: [0, 200] },
             },

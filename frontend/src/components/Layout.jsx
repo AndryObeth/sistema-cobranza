@@ -45,6 +45,28 @@ export default function Layout({ children }) {
     setTimeout(() => setToast(null), 4000)
   }
 
+  // Cachés de datos (cuentas, clientes, visitas...) que NO deben borrarse al
+  // actualizar — si se borran y el cobrador se queda sin señal después, se
+  // queda sin nada guardado hasta que vuelva a tener conexión.
+  const CACHES_DE_DATOS = [
+    'api-cuentas', 'api-clientes', 'api-cuenta-detalle', 'api-ventas',
+    'api-visitas-cuenta', 'api-visitas-agenda', 'api-ubicaciones-cliente',
+    'api-verificacion',
+  ]
+
+  // Después de sincronizar la cola offline, el caché NetworkFirst de estas
+  // listas puede seguir teniendo la respuesta de ANTES del cambio (la
+  // acción se guardó bien en el servidor, pero nadie le avisó al Service
+  // Worker) — la próxima vez que se cargue esa lista, con mala suerte de
+  // timing, puede servir esa versión vieja como si fuera buena ("se las
+  // vuelve a arrojar": cuentas que ya se aprobaron/pagaron reaparecen).
+  // Se borran aquí, recién confirmado que hay señal y se subió algo, para
+  // forzar que el siguiente GET de cada una vaya de verdad al servidor.
+  const limpiarCachesDeDatos = async () => {
+    if (!('caches' in window)) return
+    try { await Promise.all(CACHES_DE_DATOS.map(k => caches.delete(k))) } catch { /* no crítico */ }
+  }
+
   const toggleSidebar = () => {
     setColapsado(prev => {
       const next = !prev
@@ -82,7 +104,15 @@ export default function Layout({ children }) {
           await new Promise(res => setTimeout(res, 3000))
         }
         setSincProgreso(null)
-        if (totalSinc > 0) mostrarToast(`✅ ${totalSinc} cambio(s) sincronizados`, 'exito')
+        if (totalSinc > 0) {
+          mostrarToast(`✅ ${totalSinc} cambio(s) sincronizados`, 'exito')
+          // Ver comentario en limpiarCachesDeDatos: sin esto, una lista que
+          // ya tenía caché de ANTES de subir la cola puede seguir mostrando
+          // esos datos viejos hasta que expire por su cuenta.
+          await limpiarCachesDeDatos()
+          window.dispatchEvent(new Event('verificacion-actualizada'))
+          window.dispatchEvent(new Event('offline-sync-completado'))
+        }
         if (totalErr > 0 && !silencioso) mostrarToast(`⚠️ ${totalErr} cambio(s) rechazados por el servidor — revísalos`, 'error')
         if (queueCount() > 0 && !silencioso && totalErr === 0) {
           mostrarToast(`Quedan ${queueCount()} por subir — se reintenta solo al mejorar la señal`, 'info')
@@ -120,6 +150,7 @@ export default function Layout({ children }) {
       window.removeEventListener('offline-queue-changed', actualizarConteo)
       clearInterval(intervalo)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Comentarios de cobranza sin leer (badge en el menú) — panel vive en
@@ -167,15 +198,6 @@ export default function Layout({ children }) {
     logout()
     navigate('/login')
   }
-
-  // Cachés de datos (cuentas, clientes, visitas...) que NO deben borrarse al
-  // actualizar — si se borran y el cobrador se queda sin señal después, se
-  // queda sin nada guardado hasta que vuelva a tener conexión.
-  const CACHES_DE_DATOS = [
-    'api-cuentas', 'api-clientes', 'api-cuenta-detalle', 'api-ventas',
-    'api-visitas-cuenta', 'api-visitas-agenda', 'api-ubicaciones-cliente',
-    'api-verificacion',
-  ]
 
   const handleForzarActualizacion = async () => {
     try {

@@ -101,6 +101,18 @@ export default function Verificacion() {
 
   useEffect(() => { cargar() }, [cargar])
 
+  // Segundo refresco silencioso poco después del primero: si la carga
+  // inicial compitió contra una ráfaga de peticiones al entrar (Dashboard,
+  // badges, etc.) o el backend tardó en responder, el Service Worker puede
+  // haber servido de respaldo una versión vieja del caché (a veces vacía)
+  // en vez de esperar — de ahí "tengo que recargar para que aparezcan".
+  // Este segundo intento, unos segundos después y ya sin esa congestión,
+  // se autocorrige solo sin que nadie tenga que recargar la página a mano.
+  useEffect(() => {
+    const t = setTimeout(() => cargar(true), 4000)
+    return () => clearTimeout(t)
+  }, [cargar])
+
   // Refresco periódico en segundo plano (sin el "Cargando…" de pantalla
   // completa): la lista solo se actualizaba una vez al entrar, así que una
   // venta nueva, o una cuenta que otro admin/supervisor regresó o reenvió,
@@ -108,6 +120,17 @@ export default function Verificacion() {
   useEffect(() => {
     const intervalo = setInterval(() => cargar(true), 60000)
     return () => clearInterval(intervalo)
+  }, [cargar])
+
+  // Si la cola offline termina de sincronizar en segundo plano mientras esta
+  // pantalla ya estaba abierta (Layout.jsx dispara este evento tras subir
+  // pagos/verificaciones pendientes), refrescar de inmediato — si no, una
+  // cuenta que ya se resolvió sin señal se sigue viendo "pendiente" aquí
+  // hasta el siguiente refresco de 60s.
+  useEffect(() => {
+    const handler = () => cargar(true)
+    window.addEventListener('offline-sync-completado', handler)
+    return () => window.removeEventListener('offline-sync-completado', handler)
   }, [cargar])
 
   const rutasDisponibles = [...new Set([...pendientesVisita, ...pendientesAprobacion].map(c => c.cliente?.ruta).filter(Boolean))].sort()
