@@ -196,23 +196,31 @@ export default function Layout({ children }) {
 
   // Reporta la posición GPS del cobrador/supervisor mientras tiene la app
   // abierta, para que el administrador vea "cobradores en vivo" en el Mapa.
-  // Solo mientras hay señal y la pestaña está abierta — no es rastreo en
-  // segundo plano ni se guarda nada si falla (se reintenta en el próximo tic).
+  // Solo mientras hay señal y la pestaña está visible en primer plano — no es
+  // rastreo en segundo plano ni se guarda nada si falla (se reintenta en el
+  // próximo tic). Con señal débil (rural), esta petición NO debe competir con
+  // la descarga de la lista de cuentas (mucho más pesada e importante): por
+  // eso corre solo con la app activa (no con el celular guardado/pantalla
+  // apagada) y con un timeout corto para soltar la conexión rápido si no hay
+  // caso — reportado que sin esto, cobradores con señal intermitente se
+  // quedaban sin la lista de cuentas al llegar a una zona sin señal porque
+  // esta petición de fondo competía por la poca señal disponible.
   useEffect(() => {
     if (!['cobrador', 'supervisor_cobranza'].includes(usuario?.rol)) return
     if (!navigator.geolocation) return
 
     const reportarUbicacion = () => {
       if (!navigator.onLine) return
+      if (document.visibilityState !== 'visible') return
       navigator.geolocation.getCurrentPosition(
         ({ coords }) => {
           api.put('/usuarios/mi-ubicacion',
             { lat: coords.latitude, lng: coords.longitude },
-            { timeout: 10000 }
+            { timeout: 4000 }
           ).catch(() => {})
         },
         () => {},
-        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+        { enableHighAccuracy: false, timeout: 4000, maximumAge: 60000 }
       )
     }
 

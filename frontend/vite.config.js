@@ -40,7 +40,12 @@ export default defineConfig({
               // carga al entrar a Cobranza — con señal lenta (no mala) 5s no
               // alcanzaba y mostraba la versión vieja hasta refrescar.
               networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 }, // 24h
+              // 7 días (antes 24h): con señal intermitente, un cobrador puede
+              // pasar más de un día sin lograr ni una descarga completa de la
+              // lista — si el caché vencía a las 24h, se quedaba sin nada
+              // guardado justo al llegar a una zona sin señal, aunque el día
+              // anterior sí hubiera sincronizado bien.
+              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 * 7 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
@@ -55,7 +60,7 @@ export default defineConfig({
             options: {
               cacheName: 'api-ubicaciones-cliente',
               networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 },
+              expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 * 7 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
@@ -66,7 +71,7 @@ export default defineConfig({
             options: {
               cacheName: 'api-clientes',
               networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 },
+              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 * 7 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
@@ -80,7 +85,7 @@ export default defineConfig({
             options: {
               cacheName: 'api-cuenta-detalle',
               networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 },
+              expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 * 7 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
@@ -91,7 +96,7 @@ export default defineConfig({
             options: {
               cacheName: 'api-ventas',
               networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 },
+              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 * 7 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
@@ -102,7 +107,7 @@ export default defineConfig({
             options: {
               cacheName: 'api-visitas-cuenta',
               networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 },
+              expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 * 7 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
