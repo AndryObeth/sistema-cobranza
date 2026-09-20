@@ -194,6 +194,33 @@ export default function Layout({ children }) {
     }
   }, [usuario?.rol])
 
+  // Reporta la posición GPS del cobrador/supervisor mientras tiene la app
+  // abierta, para que el administrador vea "cobradores en vivo" en el Mapa.
+  // Solo mientras hay señal y la pestaña está abierta — no es rastreo en
+  // segundo plano ni se guarda nada si falla (se reintenta en el próximo tic).
+  useEffect(() => {
+    if (!['cobrador', 'supervisor_cobranza'].includes(usuario?.rol)) return
+    if (!navigator.geolocation) return
+
+    const reportarUbicacion = () => {
+      if (!navigator.onLine) return
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          api.put('/usuarios/mi-ubicacion',
+            { lat: coords.latitude, lng: coords.longitude },
+            { timeout: 10000 }
+          ).catch(() => {})
+        },
+        () => {},
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+      )
+    }
+
+    reportarUbicacion()
+    const intervalo = setInterval(reportarUbicacion, 90000)
+    return () => clearInterval(intervalo)
+  }, [usuario?.rol])
+
   const handleLogout = () => {
     logout()
     navigate('/login')

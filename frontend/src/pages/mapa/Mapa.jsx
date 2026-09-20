@@ -115,6 +115,16 @@ function grupoIndivisible(miembros) {
 
 const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
+// "hace X min/h" a partir de una fecha ISO, para mostrar qué tan fresca es
+// la última posición reportada por el cobrador.
+function haceTiempo(fechaISO) {
+  const minutos = Math.round((Date.now() - new Date(fechaISO).getTime()) / 60000)
+  if (minutos < 1) return 'hace instantes'
+  if (minutos < 60) return `hace ${minutos} min`
+  const horas = Math.round(minutos / 60)
+  return `hace ${horas} h`
+}
+
 export default function Mapa() {
   const { usuario } = useAuth()
   const navigate = useNavigate()
@@ -155,6 +165,11 @@ export default function Mapa() {
   const [ubicInputMapa, setUbicInputMapa]     = useState('')
   const [buscandoGPSMapa, setBuscandoGPSMapa] = useState(false)
   const [guardandoUbicMapa, setGuardandoUbicMapa] = useState(false)
+
+  // Cobradores en vivo — solo administrador
+  const [verCobradores, setVerCobradores] = useState(false)
+  const [cobradoresLive, setCobradoresLive] = useState([])
+  const [cobradorSeleccionado, setCobradorSeleccionado] = useState(null)
 
   const mostrarToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
 
@@ -313,6 +328,19 @@ export default function Mapa() {
   }
 
   const puedeEditar = ['administrador', 'supervisor_cobranza', 'jefe_camioneta'].includes(usuario?.rol)
+  const esAdmin = usuario?.rol === 'administrador'
+
+  // Posición en vivo de cobradores/supervisor — solo administrador, y solo
+  // mientras el panel está activado (evita pegarle al backend sin necesidad).
+  useEffect(() => {
+    if (!esAdmin || !verCobradores) return
+    const cargar = () => {
+      api.get('/usuarios/ubicaciones').then(r => setCobradoresLive(r.data)).catch(() => {})
+    }
+    cargar()
+    const intervalo = setInterval(cargar, 20000)
+    return () => clearInterval(intervalo)
+  }, [esAdmin, verCobradores])
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_API_KEY,
@@ -594,6 +622,16 @@ export default function Mapa() {
           >
             {buscandoUbicacion ? 'Buscando…' : '🎯 Mi ubicación'}
           </button>
+          {esAdmin && (
+            <button
+              onClick={() => setVerCobradores(v => !v)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                verCobradores ? 'bg-purple-700 text-white hover:bg-purple-800' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+              }`}
+            >
+              🧑‍💼 Cobradores en vivo{verCobradores && cobradoresLive.length > 0 ? ` (${cobradoresLive.length})` : ''}
+            </button>
+          )}
           {sinCoordenadas > 0 && (
             <button
               onClick={geocodificarTodos}
@@ -841,6 +879,41 @@ export default function Mapa() {
                 title="Mi ubicación actual"
                 zIndex={999}
               />
+            )}
+
+            {verCobradores && cobradoresLive.map(c => (
+              <Marker
+                key={`cobrador-${c.id_usuario}`}
+                position={{ lat: c.ultima_lat, lng: c.ultima_lng }}
+                icon={{
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  scale: 11,
+                  fillColor: '#7e22ce',
+                  fillOpacity: 1,
+                  strokeColor: 'white',
+                  strokeWeight: 2,
+                }}
+                label={{ text: '🧑‍💼', fontSize: '12px' }}
+                title={`${c.nombre} — ${haceTiempo(c.ultima_ubicacion_fecha)}`}
+                zIndex={800}
+                onClick={() => { setSeleccionado(null); setCobradorSeleccionado(c) }}
+              />
+            ))}
+
+            {cobradorSeleccionado && (
+              <InfoWindow
+                position={{ lat: cobradorSeleccionado.ultima_lat, lng: cobradorSeleccionado.ultima_lng }}
+                onCloseClick={() => setCobradorSeleccionado(null)}
+              >
+                <div style={{ minWidth: 160 }}>
+                  <p style={{ fontWeight: 700, fontSize: 14, margin: '0 0 2px' }}>🧑‍💼 {cobradorSeleccionado.nombre}</p>
+                  <p style={{ color: '#6b7280', fontSize: 11, margin: '0 0 4px' }}>
+                    {cobradorSeleccionado.rol === 'supervisor_cobranza' ? 'Supervisor' : 'Cobrador'}
+                    {cobradorSeleccionado.rutas_asignadas?.length ? ` · Ruta ${cobradorSeleccionado.rutas_asignadas.join(', ')}` : ''}
+                  </p>
+                  <p style={{ fontSize: 12, color: '#374151' }}>{haceTiempo(cobradorSeleccionado.ultima_ubicacion_fecha)}</p>
+                </div>
+              </InfoWindow>
             )}
 
             {seleccionado && (

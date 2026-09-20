@@ -22,6 +22,12 @@ model Usuario {
   activo           Boolean  @default(true)
   fecha_creacion   DateTime @default(now())
 
+  // Última posición reportada por el celular del usuario mientras la app
+  // está abierta (solo mientras hay señal); no es rastreo en segundo plano.
+  ultima_lat              Float?
+  ultima_lng              Float?
+  ultima_ubicacion_fecha  DateTime?
+
   lista_negra_registros ListaNegra[]
 
   // Relaciones

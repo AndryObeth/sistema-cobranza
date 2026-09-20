@@ -97,6 +97,49 @@ router.put('/mi-orden', auth, async (req, res) => {
   }
 })
 
+// PUT /api/usuarios/mi-ubicacion — el usuario autenticado reporta su posición GPS actual
+// (mientras tiene la app abierta y con señal; no es rastreo en segundo plano)
+router.put('/mi-ubicacion', auth, async (req, res) => {
+  try {
+    const { lat, lng } = req.body
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      return res.status(400).json({ error: 'lat y lng son requeridos' })
+    }
+    await prisma.usuario.update({
+      where: { id_usuario: req.usuario.id },
+      data: { ultima_lat: lat, ultima_lng: lng, ultima_ubicacion_fecha: new Date() }
+    })
+    res.json({ ok: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar ubicación', detalle: error.message })
+  }
+})
+
+// GET /api/usuarios/ubicaciones — última posición conocida de cobradores/supervisor, solo administrador
+router.get('/ubicaciones', auth, async (req, res) => {
+  if (req.usuario.rol !== 'administrador') {
+    return res.status(403).json({ error: 'No autorizado' })
+  }
+  try {
+    const usuarios = await prisma.usuario.findMany({
+      where: {
+        activo: true,
+        rol: { in: ['cobrador', 'supervisor_cobranza'] },
+        ultima_lat: { not: null },
+        ultima_lng: { not: null },
+      },
+      select: {
+        id_usuario: true, nombre: true, rol: true, rutas_asignadas: true,
+        ultima_lat: true, ultima_lng: true, ultima_ubicacion_fecha: true,
+      },
+      orderBy: { nombre: 'asc' }
+    })
+    res.json(usuarios)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener ubicaciones', detalle: error.message })
+  }
+})
+
 // PUT /api/usuarios/:id — editar datos del usuario
 router.put('/:id', auth, async (req, res) => {
   try {
