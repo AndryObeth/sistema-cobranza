@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
 import { encolarPago, encolarVisita, encolarCambioDia, encolarUbicacion, getQueue } from '../../utils/offlineQueue.js'
 import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
-import { sinAcentos } from '../../utils/texto.js'
+import { sinAcentos, incluyeTexto, empiezaCon } from '../../utils/texto.js'
 import { optimizarRuta } from '../../utils/ruta.js'
 import { diaQueLeToca, nombreDiaSemana, fechaISO, DIAS_SEMANA } from '../../utils/frecuenciaCobranza.js'
 import { generarTicket, compartirTicket } from '../../utils/ticket.js'
@@ -4012,6 +4012,12 @@ function PanelRutaMapa({
 }) {
   const [mostrarReagendo, setMostrarReagendo] = useState(false)
   const [fechaReagendoManual, setFechaReagendoManual] = useState('')
+  const [busquedaRuta, setBusquedaRuta] = useState('')
+  const hayBusqueda = busquedaRuta.trim().length > 0
+  const coincideBusqueda = (c) =>
+    incluyeTexto(c.cliente?.nombre, busquedaRuta) ||
+    empiezaCon(c.numero_cuenta, busquedaRuta) ||
+    incluyeTexto(c.folio_cuenta, busquedaRuta)
   const total = paradas.length
   const faltantes = Math.max((totalImportadas ?? total) - total, 0)
   const resueltas = paradas.filter(c => estados[c.id_cuenta]).length
@@ -4298,22 +4304,45 @@ function PanelRutaMapa({
 
       {/* Lista de paradas */}
       <div className="bg-white rounded-2xl shadow overflow-hidden">
-        <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+        <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between gap-2">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            {verCompleta ? 'Todas las paradas' : 'Próximas paradas'}
+            {hayBusqueda ? 'Resultados' : verCompleta ? 'Todas las paradas' : 'Próximas paradas'}
           </p>
-          <button onClick={() => setVerCompleta(!verCompleta)} className="text-xs text-blue-600 hover:underline">
-            {verCompleta ? 'Ver menos' : 'Ver todas'}
-          </button>
+          {!hayBusqueda && (
+            <button onClick={() => setVerCompleta(!verCompleta)} className="text-xs text-blue-600 hover:underline shrink-0">
+              {verCompleta ? 'Ver menos' : 'Ver todas'}
+            </button>
+          )}
         </div>
-        {verCompleta && (
+        <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 relative">
+          <input
+            type="text"
+            value={busquedaRuta}
+            onChange={e => setBusquedaRuta(e.target.value)}
+            placeholder="Buscar por nombre o número de cuenta…"
+            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-7 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          {hayBusqueda && (
+            <button
+              onClick={() => setBusquedaRuta('')}
+              className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              aria-label="Limpiar búsqueda"
+            >✕</button>
+          )}
+        </div>
+        {verCompleta && !hayBusqueda && (
           <p className="px-4 py-1.5 text-xs text-gray-400 bg-gray-50 border-b border-gray-100">
             ¿El orden te hace dar vueltas? Usa ↑ ↓ o «traer» para acomodarlo a como conoces las calles.
           </p>
         )}
+        {hayBusqueda && !paradas.some(coincideBusqueda) && (
+          <p className="px-4 py-3 text-sm text-gray-400 text-center">Sin resultados para "{busquedaRuta}"</p>
+        )}
         <div className="divide-y divide-gray-50 max-h-96 overflow-y-auto">
           {paradas.map((c, i) => {
-            if (!verCompleta && (i < idxActual || i > idxActual + 5)) return null
+            if (hayBusqueda) {
+              if (!coincideBusqueda(c)) return null
+            } else if (!verCompleta && (i < idxActual || i > idxActual + 5)) return null
             const e = estados[c.id_cuenta]
             return (
               <div
