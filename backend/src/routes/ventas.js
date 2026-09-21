@@ -55,6 +55,7 @@ router.post('/', auth, async (req, res) => {
       frecuencia_pago, fecha_primer_cobro, horario_preferido, abono_semanal,
       numero_cuenta,
       saldo_inicial_override,
+      cliente_migrado,
       detalles,
       id_vendedor: id_vendedor_body,
       idempotency_key
@@ -146,6 +147,12 @@ router.post('/', auth, async (req, res) => {
           ? parseFloat(saldo_inicial_override)
           : precio_final_usado - (enganche_recibido_total || 0)
 
+        // Cliente migrado (ya venía cobrándose de antes, entra al sistema por
+        // primera vez): salta el control de calidad de "Primera visita" — la
+        // cuenta queda visible/cobrable para el cobrador de inmediato en vez
+        // de pendiente_visita. Solo admin puede marcarlo.
+        const esMigrado = esAdmin && !!cliente_migrado
+
         const cuentaCreada = await tx.cuenta.create({
           data: {
             folio_cuenta: 'CTA-' + Date.now(),
@@ -164,7 +171,13 @@ router.post('/', auth, async (req, res) => {
             frecuencia_pago:    frecuencia_pago    || 'semanal',
             fecha_primer_cobro: fecha_primer_cobro ? new Date(fecha_primer_cobro + 'T12:00:00') : null,
             horario_preferido:  horario_preferido  || null,
-            abono_semanal:      abono_semanal != null ? parseFloat(abono_semanal) : null
+            abono_semanal:      abono_semanal != null ? parseFloat(abono_semanal) : null,
+            ...(esMigrado && {
+              estado_verificacion: 'aprobada',
+              notas_aprobacion_admin: 'Cliente migrado — omite Primera visita (marcado al crear la venta)',
+              id_admin_aprobacion: req.usuario.id,
+              fecha_aprobacion: new Date(),
+            }),
           }
         })
 

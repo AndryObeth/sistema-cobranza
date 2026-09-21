@@ -128,6 +128,7 @@ export default function Ventas() {
   const [precioOverride, setPrecioOverride] = useState('')
   const [observacionAjuste, setObservacionAjuste] = useState('')
   const [saldoInicialOverride, setSaldoInicialOverride] = useState('')
+  const [clienteMigrado, setClienteMigrado] = useState(false)
 
   // Buscador de cliente en modal nueva venta
   const [busquedaCliente, setBusquedaCliente] = useState('')
@@ -141,7 +142,7 @@ export default function Ventas() {
 
   useEffect(() => { cargarDatos() }, [])
   // Limpiar overrides cuando cambian productos o plan
-  useEffect(() => { setPrecioOverride(''); setObservacionAjuste(''); setSaldoInicialOverride('') }, [form.tipo_venta, form.plan_venta, productosSeleccionados])
+  useEffect(() => { setPrecioOverride(''); setObservacionAjuste(''); setSaldoInicialOverride(''); setClienteMigrado(false) }, [form.tipo_venta, form.plan_venta, productosSeleccionados])
 
   const cargarDatos = async () => {
     const [rv, rc] = await Promise.allSettled([
@@ -215,6 +216,7 @@ export default function Ventas() {
     setPrecioOverride('')
     setObservacionAjuste('')
     setSaldoInicialOverride('')
+    setClienteMigrado(false)
     setError('')
     setErrorModal('')
     idempotencyKeyVentaRef.current = null
@@ -271,6 +273,7 @@ export default function Ventas() {
         if (esAdmin && saldoInicialOverride && parseFloat(saldoInicialOverride) >= 0) {
           payload.saldo_inicial_override = parseFloat(saldoInicialOverride)
         }
+        if (esAdmin && clienteMigrado) payload.cliente_migrado = true
       }
 
       const res = await api.post('/ventas', payload, { timeout: 15000 })
@@ -1058,6 +1061,24 @@ export default function Ventas() {
                             ⚠️ Saldo personalizado. Calculado automáticamente: {fmt(calculos.precio_final_total - (parseFloat(form.enganche_recibido_total) || 0))}
                           </p>
                         )}
+                      </div>
+                    )}
+
+                    {/* Cliente migrado — solo admin, salta Primera visita */}
+                    {esAdmin && (
+                      <div className="col-span-2">
+                        <label className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={clienteMigrado}
+                            onChange={e => setClienteMigrado(e.target.checked)}
+                            className="mt-0.5 rounded"
+                          />
+                          <span className="text-sm text-gray-700">
+                            <span className="font-medium">Cliente migrado</span> — ya venía cobrándose de antes, no es cliente nuevo.
+                            <span className="block text-xs text-gray-500">La cuenta queda visible para el cobrador de inmediato, sin pasar por Primera visita.</span>
+                          </span>
+                        </label>
                       </div>
                     )}
                   </div>
