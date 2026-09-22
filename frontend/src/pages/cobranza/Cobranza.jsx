@@ -395,6 +395,20 @@ export default function Cobranza() {
     setVerRutaCompleta(false)
   }
 
+  // Buscador de "Cargar mi semana": salta a una cuenta que puede estar en
+  // CUALQUIER día de la semana ya cargada, no solo el día que se está viendo.
+  // Cambia de pestaña de día y apunta el paso directo a esa parada.
+  const saltarACuentaEnSemana = (dia, id_cuenta) => {
+    setPasoPorDiaSemana(prev => ({ ...prev, [diaActivoSemana]: pasoRuta }))
+    const lista = rutaSemanaDias[dia] || []
+    setDiaActivoSemana(dia)
+    setRutaImportada(lista)
+    localStorage.setItem('cobranza_orden_manual_ruta_importada', JSON.stringify(lista))
+    const idx = lista.indexOf(id_cuenta)
+    setPasoRuta(idx >= 0 ? idx : 0)
+    setVerRutaCompleta(false)
+  }
+
   // Reagendar una parada desde Modo Ruta cuando el cliente pide otro día
   // ("pasa mañana", "pasa el jueves"). Registra la misma promesa_pago que ya
   // usa Visitas (fecha_programada) — no inventa un mecanismo nuevo — y si
@@ -2040,6 +2054,9 @@ export default function Cobranza() {
             setPaso={setPasoRuta}
             estados={paradasRuta}
             meta={rutaMeta}
+            semanaDias={rutaMeta?.tipo === 'semana' ? rutaSemanaDias : null}
+            todasLasCuentas={cuentas}
+            onSaltarDia={saltarACuentaEnSemana}
             fmt={fmt}
             enlaceMapaCliente={enlaceMapaCliente}
             onRegistrarPago={abrirModal}
@@ -4009,6 +4026,7 @@ function PanelCorreccionUbicacion({
 function PanelRutaMapa({
   paradas, totalImportadas, cargando, errorCarga, paso, setPaso, estados, meta, fmt, enlaceMapaCliente,
   onRegistrarPago, onMarcar, onCorregirUbicacion, onReordenar, onReagendar, aviso, verCompleta, setVerCompleta, onSalir,
+  semanaDias, todasLasCuentas, onSaltarDia,
 }) {
   const [mostrarReagendo, setMostrarReagendo] = useState(false)
   const [fechaReagendoManual, setFechaReagendoManual] = useState('')
@@ -4018,6 +4036,21 @@ function PanelRutaMapa({
     incluyeTexto(c.cliente?.nombre, busquedaRuta) ||
     empiezaCon(c.numero_cuenta, busquedaRuta) ||
     incluyeTexto(c.folio_cuenta, busquedaRuta)
+
+  // "Cargar mi semana": la búsqueda no se limita al día que se está viendo —
+  // recorre los 7 días ya cargados para encontrar la cuenta esté donde esté.
+  const enModoSemana = !!semanaDias
+  const ordenDiasSemana = enModoSemana
+    ? Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return nombreDiaSemana(d) })
+    : []
+  const resultadosSemana = (hayBusqueda && enModoSemana)
+    ? ordenDiasSemana.flatMap((dia, i) => (semanaDias[dia] || [])
+        .map(id => todasLasCuentas.find(c => c.id_cuenta === id))
+        .filter(Boolean)
+        .filter(coincideBusqueda)
+        .map(cuenta => ({ dia, esHoy: i === 0, cuenta })))
+    : null
+
   const total = paradas.length
   const faltantes = Math.max((totalImportadas ?? total) - total, 0)
   const resueltas = paradas.filter(c => estados[c.id_cuenta]).length
@@ -4306,7 +4339,7 @@ function PanelRutaMapa({
       <div className="bg-white rounded-2xl shadow overflow-hidden">
         <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between gap-2">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            {hayBusqueda ? 'Resultados' : verCompleta ? 'Todas las paradas' : 'Próximas paradas'}
+            {hayBusqueda ? (enModoSemana ? 'Resultados · toda la semana' : 'Resultados') : verCompleta ? 'Todas las paradas' : 'Próximas paradas'}
           </p>
           {!hayBusqueda && (
             <button onClick={() => setVerCompleta(!verCompleta)} className="text-xs text-blue-600 hover:underline shrink-0">
@@ -4319,7 +4352,7 @@ function PanelRutaMapa({
             type="text"
             value={busquedaRuta}
             onChange={e => setBusquedaRuta(e.target.value)}
-            placeholder="Buscar por nombre o número de cuenta…"
+            placeholder={enModoSemana ? "Buscar en toda la semana por nombre o cuenta…" : "Buscar por nombre o número de cuenta…"}
             className="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-7 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           {hayBusqueda && (
@@ -4335,31 +4368,23 @@ function PanelRutaMapa({
             ¿El orden te hace dar vueltas? Usa ↑ ↓ o «traer» para acomodarlo a como conoces las calles.
           </p>
         )}
-        {hayBusqueda && !paradas.some(coincideBusqueda) && (
+        {hayBusqueda && (resultadosSemana ? resultadosSemana.length === 0 : !paradas.some(coincideBusqueda)) && (
           <p className="px-4 py-3 text-sm text-gray-400 text-center">Sin resultados para "{busquedaRuta}"</p>
         )}
         <div className="divide-y divide-gray-50 max-h-96 overflow-y-auto">
-          {paradas.map((c, i) => {
-            if (hayBusqueda) {
-              if (!coincideBusqueda(c)) return null
-            } else if (!verCompleta && (i < idxActual || i > idxActual + 5)) return null
-            const e = estados[c.id_cuenta]
-            return (
-              <div
-                key={c.id_cuenta}
-                className={`flex items-center gap-2 px-3 py-2.5 transition ${i === idxActual ? 'bg-blue-50' : ''}`}
-              >
+          {resultadosSemana ? (
+            resultadosSemana.map(({ dia, esHoy, cuenta: c }) => {
+              const e = estados[c.id_cuenta]
+              return (
                 <button
-                  onClick={() => irAParada(i)}
-                  className="flex items-center gap-3 text-left min-w-0 flex-1"
+                  key={`${dia}-${c.id_cuenta}`}
+                  onClick={() => onSaltarDia(dia, c.id_cuenta)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 transition text-left hover:bg-gray-50"
                 >
                   <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold shrink-0 ${
-                    e === 'pagado' ? 'bg-green-600 text-white'
-                      : e === 'no_pago' ? 'bg-gray-300 text-white'
-                      : i === idxActual ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-500'
+                    e === 'pagado' ? 'bg-green-600 text-white' : e === 'no_pago' ? 'bg-gray-300 text-white' : 'bg-gray-100 text-gray-500'
                   }`}>
-                    {e === 'pagado' ? '✓' : e === 'no_pago' ? '✗' : i + 1}
+                    {e === 'pagado' ? '✓' : e === 'no_pago' ? '✗' : '•'}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium text-gray-800 truncate">
@@ -4368,34 +4393,72 @@ function PanelRutaMapa({
                     </span>
                     <span className="block text-xs text-gray-400 truncate">{dir(c)}</span>
                   </span>
+                  <span className="text-xs font-semibold text-indigo-600 shrink-0 capitalize">
+                    {esHoy ? 'Hoy' : LABEL_DIA_COBRANZA[dia]}
+                  </span>
                   <span className="text-sm font-semibold text-gray-600 shrink-0">{fmt(c.saldo_actual)}</span>
                 </button>
-                {verCompleta && (
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <button
-                      onClick={() => moverParada(i, i - 1)}
-                      disabled={i === 0}
-                      className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded disabled:opacity-20"
-                      aria-label="Subir"
-                    >▲</button>
-                    <button
-                      onClick={() => moverParada(i, i + 1)}
-                      disabled={i === total - 1}
-                      className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded disabled:opacity-20"
-                      aria-label="Bajar"
-                    >▼</button>
-                    {i > idxActual + 1 && (
+              )
+            })
+          ) : (
+            paradas.map((c, i) => {
+              if (hayBusqueda) {
+                if (!coincideBusqueda(c)) return null
+              } else if (!verCompleta && (i < idxActual || i > idxActual + 5)) return null
+              const e = estados[c.id_cuenta]
+              return (
+                <div
+                  key={c.id_cuenta}
+                  className={`flex items-center gap-2 px-3 py-2.5 transition ${i === idxActual ? 'bg-blue-50' : ''}`}
+                >
+                  <button
+                    onClick={() => irAParada(i)}
+                    className="flex items-center gap-3 text-left min-w-0 flex-1"
+                  >
+                    <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold shrink-0 ${
+                      e === 'pagado' ? 'bg-green-600 text-white'
+                        : e === 'no_pago' ? 'bg-gray-300 text-white'
+                        : i === idxActual ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {e === 'pagado' ? '✓' : e === 'no_pago' ? '✗' : i + 1}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-gray-800 truncate">
+                        {c.cliente?.nombre}
+                        {esAproximada(c) && <span className="text-amber-600" title="Ubicación aproximada"> ⚠️</span>}
+                      </span>
+                      <span className="block text-xs text-gray-400 truncate">{dir(c)}</span>
+                    </span>
+                    <span className="text-sm font-semibold text-gray-600 shrink-0">{fmt(c.saldo_actual)}</span>
+                  </button>
+                  {verCompleta && (
+                    <div className="flex items-center gap-0.5 shrink-0">
                       <button
-                        onClick={() => moverParada(i, idxActual + 1)}
-                        className="text-[11px] text-blue-600 hover:text-blue-800 px-1.5 py-1 rounded whitespace-nowrap"
-                        title="Mover justo después de la parada actual"
-                      >traer</button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                        onClick={() => moverParada(i, i - 1)}
+                        disabled={i === 0}
+                        className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded disabled:opacity-20"
+                        aria-label="Subir"
+                      >▲</button>
+                      <button
+                        onClick={() => moverParada(i, i + 1)}
+                        disabled={i === total - 1}
+                        className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded disabled:opacity-20"
+                        aria-label="Bajar"
+                      >▼</button>
+                      {i > idxActual + 1 && (
+                        <button
+                          onClick={() => moverParada(i, idxActual + 1)}
+                          className="text-[11px] text-blue-600 hover:text-blue-800 px-1.5 py-1 rounded whitespace-nowrap"
+                          title="Mover justo después de la parada actual"
+                        >traer</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
         </div>
       </div>
     </div>
