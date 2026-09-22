@@ -1580,13 +1580,20 @@ export default function Cobranza() {
   const calcularCumplimiento = (c) => {
     const dias = DIAS_FRECUENCIA[c.frecuencia_pago] || 7
     const hoy  = new Date(); hoy.setHours(0, 0, 0, 0)
-    const base = c.fecha_ultimo_pago
-      ? new Date(c.fecha_ultimo_pago)
-      : c.fecha_primer_cobro ? new Date(c.fecha_primer_cobro) : null
-    if (!base) return { diasAtraso: 0, tipo: 'sin_datos' }
-    base.setHours(0, 0, 0, 0)
-    const proximo = new Date(base)
-    proximo.setDate(proximo.getDate() + dias)
+    // Antes del primer pago regular (solo enganche o nada), fecha_primer_cobro
+    // YA ES el día en que se espera ese primer cobro — no hay que sumarle otro
+    // periodo encima (eso regalaba una semana de gracia extra a cuentas nuevas,
+    // mostrando "Al corriente" cuando en realidad ya tocaba el primer cobro).
+    let proximo = null
+    if (c.fecha_ultimo_pago) {
+      proximo = new Date(c.fecha_ultimo_pago)
+      proximo.setHours(0, 0, 0, 0)
+      proximo.setDate(proximo.getDate() + dias)
+    } else if (c.fecha_primer_cobro) {
+      proximo = new Date(c.fecha_primer_cobro)
+      proximo.setHours(0, 0, 0, 0)
+    }
+    if (!proximo) return { diasAtraso: 0, tipo: 'sin_datos' }
     const diff = Math.ceil((hoy - proximo) / (1000 * 60 * 60 * 24)) // positivo = atrasado
     if (diff > 0)  return { diasAtraso: diff, tipo: 'atrasado' }
     if (diff === 0) return { diasAtraso: 0,   tipo: 'vence_hoy' }

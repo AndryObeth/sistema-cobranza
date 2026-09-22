@@ -103,10 +103,17 @@ router.get('/estado-cumplimiento/:id_cuenta', auth, async (req, res) => {
     }
 
     const dias = DIAS_POR_FRECUENCIA[cuenta.frecuencia_pago] || 7
-    const base = cuenta.fecha_ultimo_pago ? new Date(cuenta.fecha_ultimo_pago) : new Date(cuenta.fecha_primer_cobro)
-    base.setHours(0, 0, 0, 0)
-    const fechaProximo = new Date(base)
-    fechaProximo.setDate(fechaProximo.getDate() + dias)
+    // Antes del primer pago regular, fecha_primer_cobro YA ES la fecha del
+    // próximo pago esperado — no sumarle otro periodo (ver utils/atraso.js).
+    let fechaProximo
+    if (cuenta.fecha_ultimo_pago) {
+      fechaProximo = new Date(cuenta.fecha_ultimo_pago)
+      fechaProximo.setHours(0, 0, 0, 0)
+      fechaProximo.setDate(fechaProximo.getDate() + dias)
+    } else {
+      fechaProximo = new Date(cuenta.fecha_primer_cobro)
+      fechaProximo.setHours(0, 0, 0, 0)
+    }
 
     const periodosSinPagar = calcularSemanasAtraso(cuenta, new Date())
 

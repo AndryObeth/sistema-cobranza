@@ -16,11 +16,21 @@ function calcularSemanasAtraso({ fecha_primer_cobro, fecha_ultimo_pago, frecuenc
 
   const dias = DIAS_POR_FRECUENCIA[frecuencia_pago] || 7
 
-  const base = fecha_ultimo_pago ? new Date(fecha_ultimo_pago) : new Date(fecha_primer_cobro)
-  base.setHours(0, 0, 0, 0)
-
-  const fechaProximo = new Date(base)
-  fechaProximo.setDate(fechaProximo.getDate() + dias)
+  // Antes del primer pago regular (solo enganche o nada todavía),
+  // fecha_primer_cobro YA ES el día en que se espera ese primer cobro —
+  // no hay que sumarle otro periodo encima, o se le regala una semana
+  // (o quincena/mes) extra de gracia a toda cuenta nueva antes de poder
+  // marcarla atrasada. Una vez que ya hubo un pago regular, ese pago sí
+  // marca el inicio del siguiente periodo (+dias).
+  let fechaProximo
+  if (fecha_ultimo_pago) {
+    fechaProximo = new Date(fecha_ultimo_pago)
+    fechaProximo.setHours(0, 0, 0, 0)
+    fechaProximo.setDate(fechaProximo.getDate() + dias)
+  } else {
+    fechaProximo = new Date(fecha_primer_cobro)
+    fechaProximo.setHours(0, 0, 0, 0)
+  }
 
   const ref = new Date(fechaReferencia)
   ref.setHours(0, 0, 0, 0)
