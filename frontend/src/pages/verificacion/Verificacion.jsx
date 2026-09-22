@@ -450,6 +450,34 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo, onOcultar }) {
   const [guardandoFecha, setGuardandoFecha] = useState(false)
   const [fechaGuardada, setFechaGuardada] = useState(false)
 
+  // Número de cuenta: se puede asignar en la aprobación final (oficina/admin),
+  // por si el vendedor no lo capturó al vender (ej. folio físico pendiente).
+  const [numeroCuenta, setNumeroCuenta] = useState(c.numero_cuenta || '')
+  const [guardandoNumCuenta, setGuardandoNumCuenta] = useState(false)
+  const [numCuentaGuardado, setNumCuentaGuardado] = useState(false)
+
+  const guardarNumeroCuenta = async () => {
+    setGuardandoNumCuenta(true)
+    setError('')
+    const cambios = { numero_cuenta: numeroCuenta.trim() || null }
+    const encolarYMostrar = () => {
+      encolarFrecuencia({ id_cuenta: c.id_cuenta, cambios })
+      setNumCuentaGuardado(true)
+      setTimeout(() => setNumCuentaGuardado(false), 3000)
+    }
+    if (!navigator.onLine) { encolarYMostrar(); setGuardandoNumCuenta(false); return }
+    try {
+      await api.put(`/pagos/cuenta/${c.id_cuenta}/frecuencia`, cambios, { timeout: 10000 })
+      setNumCuentaGuardado(true)
+      setTimeout(() => setNumCuentaGuardado(false), 3000)
+    } catch (err) {
+      if (err.response) setError(err.response.data?.error || 'Error al guardar el número de cuenta')
+      else encolarYMostrar()
+    } finally {
+      setGuardandoNumCuenta(false)
+    }
+  }
+
   const guardarFechaPrimerCobro = async () => {
     setGuardandoFecha(true)
     setError('')
@@ -823,6 +851,26 @@ function ModalDetalle({ cuenta: c, tab, onClose, onListo, onOcultar }) {
               </button>
               {fechaGuardada && <span className="text-xs text-green-600 self-center">✓</span>}
             </div>
+
+            {/* Número de cuenta: se asigna aquí en la aprobación final si el
+                vendedor no lo capturó al vender (folio físico del negocio). */}
+            {tab === 'aprobacion' && (
+              <div className="flex items-end gap-2 mt-2">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Número de cuenta {!c.numero_cuenta && <span className="text-amber-500">(sin asignar)</span>}
+                  </label>
+                  <input type="text" value={numeroCuenta} onChange={e => setNumeroCuenta(e.target.value)}
+                    placeholder="Ej: 001, A-045, 2024-001"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <button type="button" onClick={guardarNumeroCuenta} disabled={guardandoNumCuenta}
+                  className="text-xs px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium disabled:opacity-50">
+                  {guardandoNumCuenta ? 'Guardando...' : '💾 Guardar'}
+                </button>
+                {numCuentaGuardado && <span className="text-xs text-green-600 self-center">✓</span>}
+              </div>
+            )}
           </div>
 
           {/* Cobrar el primer abono en la propia visita */}
