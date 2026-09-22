@@ -29,6 +29,8 @@ model Usuario {
   ultima_ubicacion_fecha  DateTime?
 
   lista_negra_registros ListaNegra[]
+  mayoristas_registrados     Mayorista[]
+  movimientos_mayoristas_registrados MovimientoMayorista[]
 
   // Relaciones
   ventas_como_vendedor       Venta[]              @relation("VendedorVenta")
@@ -661,4 +663,51 @@ model ListaNegra {
   registrado_por      Usuario @relation(fields: [id_usuario_registro], references: [id_usuario])
 
   @@map("lista_negra")
+}
+
+// ─────────────────────────────────────────
+// 19. CRÉDITO MAYORISTAS
+// ─────────────────────────────────────────
+// Control simple de cuenta corriente para clientes mayoristas: nombre,
+// saldo actual y un historial de cargos (suben el saldo) y abonos (lo
+// bajan). Independiente del sistema de Ventas/Cuentas — no genera comisión
+// ni pasa por Primera visita. Solo administrador.
+model Mayorista {
+  id_mayorista   Int      @id @default(autoincrement())
+  nombre         String
+  telefono       String?
+  notas          String?
+  saldo_actual   Decimal  @default(0) @db.Decimal(10, 2)
+  activo         Boolean  @default(true)
+  fecha_creacion DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  id_usuario_registro Int
+  registrado_por      Usuario @relation(fields: [id_usuario_registro], references: [id_usuario])
+
+  movimientos MovimientoMayorista[]
+
+  @@map("mayoristas")
+}
+
+enum TipoMovimientoMayorista {
+  cargo
+  abono
+}
+
+model MovimientoMayorista {
+  id_movimiento  Int                     @id @default(autoincrement())
+  id_mayorista   Int
+  tipo           TipoMovimientoMayorista
+  monto          Decimal                 @db.Decimal(10, 2)
+  saldo_anterior Decimal                 @db.Decimal(10, 2)
+  saldo_nuevo    Decimal                 @db.Decimal(10, 2)
+  fecha          DateTime                @default(now())
+  observaciones  String?
+
+  id_usuario   Int
+  registrado_por Usuario   @relation(fields: [id_usuario], references: [id_usuario])
+  mayorista      Mayorista @relation(fields: [id_mayorista], references: [id_mayorista])
+
+  @@map("movimientos_mayoristas")
 }

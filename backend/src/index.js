@@ -22,6 +22,7 @@ app.use('/api/cortes',   require('./routes/cortes'))
 app.use('/api/cuentas',  require('./routes/cuentas'))
 app.use('/api/uploads',     require('./routes/uploads'))
 app.use('/api/lista-negra', require('./routes/listaNegra'))
+app.use('/api/mayoristas', require('./routes/mayoristas'))
 
 app.get('/', (req, res) => {
   res.json({ mensaje: 'Sistema cobranza activo ✅' })

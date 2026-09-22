@@ -21,6 +21,7 @@ const menu = [
   { path: '/lista-negra', label: 'Lista Negra', icono: '⛔', roles: null },
   { path: '/cortes',      label: 'Cortes',      icono: '✂️',  roles: ['administrador', 'supervisor_cobranza', 'cobrador'] },
   { path: '/usuarios',    label: 'Usuarios',    icono: '👤', roles: ['administrador'] },
+  { path: '/mayoristas',  label: 'Crédito Mayoristas', icono: '🏪', roles: ['administrador'] },
 ]
 
 export default function Layout({ children }) {
