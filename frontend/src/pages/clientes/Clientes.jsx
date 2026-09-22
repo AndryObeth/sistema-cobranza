@@ -595,10 +595,26 @@ export default function Clientes() {
     setGuardando(true)
     setError('')
     try {
+      const payload = { ...form }
+      // Decodificar el Plus Code aquí y mandar lat/lng directo: si solo se
+      // manda el texto, el backend intenta geocodificarlo con Google tal
+      // cual, y un código corto (sin ciudad) casi siempre falla en
+      // silencio — el plus_code quedaba actualizado pero las coordenadas
+      // se quedaban con las viejas (el mapa siempre prioriza lat/lng).
+      // No usar las coordenadas ya guardadas del cliente como referencia:
+      // son justo las que se están corrigiendo por estar mal.
+      if (form.plus_code?.trim()) {
+        const code = normalizePlusCode(form.plus_code)
+        if (!code) { setError('Plus Code no válido. Revisa que esté bien escrito.'); setGuardando(false); return }
+        payload.plus_code = code
+        const coords = decodePlusCode(code)
+        if (coords) { payload.latitud = coords.lat; payload.longitud = coords.lng }
+      }
+
       if (clienteEditando) {
-        await api.put(`/clientes/${clienteEditando}`, form)
+        await api.put(`/clientes/${clienteEditando}`, payload)
       } else {
-        await api.post('/clientes', form)
+        await api.post('/clientes', payload)
       }
       cerrarModal()
       cargarClientes()
