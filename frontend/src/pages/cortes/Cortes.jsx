@@ -286,6 +286,10 @@ function TabCobrador({ usuario }) {
 
   const esCobradorPuro = usuario?.rol === 'cobrador'
   const puedeGestionar = ['administrador', 'supervisor_cobranza'].includes(usuario?.rol)
+  // Para las etiquetas ("mi corte" vs "corte de cobrador"): true tanto para
+  // un cobrador puro como para un admin/supervisor que se seleccionó a sí
+  // mismo en la lista (ej. admin con rutas asignadas haciendo su propio corte).
+  const viendoSuPropioCorte = esCobradorPuro || idCobrador === usuario?.id
   const [mensaje, setMensaje] = useState('')
 
   const aprobarCorte = async (corte) => {
@@ -321,9 +325,15 @@ function TabCobrador({ usuario }) {
     if (esCobradorPuro) {
       setIdCobrador(usuario.id)
     } else {
-      // admin y supervisor: pueden ver el corte de cualquier cobrador
+      // admin y supervisor: pueden ver el corte de cualquier cobrador.
+      // Un administrador con rutas_asignadas también trabaja como cobrador
+      // en la calle (caso: supervisor con perfil admin) — debe poder
+      // aparecer aquí y hacer su propio corte sin dejar de ser admin.
       api.get('/usuarios').then(r => {
-        const cobs = r.data.filter(u => ['cobrador', 'supervisor_cobranza'].includes(u.rol) && u.activo)
+        const cobs = r.data.filter(u =>
+          (['cobrador', 'supervisor_cobranza'].includes(u.rol) || (u.rol === 'administrador' && u.rutas_asignadas?.length > 0))
+          && u.activo
+        )
         setCobradores(cobs)
         if (cobs.length > 0) {
           // el supervisor arranca viendo el suyo si está en la lista
@@ -592,7 +602,7 @@ function TabCobrador({ usuario }) {
                     onClick={() => setModalAbierto(true)}
                     className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
                   >
-                    {esCobradorPuro ? '📤 Entregar mi corte' : '✂️ Cerrar corte'}
+                    {viendoSuPropioCorte ? '📤 Entregar mi corte' : '✂️ Cerrar corte'}
                   </button>
                 )}
               </div>
@@ -826,7 +836,7 @@ function TabCobrador({ usuario }) {
         <ModalCerrarCorte
           cobradorId={idCobrador}
           semana={resumen}
-          esPropio={esCobradorPuro}
+          esPropio={viendoSuPropioCorte}
           onCerrar={recargar}
           onClose={() => setModalAbierto(false)}
         />
