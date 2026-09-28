@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../api'
 import Layout from '../../components/Layout'
+import { imprimirTicketCorteCobrador } from '../../components/TicketCorteCobrador'
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0)
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
@@ -403,6 +404,47 @@ function TabCobrador({ usuario }) {
     })
   }
 
+  const imprimirTicketActual = () => {
+    if (!resumen) return
+    const nombreCobrador = esCobradorPuro
+      ? usuario?.nombre
+      : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || '')
+
+    imprimirTicketCorteCobrador({
+      nombreCobrador,
+      semanaInicio: resumen.semana_inicio,
+      semanaFin: resumen.semana_fin,
+      totalCobrado: resumen.total_cobrado,
+      totalComisiones: resumen.total_comisiones,
+      cantidadPagos: resumen.cantidad_pagos,
+      detalle: resumen.detalle,
+    })
+  }
+
+  const imprimirTicketHistorial = (corte) => {
+    const nombreCobrador = esCobradorPuro
+      ? usuario?.nombre
+      : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || corte.cobrador?.nombre || '')
+
+    const detalle = corte.detalles.map(d => ({
+      id_pago: d.id_pago,
+      cliente: d.pago?.cliente?.nombre || '—',
+      numero_cuenta: d.pago?.cuenta?.numero_cuenta || d.pago?.cuenta?.folio_cuenta || null,
+      monto: parseFloat(d.monto_pago),
+    }))
+    const totalComisiones = corte.detalles.reduce((s, d) => s + parseFloat(d.comision_generada), 0)
+
+    imprimirTicketCorteCobrador({
+      nombreCobrador,
+      semanaInicio: corte.fecha_inicio,
+      semanaFin: corte.fecha_fin,
+      totalCobrado: corte.total_cobrado,
+      totalComisiones,
+      cantidadPagos: corte.detalles.length,
+      detalle,
+    })
+  }
+
   const descargarCorteHistorial = (corte) => {
     const nombreCobrador = esCobradorPuro
       ? usuario?.nombre
@@ -589,6 +631,14 @@ function TabCobrador({ usuario }) {
                     📄 Exportar PDF
                   </button>
                 )}
+                {resumen.cantidad_pagos > 0 && (
+                  <button
+                    onClick={imprimirTicketActual}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+                  >
+                    🖨️ Ticket 58mm
+                  </button>
+                )}
                 {'share' in navigator && resumen.cantidad_pagos > 0 && (
                   <button
                     onClick={compartirCorteActual}
@@ -746,6 +796,9 @@ function TabCobrador({ usuario }) {
                       {c.detalles?.length > 0 && (
                         <button onClick={() => descargarCorteHistorial(c)} className="text-blue-600 hover:text-blue-800 text-xs whitespace-nowrap">📄 Descargar</button>
                       )}
+                      {c.detalles?.length > 0 && (
+                        <button onClick={() => imprimirTicketHistorial(c)} className="text-blue-600 hover:text-blue-800 text-xs whitespace-nowrap">🖨️ Ticket 58mm</button>
+                      )}
                       {'share' in navigator && (
                         <button onClick={() => compartirCorteHistorialFn(c)} className="text-blue-600 hover:text-blue-800 text-xs whitespace-nowrap">📲 RawBT</button>
                       )}
@@ -810,6 +863,14 @@ function TabCobrador({ usuario }) {
                                 className="text-blue-600 hover:text-blue-800 text-xs whitespace-nowrap"
                               >
                                 📄 Descargar
+                              </button>
+                            )}
+                            {c.detalles?.length > 0 && (
+                              <button
+                                onClick={() => imprimirTicketHistorial(c)}
+                                className="text-blue-600 hover:text-blue-800 text-xs whitespace-nowrap"
+                              >
+                                🖨️ Ticket 58mm
                               </button>
                             )}
                             {'share' in navigator && (
