@@ -72,11 +72,17 @@ export default function TicketCorteCobrador({
 // CSS de la ficha — todo en negro puro, sin grises/fondos/sombras/bordes
 // redondeados; la jerarquía se marca con bold, nunca con color.
 const ESTILOS = `
-  @page { size: 58mm auto; margin: 0; }
+  /* size:58mm "auto" no lo respetan bien varios motores de impresión
+     Android/Chrome hacia impresoras térmicas continuas — en vez de alto
+     infinito, asumen una página corta y meten un salto de página (con su
+     hueco en blanco) a media lista. Se fuerza un alto fijo generoso
+     (1500mm, de sobra para cualquier corte real) para que nunca pagine. */
+  @page { size: 58mm 1500mm; margin: 0; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+  html, body { width: 58mm; margin: 0; padding: 0; background: #fff; color: #000; }
   .ticket {
-    width: 48mm;
+    width: 100%;
+    max-width: 48mm;
     margin: 0 auto;
     padding: 2mm 0;
     font-family: 'Courier New', monospace;
@@ -89,11 +95,11 @@ const ESTILOS = `
   .marca { font-weight: bold; font-size: 13px; }
   .titulo { font-weight: bold; margin: 1mm 0 2mm; }
   .fila { display: flex; justify-content: space-between; gap: 2mm; }
-  .cobro { border-top: 1px dashed #000; padding: 1mm 0; }
+  .cobro { border-top: 1px dashed #000; padding: 1mm 0; break-inside: avoid; page-break-inside: avoid; }
   .cliente { word-break: break-word; }
-  .totales { border-top: 1px dashed #000; margin-top: 1mm; padding-top: 1.5mm; }
+  .totales { border-top: 1px dashed #000; margin-top: 1mm; padding-top: 1.5mm; break-inside: avoid; page-break-inside: avoid; }
   .total-cobrado { font-weight: bold; font-size: 14px; }
-  .pie { border-top: 1px dashed #000; margin-top: 1.5mm; padding-top: 1.5mm; }
+  .pie { border-top: 1px dashed #000; margin-top: 1.5mm; padding-top: 1.5mm; break-inside: avoid; page-break-inside: avoid; }
   .firma { margin-top: 6mm; }
   .espacio-final { height: 15mm; }
   .btn-imprimir {
