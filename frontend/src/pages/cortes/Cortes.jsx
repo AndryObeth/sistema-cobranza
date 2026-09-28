@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../api'
 import Layout from '../../components/Layout'
-import { imprimirTicketCorteCobrador } from '../../components/TicketCorteCobrador'
+import { compartirTicketCorteCobrador } from '../../utils/ticketCorte'
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0)
 const fmtFecha = f => f ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
@@ -410,7 +410,7 @@ function TabCobrador({ usuario }) {
       ? usuario?.nombre
       : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || '')
 
-    imprimirTicketCorteCobrador({
+    compartirTicketCorteCobrador({
       nombreCobrador,
       semanaInicio: resumen.semana_inicio,
       semanaFin: resumen.semana_fin,
@@ -434,7 +434,7 @@ function TabCobrador({ usuario }) {
     }))
     const totalComisiones = corte.detalles.reduce((s, d) => s + parseFloat(d.comision_generada), 0)
 
-    imprimirTicketCorteCobrador({
+    compartirTicketCorteCobrador({
       nombreCobrador,
       semanaInicio: corte.fecha_inicio,
       semanaFin: corte.fecha_fin,
@@ -631,7 +631,7 @@ function TabCobrador({ usuario }) {
                     📄 Exportar PDF
                   </button>
                 )}
-                {resumen.cantidad_pagos > 0 && (
+                {'share' in navigator && resumen.cantidad_pagos > 0 && (
                   <button
                     onClick={imprimirTicketActual}
                     className="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
@@ -796,7 +796,7 @@ function TabCobrador({ usuario }) {
                       {c.detalles?.length > 0 && (
                         <button onClick={() => descargarCorteHistorial(c)} className="text-blue-600 hover:text-blue-800 text-xs whitespace-nowrap">📄 Descargar</button>
                       )}
-                      {c.detalles?.length > 0 && (
+                      {'share' in navigator && c.detalles?.length > 0 && (
                         <button onClick={() => imprimirTicketHistorial(c)} className="text-blue-600 hover:text-blue-800 text-xs whitespace-nowrap">🖨️ Ticket 58mm</button>
                       )}
                       {'share' in navigator && (
@@ -865,7 +865,7 @@ function TabCobrador({ usuario }) {
                                 📄 Descargar
                               </button>
                             )}
-                            {c.detalles?.length > 0 && (
+                            {'share' in navigator && c.detalles?.length > 0 && (
                               <button
                                 onClick={() => imprimirTicketHistorial(c)}
                                 className="text-blue-600 hover:text-blue-800 text-xs whitespace-nowrap"
