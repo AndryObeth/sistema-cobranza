@@ -84,6 +84,14 @@ function fechaLocalHoy() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+// ¿Ya se le cobró hoy a esta cuenta? Para pintar el botón "Registrar pago"
+// en verde y que no se vuelva a tocar por duda de si ya se registró.
+function yaPagoHoy(c) {
+  if (!c.fecha_ultimo_pago) return false
+  const f = new Date(c.fecha_ultimo_pago)
+  const fISO = `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`
+  return fISO === fechaLocalHoy()
+}
 
 export default function Cobranza() {
   const { usuario } = useAuth()
@@ -2344,9 +2352,11 @@ export default function Cobranza() {
                   )}
                   <button
                     onClick={() => abrirModal(c)}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition"
+                    className={`flex-1 text-white py-3 rounded-xl text-sm font-semibold transition ${
+                      yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+                    }`}
                   >
-                    Registrar pago
+                    {yaPagoHoy(c) ? '✓ Ya pagó hoy' : 'Registrar pago'}
                   </button>
                 </div>
               </div>
@@ -2540,9 +2550,11 @@ export default function Cobranza() {
                         )}
                         <button
                           onClick={() => abrirModal(c)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition"
+                          className={`text-white px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                            yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+                          }`}
                         >
-                          Registrar pago
+                          {yaPagoHoy(c) ? '✓ Ya pagó hoy' : 'Registrar pago'}
                         </button>
                       </div>
                     </td>
@@ -3915,8 +3927,10 @@ export default function Cobranza() {
                   </button>
                   <button type="button"
                     onClick={() => { cerrarDetalle(); abrirModal(cuentaDetalle) }}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition">
-                    Registrar pago
+                    className={`flex-1 text-white py-3 rounded-xl text-sm font-semibold transition ${
+                      yaPagoHoy(cuentaDetalle) ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+                    }`}>
+                    {yaPagoHoy(cuentaDetalle) ? '✓ Ya pagó hoy' : 'Registrar pago'}
                   </button>
                 </div>
               </>
@@ -4392,7 +4406,14 @@ function PanelRutaMapa({
             </div>
           )}
 
-          <button onClick={() => onRegistrarPago(actual)} className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition">💵 Registrar pago</button>
+          <button
+            onClick={() => onRegistrarPago(actual)}
+            className={`w-full mt-2 text-white py-3 rounded-xl text-sm font-semibold transition ${
+              eActual === 'pagado' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {eActual === 'pagado' ? '✓ Pago registrado' : '💵 Registrar pago'}
+          </button>
 
           <div className="grid grid-cols-2 gap-2 mt-2">
             <button onClick={() => marcarYAvanzar(actual.id_cuenta, 'pagado')} className="bg-green-100 hover:bg-green-200 text-green-800 py-2.5 rounded-xl text-sm font-medium transition">✓ Pagó</button>
