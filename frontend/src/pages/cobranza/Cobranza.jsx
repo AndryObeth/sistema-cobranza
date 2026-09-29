@@ -632,19 +632,6 @@ export default function Cobranza() {
   // y duplicaban el pago. El botón se pone verde con una palomita unos
   // segundos para que quede claro que ya se registró.
   const [pagoConfirmado, setPagoConfirmado] = useState(false)
-  // Destello rosa al TOCAR el botón "Registrar pago" (antes de que se abra
-  // el formulario) — el azul se queda como color normal; solo se pone rosa
-  // el instante en que se detecta el toque, para que quede claro que sí se
-  // registró el clic aunque de inmediato se abra el menú. Guarda el
-  // id_cuenta tocado (no un booleano) porque hay varias tarjetas en pantalla.
-  const [idCuentaBotonPresionado, setIdCuentaBotonPresionado] = useState(null)
-  const abrirModalConDestello = (cuenta) => {
-    setIdCuentaBotonPresionado(cuenta.id_cuenta)
-    setTimeout(() => {
-      abrirModal(cuenta)
-      setIdCuentaBotonPresionado(null)
-    }, 150)
-  }
   const [error, setError]         = useState('')
   const [exito, setExito]         = useState('')
 
@@ -2364,11 +2351,9 @@ export default function Cobranza() {
                     </button>
                   )}
                   <button
-                    onClick={() => abrirModalConDestello(c)}
+                    onClick={() => abrirModal(c)}
                     className={`flex-1 text-white py-3 rounded-xl text-sm font-semibold transition ${
-                      yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700'
-                        : idCuentaBotonPresionado === c.id_cuenta ? 'bg-[#EF007E]'
-                        : 'bg-blue-600 hover:bg-blue-700'
+                      yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
                     }`}
                   >
                     {yaPagoHoy(c) ? '✓ Ya pagó hoy' : 'Registrar pago'}
@@ -2564,11 +2549,9 @@ export default function Cobranza() {
                           </button>
                         )}
                         <button
-                          onClick={() => abrirModalConDestello(c)}
+                          onClick={() => abrirModal(c)}
                           className={`text-white px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                            yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700'
-                              : idCuentaBotonPresionado === c.id_cuenta ? 'bg-[#EF007E]'
-                              : 'bg-blue-600 hover:bg-blue-700'
+                            yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
                           }`}
                         >
                           {yaPagoHoy(c) ? '✓ Ya pagó hoy' : 'Registrar pago'}
@@ -3943,14 +3926,9 @@ export default function Cobranza() {
                     Cerrar
                   </button>
                   <button type="button"
-                    onClick={() => {
-                      setIdCuentaBotonPresionado(cuentaDetalle.id_cuenta)
-                      setTimeout(() => { cerrarDetalle(); abrirModal(cuentaDetalle); setIdCuentaBotonPresionado(null) }, 150)
-                    }}
+                    onClick={() => { cerrarDetalle(); abrirModal(cuentaDetalle) }}
                     className={`flex-1 text-white py-3 rounded-xl text-sm font-semibold transition ${
-                      yaPagoHoy(cuentaDetalle) ? 'bg-green-600 hover:bg-green-700'
-                        : idCuentaBotonPresionado === cuentaDetalle.id_cuenta ? 'bg-[#EF007E]'
-                        : 'bg-blue-600 hover:bg-blue-700'
+                      yaPagoHoy(cuentaDetalle) ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
                     }`}>
                     {yaPagoHoy(cuentaDetalle) ? '✓ Ya pagó hoy' : 'Registrar pago'}
                   </button>
@@ -4125,13 +4103,6 @@ function PanelRutaMapa({
   const [mostrarReagendo, setMostrarReagendo] = useState(false)
   const [fechaReagendoManual, setFechaReagendoManual] = useState('')
   const [busquedaRuta, setBusquedaRuta] = useState('')
-  // Destello rosa al tocar "Registrar pago" antes de abrir el formulario
-  // (el botón se queda azul; solo se pone rosa el instante del toque).
-  const [flashRegistrarPago, setFlashRegistrarPago] = useState(false)
-  const handleRegistrarPagoClick = () => {
-    setFlashRegistrarPago(true)
-    setTimeout(() => { onRegistrarPago(actual); setFlashRegistrarPago(false) }, 150)
-  }
   const hayBusqueda = busquedaRuta.trim().length > 0
   const coincideBusqueda = (c) =>
     incluyeTexto(c.cliente?.nombre, busquedaRuta) ||
@@ -4436,11 +4407,9 @@ function PanelRutaMapa({
           )}
 
           <button
-            onClick={handleRegistrarPagoClick}
+            onClick={() => onRegistrarPago(actual)}
             className={`w-full mt-2 text-white py-3 rounded-xl text-sm font-semibold transition ${
-              eActual === 'pagado' ? 'bg-green-600 hover:bg-green-700'
-                : flashRegistrarPago ? 'bg-[#EF007E]'
-                : 'bg-blue-600 hover:bg-blue-700'
+              eActual === 'pagado' ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
             }`}
           >
             {eActual === 'pagado' ? '✓ Pago registrado' : '💵 Registrar pago'}
