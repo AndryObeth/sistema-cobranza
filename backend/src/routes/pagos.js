@@ -89,12 +89,15 @@ router.get('/todas-cuentas', auth, async (req, res) => {
             select: { latitud: true, longitud: true, plus_code: true } }
         }},
         venta: { include: {
-          vendedor: true, cobrador: true,
+          vendedor: true, cobrador: true, jefe_camioneta: { select: { nombre: true } },
           // Datos de la compra para el ticket y la ficha de la parada en el
           // modo ruta (también funciona offline: este endpoint es el que
           // cachea la PWA)
           detalles: { select: { producto: true, cantidad: true, precio_final_unitario: true } },
-        } }
+        } },
+        // Último abono real (fecha + monto) para la ficha de la parada en
+        // modo ruta — fecha_ultimo_pago ya está en la cuenta, pero no el monto.
+        pagos: { orderBy: { fecha_pago: 'desc' }, take: 1, select: { fecha_pago: true, monto_pago: true } },
       },
       orderBy: { semanas_atraso: 'desc' }
     })

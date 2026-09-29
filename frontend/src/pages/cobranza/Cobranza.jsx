@@ -4204,7 +4204,11 @@ function PanelRutaMapa({
             <div className="min-w-0">
               <p className="text-lg font-bold text-gray-800">{actual.cliente?.nombre}</p>
               {actual.numero_cuenta && <p className="text-sm text-blue-600 font-mono">Cta. {actual.numero_cuenta}</p>}
-              <p className="text-sm text-gray-500 mt-0.5">{dir(actual)}</p>
+              {actual.cliente?.direccion && <p className="text-sm text-gray-700 mt-0.5">{actual.cliente.direccion}</p>}
+              <p className="text-sm text-gray-500">{dir(actual)}</p>
+              {actual.cliente?.referencias && (
+                <p className="text-xs text-gray-500 italic mt-0.5">📍 {actual.cliente.referencias}</p>
+              )}
               {esAproximada(actual) && (
                 <p className="text-xs text-amber-600 font-medium mt-0.5">⚠️ Ubicación aproximada</p>
               )}
@@ -4225,7 +4229,8 @@ function PanelRutaMapa({
               ? new Date(f).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: 'short', year: 'numeric' })
               : null
             const fCompra = fmtFecha(v.fecha_venta)
-            const fUltimoPago = fmtFecha(actual.fecha_ultimo_pago)
+            const ultimoPago = actual.pagos?.[0]
+            const fUltimoPago = fmtFecha(ultimoPago?.fecha_pago || actual.fecha_ultimo_pago)
             const frecLabel = { semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual', dos_meses: 'Cada 2 meses' }[actual.frecuencia_pago] || actual.frecuencia_pago || '—'
             return (
               <div className="mt-3 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 space-y-1.5">
@@ -4233,10 +4238,18 @@ function PanelRutaMapa({
                   {fCompra && (
                     <span className="text-gray-500">📅 Compró: <span className="text-gray-800 font-medium">{fCompra}</span></span>
                   )}
-                  <span className="text-gray-500">💵 Últ. pago: <span className="text-gray-800 font-medium">{fUltimoPago || 'sin pagos'}</span></span>
+                  <span className="text-gray-500">💵 Últ. pago: <span className="text-gray-800 font-medium">
+                    {fUltimoPago ? `${fUltimoPago}${ultimoPago ? ` · ${fmt(ultimoPago.monto_pago)}` : ''}` : 'sin pagos'}
+                  </span></span>
                   <span className="text-gray-500">🗓️ Paga: <span className="text-gray-800 font-medium">{frecLabel}</span>
                     {actual.abono_semanal ? <span className="text-gray-400"> · {fmt(actual.abono_semanal)}/pago</span> : null}
                   </span>
+                  {v.vendedor?.nombre && (
+                    <span className="text-gray-500">🧑‍💼 Vendedor: <span className="text-gray-800 font-medium">{v.vendedor.nombre}</span></span>
+                  )}
+                  {v.jefe_camioneta?.nombre && (
+                    <span className="text-gray-500">👷 Jefe de grupo: <span className="text-gray-800 font-medium">{v.jefe_camioneta.nombre}</span></span>
+                  )}
                   {v.precio_final_total != null && (
                     <span className="text-gray-500 col-span-2">💰 Precio: <span className="text-gray-800 font-medium">{fmt(v.precio_final_total)}</span>
                       {v.precio_original_total != null && parseFloat(v.precio_original_total) > parseFloat(v.precio_final_total) && (
