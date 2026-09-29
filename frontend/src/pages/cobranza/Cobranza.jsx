@@ -632,6 +632,15 @@ export default function Cobranza() {
   // y duplicaban el pago. El botón se pone verde con una palomita unos
   // segundos para que quede claro que ya se registró.
   const [pagoConfirmado, setPagoConfirmado] = useState(false)
+  // Marca en rosa, de forma permanente (hasta recargar), el botón "Registrar
+  // pago" de cada cuenta que ya se tocó — para identificar de un vistazo
+  // cuáles ya se intentaron, sin esperar a la confirmación del servidor
+  // (eso ya lo cubre el verde de yaPagoHoy).
+  const [cuentasBotonTocado, setCuentasBotonTocado] = useState(() => new Set())
+  const marcarTocadoYAbrir = (cuenta) => {
+    setCuentasBotonTocado(prev => new Set(prev).add(cuenta.id_cuenta))
+    abrirModal(cuenta)
+  }
   const [error, setError]         = useState('')
   const [exito, setExito]         = useState('')
 
@@ -2351,9 +2360,11 @@ export default function Cobranza() {
                     </button>
                   )}
                   <button
-                    onClick={() => abrirModal(c)}
+                    onClick={() => marcarTocadoYAbrir(c)}
                     className={`flex-1 text-white py-3 rounded-xl text-sm font-semibold transition ${
-                      yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
+                      yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700'
+                        : cuentasBotonTocado.has(c.id_cuenta) ? 'bg-[#EF007E] hover:bg-[#cb006b]'
+                        : 'bg-blue-600 hover:bg-blue-700'
                     }`}
                   >
                     {yaPagoHoy(c) ? '✓ Ya pagó hoy' : 'Registrar pago'}
@@ -2549,9 +2560,11 @@ export default function Cobranza() {
                           </button>
                         )}
                         <button
-                          onClick={() => abrirModal(c)}
+                          onClick={() => marcarTocadoYAbrir(c)}
                           className={`text-white px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                            yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
+                            yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700'
+                              : cuentasBotonTocado.has(c.id_cuenta) ? 'bg-[#EF007E] hover:bg-[#cb006b]'
+                              : 'bg-blue-600 hover:bg-blue-700'
                           }`}
                         >
                           {yaPagoHoy(c) ? '✓ Ya pagó hoy' : 'Registrar pago'}
@@ -3926,9 +3939,11 @@ export default function Cobranza() {
                     Cerrar
                   </button>
                   <button type="button"
-                    onClick={() => { cerrarDetalle(); abrirModal(cuentaDetalle) }}
+                    onClick={() => { marcarTocadoYAbrir(cuentaDetalle); cerrarDetalle() }}
                     className={`flex-1 text-white py-3 rounded-xl text-sm font-semibold transition ${
-                      yaPagoHoy(cuentaDetalle) ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
+                      yaPagoHoy(cuentaDetalle) ? 'bg-green-600 hover:bg-green-700'
+                        : cuentasBotonTocado.has(cuentaDetalle.id_cuenta) ? 'bg-[#EF007E] hover:bg-[#cb006b]'
+                        : 'bg-blue-600 hover:bg-blue-700'
                     }`}>
                     {yaPagoHoy(cuentaDetalle) ? '✓ Ya pagó hoy' : 'Registrar pago'}
                   </button>
@@ -4103,6 +4118,9 @@ function PanelRutaMapa({
   const [mostrarReagendo, setMostrarReagendo] = useState(false)
   const [fechaReagendoManual, setFechaReagendoManual] = useState('')
   const [busquedaRuta, setBusquedaRuta] = useState('')
+  // Marca en rosa, de forma permanente (hasta recargar), el botón de
+  // "Registrar pago" de cada parada que ya se tocó.
+  const [cuentasBotonTocado, setCuentasBotonTocado] = useState(() => new Set())
   const hayBusqueda = busquedaRuta.trim().length > 0
   const coincideBusqueda = (c) =>
     incluyeTexto(c.cliente?.nombre, busquedaRuta) ||
@@ -4407,9 +4425,14 @@ function PanelRutaMapa({
           )}
 
           <button
-            onClick={() => onRegistrarPago(actual)}
+            onClick={() => {
+              setCuentasBotonTocado(prev => new Set(prev).add(actual.id_cuenta))
+              onRegistrarPago(actual)
+            }}
             className={`w-full mt-2 text-white py-3 rounded-xl text-sm font-semibold transition ${
-              eActual === 'pagado' ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
+              eActual === 'pagado' ? 'bg-green-600 hover:bg-green-700'
+                : cuentasBotonTocado.has(actual.id_cuenta) ? 'bg-[#EF007E] hover:bg-[#cb006b]'
+                : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
             {eActual === 'pagado' ? '✓ Pago registrado' : '💵 Registrar pago'}
