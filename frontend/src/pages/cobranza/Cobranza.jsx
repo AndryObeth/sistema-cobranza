@@ -2353,7 +2353,7 @@ export default function Cobranza() {
                   <button
                     onClick={() => abrirModal(c)}
                     className={`flex-1 text-white py-3 rounded-xl text-sm font-semibold transition ${
-                      yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+                      yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
                     }`}
                   >
                     {yaPagoHoy(c) ? '✓ Ya pagó hoy' : 'Registrar pago'}
@@ -2551,7 +2551,7 @@ export default function Cobranza() {
                         <button
                           onClick={() => abrirModal(c)}
                           className={`text-white px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                            yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+                            yaPagoHoy(c) ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
                           }`}
                         >
                           {yaPagoHoy(c) ? '✓ Ya pagó hoy' : 'Registrar pago'}
@@ -3928,7 +3928,7 @@ export default function Cobranza() {
                   <button type="button"
                     onClick={() => { cerrarDetalle(); abrirModal(cuentaDetalle) }}
                     className={`flex-1 text-white py-3 rounded-xl text-sm font-semibold transition ${
-                      yaPagoHoy(cuentaDetalle) ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+                      yaPagoHoy(cuentaDetalle) ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
                     }`}>
                     {yaPagoHoy(cuentaDetalle) ? '✓ Ya pagó hoy' : 'Registrar pago'}
                   </button>
@@ -4409,7 +4409,7 @@ function PanelRutaMapa({
           <button
             onClick={() => onRegistrarPago(actual)}
             className={`w-full mt-2 text-white py-3 rounded-xl text-sm font-semibold transition ${
-              eActual === 'pagado' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+              eActual === 'pagado' ? 'bg-green-600 hover:bg-green-700' : 'bg-[#EF007E] hover:bg-[#cb006b]'
             }`}
           >
             {eActual === 'pagado' ? '✓ Pago registrado' : '💵 Registrar pago'}
