@@ -304,6 +304,7 @@ export default function Ventas() {
       estatus_venta:           v.estatus_venta,
       frecuencia_pago:         v.cuenta?.frecuencia_pago || 'semanal',
       numero_cuenta:           v.cuenta?.numero_cuenta || '',
+      abono_semanal:           v.cuenta?.abono_semanal != null ? parseFloat(v.cuenta.abono_semanal).toFixed(2) : '',
       diasFijosMes:            (v.cuenta?.dias_fijos_mes || []).join(', '),
       motivoCancelacion:       MOTIVOS_CANCELACION.includes(motivoSel) ? motivoSel : (motivoPrevio ? 'Otro' : ''),
       notasCancelacion:        MOTIVOS_CANCELACION.includes(motivoSel) ? resto.join(' — ') : motivoPrevio,
@@ -345,6 +346,9 @@ export default function Ventas() {
           cuentaData.frecuencia_pago = formEdicion.frecuencia_pago
         if (formEdicion.numero_cuenta !== (ventaEditando.cuenta.numero_cuenta || ''))
           cuentaData.numero_cuenta = formEdicion.numero_cuenta
+        const abonoSemanalPrevio = ventaEditando.cuenta.abono_semanal != null ? parseFloat(ventaEditando.cuenta.abono_semanal).toFixed(2) : ''
+        if (formEdicion.abono_semanal !== abonoSemanalPrevio)
+          cuentaData.abono_semanal = formEdicion.abono_semanal || null
         const diasFijosNuevo = (formEdicion.diasFijosMes || '')
           .split(',').map(s => parseInt(s.trim())).filter(n => Number.isInteger(n) && n >= 1 && n <= 31)
         const diasFijosPrevio = ventaEditando.cuenta.dias_fijos_mes || []
@@ -600,8 +604,8 @@ export default function Ventas() {
       {/* Modal editar venta */}
       {ventaEditando && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
-            <div className="flex items-center justify-between p-6 border-b">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white z-10">
               <div>
                 <h3 className="text-lg font-bold text-gray-800">Editar venta</h3>
                 <p className="text-xs text-gray-400 mt-0.5">{ventaEditando.cliente?.nombre} {ventaEditando.cuenta?.numero_cuenta ? `· Cta. ${ventaEditando.cuenta.numero_cuenta}` : ''}</p>
@@ -680,6 +684,13 @@ export default function Ventas() {
                       <input type="text" value={formEdicion.numero_cuenta}
                         onChange={e => setFormEdicion({...formEdicion, numero_cuenta: e.target.value})}
                         placeholder="Ej. 60-D"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Abono semanal</label>
+                      <input type="number" step="0.01" min="0" value={formEdicion.abono_semanal}
+                        onChange={e => setFormEdicion({...formEdicion, abono_semanal: e.target.value})}
+                        placeholder="Ej. 100.00"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                   </>

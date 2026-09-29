@@ -271,13 +271,14 @@ router.put('/:id/marcar-leido', auth, async (req, res) => {
 router.put('/cuenta/:id/frecuencia', auth, async (req, res) => {
   try {
     const id_cuenta = parseInt(req.params.id)
-    const { fecha_primer_cobro, horario_preferido, frecuencia_pago, numero_cuenta, dias_fijos_mes } = req.body
+    const { fecha_primer_cobro, horario_preferido, frecuencia_pago, numero_cuenta, dias_fijos_mes, abono_semanal } = req.body
 
     const data = {}
     if (frecuencia_pago    !== undefined) data.frecuencia_pago    = frecuencia_pago
     if (horario_preferido  !== undefined) data.horario_preferido  = horario_preferido
     if (fecha_primer_cobro !== undefined) data.fecha_primer_cobro = fecha_primer_cobro ? new Date(fecha_primer_cobro) : null
     if (numero_cuenta      !== undefined) data.numero_cuenta      = numero_cuenta || null
+    if (abono_semanal      !== undefined) data.abono_semanal      = abono_semanal !== '' && abono_semanal != null ? parseFloat(abono_semanal) : null
     if (dias_fijos_mes     !== undefined) {
       data.dias_fijos_mes = Array.isArray(dias_fijos_mes)
         ? dias_fijos_mes.map(n => parseInt(n)).filter(n => Number.isInteger(n) && n >= 1 && n <= 31)
