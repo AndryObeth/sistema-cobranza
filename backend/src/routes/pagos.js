@@ -297,10 +297,14 @@ router.put('/cuenta/:id/frecuencia', auth, async (req, res) => {
 // POST /api/pagos — registrar pago
 router.post('/', auth, async (req, res) => {
   try {
-    const { id_cuenta, monto_pago, tipo_pago, origen_pago, observaciones, fecha_pago, idempotency_key, metodo_pago, comprobante_base64 } = req.body
+    const { id_cuenta, monto_pago, tipo_pago, origen_pago, observaciones, fecha_pago, idempotency_key, metodo_pago, comprobante_base64, id_cobrador: id_cobrador_body } = req.body
     const metodo = metodo_pago === 'deposito' ? 'deposito' : 'efectivo'
     const esAdmin = ['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)
     const fechaPago = esAdmin && fecha_pago ? new Date(fecha_pago + 'T12:00:00') : new Date()
+    // Captura de pagos históricos: el admin/supervisor puede atribuir el pago
+    // al cobrador que en realidad lo cobró (para que su comisión y su corte
+    // salgan correctos), en vez de quedar a nombre de quien lo está tecleando.
+    const id_cobrador = esAdmin && id_cobrador_body ? parseInt(id_cobrador_body) : req.usuario.id
 
     // Idempotencia: con señal intermitente, el pago puede llegar y guardarse
     // en el servidor pero la respuesta se pierde antes de llegar al cobrador;
@@ -403,7 +407,7 @@ router.post('/', auth, async (req, res) => {
       data: {
         id_cuenta: parseInt(id_cuenta),
         id_cliente: cuenta.id_cliente,
-        id_cobrador: req.usuario.id,
+        id_cobrador,
         fecha_pago: fechaPago,
         monto_pago: monto,
         saldo_anterior,
@@ -452,7 +456,7 @@ router.post('/', auth, async (req, res) => {
     await prisma.comisionCobrador.create({
       data: {
         id_pago: pago.id_pago,
-        id_cobrador: req.usuario.id,
+        id_cobrador,
         monto_cobrado: monto,
         comision_generada: comision
       }
@@ -474,7 +478,7 @@ router.post('/', auth, async (req, res) => {
           id_venta:            venta.id_venta,
           id_pago:             pago.id_pago,
           id_vendedor:         id_beneficiario,
-          id_cobrador:         req.usuario.id,
+          id_cobrador,
           monto_recuperado:    monto,
           comision_cobrador:   comision_cob,
           monto_neto_vendedor: neto_vendedor,

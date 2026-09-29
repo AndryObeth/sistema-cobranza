@@ -641,9 +641,12 @@ export default function Cobranza() {
   const [historialPagos, setHistorialPagos]     = useState([])
   const [historialVisitas, setHistorialVisitas] = useState([])
 
-  // Pago histórico (solo admin)
+  // Pago histórico (solo admin) — fecha personalizada y, opcionalmente,
+  // atribuir el pago al cobrador que en realidad lo cobró.
   const [pagoHistorico, setPagoHistorico]           = useState(false)
   const [fechaPagoHistorico, setFechaPagoHistorico] = useState('')
+  const [cobradorPagoHistorico, setCobradorPagoHistorico] = useState('')
+  const [cobradoresLista, setCobradoresLista]       = useState([])
 
   // Fusión de cuentas (solo admin)
   const [modalFusion, setModalFusion]               = useState(false)
@@ -720,6 +723,20 @@ export default function Cobranza() {
       setSoloVencidas(true)
     }
   }, [])
+
+  // Lista de cobradores para "Pago histórico" — a quién se le puede atribuir
+  // un pago que en realidad cobró alguien más (mismo criterio que Cortes.jsx:
+  // cobrador/supervisor_cobranza, más administrador si también trae rutas).
+  useEffect(() => {
+    if (!['administrador', 'supervisor_cobranza'].includes(usuario?.rol)) return
+    api.get('/usuarios').then(r => {
+      const cobs = r.data.filter(u =>
+        (['cobrador', 'supervisor_cobranza'].includes(u.rol) || (u.rol === 'administrador' && u.rutas_asignadas?.length > 0))
+        && u.activo
+      )
+      setCobradoresLista(cobs)
+    }).catch(() => {})
+  }, [usuario?.rol])
 
   // Si la carga inicial falló (sin señal), reintentar solo cuando vuelva la
   // conexión — si no, el cobrador se queda atorado en la pantalla de error
@@ -877,6 +894,7 @@ export default function Cobranza() {
     setCuentasCliente([])
     setPagoHistorico(false)
     setFechaPagoHistorico('')
+    setCobradorPagoHistorico('')
     setPanelUbicacion(false)
     setModoUbicacion(null)
     setUbicPendiente(null)
@@ -1225,6 +1243,7 @@ export default function Cobranza() {
           monto_pago: monto,
           ...(formPago.metodo_pago === 'deposito' && comprobanteDeposito ? { comprobante_base64: comprobanteDeposito } : {}),
           ...(pagoHistorico && fechaPagoHistorico && { fecha_pago: fechaPagoHistorico }),
+          ...(pagoHistorico && cobradorPagoHistorico && { id_cobrador: cobradorPagoHistorico }),
           // Misma clave en todos los reintentos (directo, cola offline, resincronización)
           // para que una respuesta perdida por señal mala no duplique el pago en el servidor.
           idempotency_key: crypto.randomUUID()
@@ -2995,7 +3014,7 @@ export default function Cobranza() {
                           checked={pagoHistorico}
                           onChange={e => {
                             setPagoHistorico(e.target.checked)
-                            if (!e.target.checked) setFechaPagoHistorico('')
+                            if (!e.target.checked) { setFechaPagoHistorico(''); setCobradorPagoHistorico('') }
                           }}
                           className="w-4 h-4 accent-amber-600"
                         />
@@ -3014,6 +3033,19 @@ export default function Cobranza() {
                             required={pagoHistorico}
                             className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
                           />
+                          <label className="block text-xs font-medium text-amber-700 mt-3 mb-1">
+                            ¿Quién cobró en realidad? <span className="font-normal">(opcional — para que le cuente en su comisión y su corte)</span>
+                          </label>
+                          <select
+                            value={cobradorPagoHistorico}
+                            onChange={e => setCobradorPagoHistorico(e.target.value)}
+                            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                          >
+                            <option value="">Yo ({usuario?.nombre})</option>
+                            {cobradoresLista.map(c => (
+                              <option key={c.id_usuario} value={c.id_usuario}>{c.nombre}</option>
+                            ))}
+                          </select>
                         </div>
                       )}
                     </div>
