@@ -619,6 +619,11 @@ export default function Cobranza() {
 
   // Estado de envío
   const [guardando, setGuardando] = useState(false)
+  // Confirmación visual tras registrar el pago — algunos cobradores, sin
+  // estar seguros de si el primer toque "sí entró", volvían a tocar el botón
+  // y duplicaban el pago. El botón se pone verde con una palomita unos
+  // segundos para que quede claro que ya se registró.
+  const [pagoConfirmado, setPagoConfirmado] = useState(false)
   const [error, setError]         = useState('')
   const [exito, setExito]         = useState('')
 
@@ -895,6 +900,7 @@ export default function Cobranza() {
     setPagoHistorico(false)
     setFechaPagoHistorico('')
     setCobradorPagoHistorico('')
+    setPagoConfirmado(false)
     setPanelUbicacion(false)
     setModoUbicacion(null)
     setUbicPendiente(null)
@@ -1222,6 +1228,11 @@ export default function Cobranza() {
     setExito('')
   }
 
+  const confirmarPagoVisual = () => {
+    setPagoConfirmado(true)
+    setTimeout(() => setPagoConfirmado(false), 2500)
+  }
+
   const handleGuardar = async (e) => {
     e.preventDefault()
     setGuardando(true)
@@ -1295,6 +1306,7 @@ export default function Cobranza() {
           setComprobanteDeposito(null)
           setFormVisita(FORM_VISITA_VACIO)
           setRegistrarVisitaTambien(false)
+          confirmarPagoVisual()
         }
 
         // ── Modo offline: encolar y salir ──
@@ -1363,6 +1375,7 @@ export default function Cobranza() {
         setComprobanteDeposito(null)
         setFormVisita(FORM_VISITA_VACIO)
         setRegistrarVisitaTambien(false)
+        confirmarPagoVisual()
         if (modoRuta) marcarParada(cuentaSeleccionada.id_cuenta, 'pagado')
         cargarCuentas()
         // El pago ya se guardó; si esto falla (ej. se cortó la señal justo
@@ -3185,15 +3198,21 @@ export default function Cobranza() {
                 <button
                   type="submit"
                   disabled={guardando}
-                  className={`flex-1 text-white py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 ${
-                    noHuboPago
-                      ? 'bg-orange-500 hover:bg-orange-600'
-                      : 'bg-blue-600 hover:bg-blue-700'
+                  className={`flex-1 text-white py-2 rounded-lg text-sm font-medium transition disabled:opacity-100 ${
+                    guardando
+                      ? 'bg-gray-500'
+                      : pagoConfirmado
+                        ? 'bg-green-600'
+                        : noHuboPago
+                          ? 'bg-orange-500 hover:bg-orange-600'
+                          : 'bg-blue-600 hover:bg-blue-700'
                   }`}
                 >
                   {guardando
-                    ? 'Guardando...'
-                    : noHuboPago ? 'Registrar visita' : 'Registrar pago'}
+                    ? '⏳ Guardando...'
+                    : pagoConfirmado
+                      ? '✓ Registrado'
+                      : noHuboPago ? 'Registrar visita' : 'Registrar pago'}
                 </button>
               </div>
             </form>
