@@ -6,12 +6,14 @@ import { renderToStaticMarkup } from 'react-dom/server'
 // driver de verdad sí respeta @page { size: 58mm auto } y continúa el papel
 // sin paginar.
 //
-// Esto es DISTINTO del botón "Compartir / RawBT" (utils/ticketCorte.js):
-// ese es para cuando quien imprime es un cobrador desde su celular Android
-// con la impresora emparejada a la app RawBT — ahí RawBT intercepta
-// window.print() como si fuera una impresora del sistema, rasteriza la
-// página a imagen y la reescala hasta dejarla ilegible, así que para ese
-// caso se manda texto plano por navigator.share() en su lugar.
+// Esto es DISTINTO del botón "Compartir / RawBT" (formatearTextoCorte, en
+// este mismo Cortes.jsx): ese es para cuando quien imprime es un cobrador
+// desde su celular Android con la impresora emparejada a la app RawBT — ahí
+// RawBT intercepta window.print() como si fuera una impresora del sistema,
+// rasteriza la página a imagen y la reescala hasta dejarla ilegible, así que
+// para ese caso se manda texto plano (tabla de 3 columnas) por
+// navigator.share() en su lugar — formato específico ya afinado por los
+// cobradores, no tocar sin que lo pidan.
 //
 // Se renderiza con renderToStaticMarkup en una ventana emergente dedicada
 // (mismo patrón que utils/ticket.js para el comprobante de pago) — nunca se

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../api'
 import Layout from '../../components/Layout'
-import { compartirTicketCorteCobrador } from '../../utils/ticketCorte'
 import { imprimirTicketCorteCobrador } from '../../components/TicketCorteCobrador'
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0)
@@ -84,6 +83,59 @@ const exportarPdfCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCobrad
   if (!ventana) { alert('El navegador bloqueó la ventana emergente. Habilítala para exportar el PDF.'); return }
   ventana.document.write(html)
   ventana.document.close()
+}
+
+// Texto plano para compartir el corte por RawBT (impresora térmica portátil).
+// Resumen arriba + desglose por cuenta (no. cuenta / monto / saldo actual)
+// en formato de tabla de 3 columnas, para que quepa en el rollo de 58mm.
+const formatearTextoCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCobrado, totalComisiones, cantidadPagos, detalle, totalDeposito = 0, totalEfectivo = null }) => {
+  const W = 32
+  const sep = '='.repeat(W)
+  const das = '-'.repeat(W)
+  const money = (n) => `$${parseFloat(n || 0).toFixed(2)}`
+  const center = (s) => { const p = Math.max(0, Math.floor((W - s.length) / 2)); return ' '.repeat(p) + s }
+  const row = (l, r) => { const sp = Math.max(1, W - l.length - r.length); return l + ' '.repeat(sp) + r }
+  const fechaCorta = (f) => f ? new Date(f).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', timeZone: 'America/Mexico_City' }) : ''
+  const nombre = (nombreCobrador || '').substring(0, 20)
+  const periodo = `${fechaCorta(semanaInicio)} - ${fechaCorta(semanaFin)}`
+
+  // Cuenta(9) + Monto(10, derecha) + Saldo(13, derecha) = 32
+  const COL1 = 9, COL2 = 10, COL3 = 13
+  const fila3 = (c, m, s) => {
+    const cCol = c.length > COL1 ? c.substring(0, COL1) : c.padEnd(COL1)
+    const mCol = m.length > COL2 ? m.slice(-COL2) : m.padStart(COL2)
+    const sCol = s.length > COL3 ? s.slice(-COL3) : s.padStart(COL3)
+    return cCol + mCol + sCol
+  }
+
+  const lineas = [
+    sep,
+    center('NOVEDADES CANCUN'),
+    center('Corte de Cobrador'),
+    sep,
+    row('Cobrador:', nombre),
+    row('Periodo:', periodo),
+    das,
+    row('Total cobrado:', money(totalCobrado)),
+    ...(totalDeposito > 0 ? [
+      row('- Depositos:', money(totalDeposito)),
+      row('= Efectivo:', money(totalEfectivo ?? (totalCobrado - totalDeposito))),
+    ] : []),
+    row('Comision (12%):', money(totalComisiones)),
+    row('Cantidad de pagos:', String(cantidadPagos)),
+    das,
+    center('DESGLOSE'),
+    das,
+    fila3('Cuenta', 'Monto', 'Saldo'),
+    das,
+  ]
+
+  ordenarPorNumeroCuenta(detalle).forEach(p => {
+    lineas.push(fila3(p.numero_cuenta || '—', money(p.monto), money(p.saldo_nuevo)))
+  })
+
+  lineas.push(sep)
+  return lineas.join('\n')
 }
 
 // ─── badge estado ────────────────────────────────
@@ -423,13 +475,21 @@ function TabCobrador({ usuario }) {
     })
   }
 
+  const compartirCorte = async (datos) => {
+    try {
+      await navigator.share({ title: `Corte ${datos.nombreCobrador}`, text: formatearTextoCorte(datos) })
+    } catch (e) {
+      if (e.name !== 'AbortError') alert('No se pudo compartir: ' + e.message)
+    }
+  }
+
   const compartirCorteActual = () => {
     if (!resumen) return
     const nombreCobrador = esCobradorPuro
       ? usuario?.nombre
       : (cobradores.find(c => c.id_usuario === idCobrador)?.nombre || '')
 
-    compartirTicketCorteCobrador({
+    compartirCorte({
       nombreCobrador,
       semanaInicio: resumen.semana_inicio,
       semanaFin: resumen.semana_fin,
@@ -437,6 +497,8 @@ function TabCobrador({ usuario }) {
       totalComisiones: resumen.total_comisiones,
       cantidadPagos: resumen.cantidad_pagos,
       detalle: resumen.detalle,
+      totalDeposito: resumen.total_deposito || 0,
+      totalEfectivo: resumen.total_efectivo,
     })
   }
 
@@ -450,16 +512,21 @@ function TabCobrador({ usuario }) {
       cliente: d.pago?.cliente?.nombre || '—',
       numero_cuenta: d.pago?.cuenta?.numero_cuenta || d.pago?.cuenta?.folio_cuenta || null,
       monto: parseFloat(d.monto_pago),
+      saldo_nuevo: parseFloat(d.pago?.saldo_nuevo || 0),
+      fecha_pago: d.pago?.fecha_pago,
+      origen_pago: d.pago?.origen_pago || '—',
     }))
     const totalComisiones = corte.detalles.reduce((s, d) => s + parseFloat(d.comision_generada), 0)
 
-    compartirTicketCorteCobrador({
+    compartirCorte({
       nombreCobrador,
       semanaInicio: corte.fecha_inicio,
       semanaFin: corte.fecha_fin,
       totalCobrado: corte.total_cobrado,
       totalComisiones,
       cantidadPagos: corte.detalles.length,
+      totalDeposito: parseFloat(corte.total_deposito || 0),
+      totalEfectivo: parseFloat(corte.total_deposito || 0) > 0 ? parseFloat(corte.total_cobrado) - parseFloat(corte.total_deposito) : null,
       detalle,
     })
   }
