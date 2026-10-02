@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Layout from '../../components/Layout.jsx'
 import api from '../../api.js'
 import { incluyeTexto } from '../../utils/texto.js'
+import { generarTicketMayorista, compartirTicketMayorista } from '../../utils/ticketMayorista.js'
 
 const fmt = (n) => `$${parseFloat(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const hoyISO = () => new Date().toLocaleDateString('sv-SE') // YYYY-MM-DD en hora local
@@ -30,6 +31,7 @@ export default function Mayoristas() {
   const [formMov, setFormMov] = useState(FORM_MOV_VACIO)
   const [guardandoMov, setGuardandoMov] = useState(false)
   const [errorMov, setErrorMov] = useState('')
+  const [ultimoAbonoTicket, setUltimoAbonoTicket] = useState(null) // datos para "Ver comprobante" tras un abono
 
   const [confirmBaja, setConfirmBaja] = useState(null)
 
@@ -103,6 +105,7 @@ export default function Mayoristas() {
     setDetalle(m)
     setFormMov(FORM_MOV_VACIO)
     setErrorMov('')
+    setUltimoAbonoTicket(null)
     setCargandoMovs(true)
     try {
       const res = await api.get(`/mayoristas/${m.id_mayorista}/movimientos`)
@@ -120,6 +123,7 @@ export default function Mayoristas() {
     if (!monto || monto <= 0) { setErrorMov('El monto debe ser mayor a 0'); return }
     setGuardandoMov(true)
     setErrorMov('')
+    setUltimoAbonoTicket(null)
     try {
       const res = await api.post(`/mayoristas/${detalle.id_mayorista}/movimientos`, {
         tipo: formMov.tipo, monto, fecha: formMov.fecha, observaciones: formMov.observaciones,
@@ -128,12 +132,30 @@ export default function Mayoristas() {
       const saldoNuevo = parseFloat(res.data.saldo_nuevo)
       setDetalle(prev => ({ ...prev, saldo_actual: saldoNuevo }))
       setMayoristas(prev => prev.map(m => m.id_mayorista === detalle.id_mayorista ? { ...m, saldo_actual: saldoNuevo } : m))
+      if (formMov.tipo === 'abono') {
+        setUltimoAbonoTicket({
+          id_movimiento:    res.data.id_movimiento,
+          fecha:            res.data.fecha,
+          monto:            res.data.monto,
+          saldo_anterior:   res.data.saldo_anterior,
+          saldo_nuevo:      res.data.saldo_nuevo,
+          observaciones:    res.data.observaciones,
+          mayorista_nombre: detalle.nombre,
+          atendido_por:     res.data.registrado_por?.nombre || '',
+        })
+      }
       setFormMov(FORM_MOV_VACIO)
     } catch (err) {
       setErrorMov(err.response?.data?.error || 'Error al registrar el movimiento')
     } finally {
       setGuardandoMov(false)
     }
+  }
+
+  const verComprobanteMayorista = () => {
+    generarTicketMayorista(ultimoAbonoTicket).catch(() => {
+      alert('El navegador bloqueó la ventana emergente. Habilítala para ver el comprobante.')
+    })
   }
 
   const campo = (key, label, placeholder, tipo = 'text') => (
@@ -360,6 +382,23 @@ export default function Mayoristas() {
                 className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-2.5 rounded-xl font-semibold text-sm transition">
                 {guardandoMov ? 'Guardando...' : 'Registrar movimiento'}
               </button>
+              {ultimoAbonoTicket && (
+                <div className="mt-2 bg-green-50 border border-green-300 rounded-xl p-3 flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-sm text-green-800 font-medium">✅ Abono registrado</p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={verComprobanteMayorista}
+                      className="text-xs px-3 py-1.5 bg-white border border-green-300 hover:bg-green-100 text-green-800 rounded-lg font-semibold">
+                      🖨️ Ver comprobante
+                    </button>
+                    {'share' in navigator && (
+                      <button type="button" onClick={() => compartirTicketMayorista(ultimoAbonoTicket)}
+                        className="text-xs px-3 py-1.5 bg-white border border-green-300 hover:bg-green-100 text-green-800 rounded-lg font-semibold">
+                        📲 RawBT
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="px-6 py-4">
