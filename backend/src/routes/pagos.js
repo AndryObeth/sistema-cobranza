@@ -529,4 +529,220 @@ router.post('/', auth, async (req, res) => {
   }
 })
 
+// Un pago ya reconciliado en un corte (cobrador o vendedor) no se puede
+// editar/eliminar sin romper esos totales — hay que reabrir el corte primero.
+async function pagoEnCorteCerrado(id_pago) {
+  const enCorteCobrador = await prisma.detalleCorteCorador.findFirst({ where: { id_pago } })
+  if (enCorteCobrador) return 'Este pago ya está incluido en un corte de cobrador cerrado — reabre el corte antes de editarlo o eliminarlo.'
+  const recuperacion = await prisma.recuperacionEnganche.findUnique({
+    where: { id_pago },
+    include: { detalles_corte_vendedor: { select: { id_detalle_corte_vendedor: true } } }
+  })
+  if (recuperacion?.detalles_corte_vendedor?.length > 0) {
+    return 'Este pago ya está incluido en un corte de vendedor cerrado — reabre el corte antes de editarlo o eliminarlo.'
+  }
+  return null
+}
+
+// PUT /api/pagos/:id — editar un pago ya registrado (solo administrador).
+// Permite corregir monto, fecha, observaciones y método. Reacomoda la
+// cadena de saldo_anterior/saldo_nuevo de los pagos POSTERIORES de la misma
+// cuenta (por id_pago) y el saldo_actual de la cuenta, con el mismo criterio
+// que ya se usaba a mano en los scripts de corrección de pagos duplicados.
+router.put('/:id', auth, async (req, res) => {
+  try {
+    if (req.usuario.rol !== 'administrador') {
+      return res.status(403).json({ error: 'Solo el administrador puede editar pagos' })
+    }
+    const id_pago = parseInt(req.params.id)
+    const { monto_pago, fecha_pago, observaciones, metodo_pago } = req.body
+
+    const pago = await prisma.pago.findUnique({ where: { id_pago } })
+    if (!pago) return res.status(404).json({ error: 'Pago no encontrado' })
+
+    const bloqueo = await pagoEnCorteCerrado(id_pago)
+    if (bloqueo) return res.status(400).json({ error: bloqueo })
+
+    const cuenta = await prisma.cuenta.findUnique({ where: { id_cuenta: pago.id_cuenta } })
+    if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
+
+    const nuevoMonto = monto_pago != null ? parseFloat(monto_pago) : parseFloat(pago.monto_pago)
+    if (!nuevoMonto || isNaN(nuevoMonto) || nuevoMonto <= 0) {
+      return res.status(400).json({ error: 'El monto debe ser mayor a cero' })
+    }
+    const nuevaFecha = fecha_pago ? new Date(fecha_pago + 'T12:00:00') : pago.fecha_pago
+
+    // delta > 0 si el monto bajó (se "devuelve" saldo); < 0 si subió (se cobra más)
+    const delta = parseFloat((parseFloat(pago.monto_pago) - nuevoMonto).toFixed(2))
+    const nuevoSaldoNuevoPago = parseFloat((parseFloat(pago.saldo_anterior) - nuevoMonto).toFixed(2))
+
+    const posteriores = await prisma.pago.findMany({
+      where: { id_cuenta: pago.id_cuenta, id_pago: { gt: id_pago } },
+      orderBy: { id_pago: 'asc' }
+    })
+    const nuevoSaldoActualCuenta = parseFloat((parseFloat(cuenta.saldo_actual) + delta).toFixed(2))
+
+    // Validar que ningún punto de la cadena (este pago ni los posteriores)
+    // quede en negativo con el nuevo monto.
+    const saldosResultantes = [nuevoSaldoNuevoPago, ...posteriores.map(p => parseFloat((parseFloat(p.saldo_nuevo) + delta).toFixed(2)))]
+    if (saldosResultantes.some(s => s < -0.01)) {
+      return res.status(400).json({ error: 'Ese monto dejaría un saldo negativo en la cuenta (hay pagos posteriores que ya aplicaron contra el saldo anterior).' })
+    }
+
+    // fecha_ultimo_pago / atraso: recalcular con la fecha más reciente entre
+    // todos los pagos de la cuenta, usando la fecha NUEVA para este pago.
+    const todosLosPagos = await prisma.pago.findMany({
+      where: { id_cuenta: pago.id_cuenta },
+      select: { id_pago: true, fecha_pago: true }
+    })
+    const fechaMasReciente = todosLosPagos.reduce((max, p) => {
+      const f = p.id_pago === id_pago ? nuevaFecha : p.fecha_pago
+      return f > max ? f : max
+    }, new Date(0))
+
+    const semanas_atraso_nueva = nuevoSaldoActualCuenta === 0 ? 0 : calcularSemanasAtraso({
+      fecha_primer_cobro: cuenta.fecha_primer_cobro,
+      fecha_ultimo_pago:  fechaMasReciente,
+      frecuencia_pago:    cuenta.frecuencia_pago,
+    })
+    const nuevoEstadoCuenta = nuevoSaldoActualCuenta === 0 ? 'liquidada' : calcularEstadoPorAtraso(semanas_atraso_nueva)
+
+    await prisma.$transaction(async tx => {
+      await tx.pago.update({
+        where: { id_pago },
+        data: {
+          monto_pago: nuevoMonto,
+          saldo_nuevo: nuevoSaldoNuevoPago,
+          fecha_pago: nuevaFecha,
+          ...(observaciones !== undefined && { observaciones }),
+          ...(metodo_pago !== undefined && { metodo_pago: metodo_pago === 'deposito' ? 'deposito' : 'efectivo' }),
+        }
+      })
+
+      if (delta !== 0) {
+        for (const p of posteriores) {
+          await tx.pago.update({
+            where: { id_pago: p.id_pago },
+            data: {
+              saldo_anterior: parseFloat((parseFloat(p.saldo_anterior) + delta).toFixed(2)),
+              saldo_nuevo:    parseFloat((parseFloat(p.saldo_nuevo)    + delta).toFixed(2)),
+            }
+          })
+        }
+
+        const comision = await tx.comisionCobrador.findUnique({ where: { id_pago } })
+        if (comision) {
+          await tx.comisionCobrador.update({
+            where: { id_pago },
+            data: { monto_cobrado: nuevoMonto, comision_generada: parseFloat((nuevoMonto * 0.12).toFixed(2)) }
+          })
+        }
+      }
+
+      await tx.cuenta.update({
+        where: { id_cuenta: pago.id_cuenta },
+        data: {
+          saldo_actual: nuevoSaldoActualCuenta,
+          fecha_ultimo_pago: fechaMasReciente,
+          estado_cuenta: nuevoEstadoCuenta,
+          semanas_atraso: semanas_atraso_nueva,
+        }
+      })
+
+      if (nuevoSaldoActualCuenta === 0 && cuenta.estado_cuenta !== 'liquidada') {
+        await tx.venta.update({ where: { id_venta: cuenta.id_venta }, data: { estatus_venta: 'liquidada' } })
+      } else if (nuevoSaldoActualCuenta > 0 && cuenta.estado_cuenta === 'liquidada') {
+        await tx.venta.update({ where: { id_venta: cuenta.id_venta }, data: { estatus_venta: 'activa' } })
+      }
+    })
+
+    const pagoActualizado = await prisma.pago.findUnique({ where: { id_pago }, include: { comision_cobrador: true } })
+    res.json({ mensaje: 'Pago actualizado', pago: pagoActualizado })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al editar el pago', detalle: error.message })
+  }
+})
+
+// DELETE /api/pagos/:id — eliminar un pago (solo administrador). Reacomoda
+// la cadena de saldos de los pagos posteriores y de la cuenta, igual que
+// PUT de arriba.
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    if (req.usuario.rol !== 'administrador') {
+      return res.status(403).json({ error: 'Solo el administrador puede eliminar pagos' })
+    }
+    const id_pago = parseInt(req.params.id)
+    const pago = await prisma.pago.findUnique({ where: { id_pago } })
+    if (!pago) return res.status(404).json({ error: 'Pago no encontrado' })
+
+    const bloqueo = await pagoEnCorteCerrado(id_pago)
+    if (bloqueo) return res.status(400).json({ error: bloqueo })
+
+    const cuenta = await prisma.cuenta.findUnique({ where: { id_cuenta: pago.id_cuenta } })
+    if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
+
+    const monto = parseFloat(pago.monto_pago)
+    const nuevoSaldoActualCuenta = parseFloat((parseFloat(cuenta.saldo_actual) + monto).toFixed(2))
+
+    const posteriores = await prisma.pago.findMany({
+      where: { id_cuenta: pago.id_cuenta, id_pago: { gt: id_pago } },
+      orderBy: { id_pago: 'asc' }
+    })
+
+    const pagosRestantes = await prisma.pago.findMany({
+      where: { id_cuenta: pago.id_cuenta, id_pago: { not: id_pago } },
+      select: { fecha_pago: true }
+    })
+    const hayPagosRestantes = pagosRestantes.length > 0
+    const fechaMasReciente = hayPagosRestantes
+      ? pagosRestantes.reduce((max, p) => p.fecha_pago > max ? p.fecha_pago : max, pagosRestantes[0].fecha_pago)
+      : null
+
+    const semanas_atraso_nueva = (nuevoSaldoActualCuenta === 0 || !hayPagosRestantes) ? 0 : calcularSemanasAtraso({
+      fecha_primer_cobro: cuenta.fecha_primer_cobro,
+      fecha_ultimo_pago:  fechaMasReciente,
+      frecuencia_pago:    cuenta.frecuencia_pago,
+    })
+    const nuevoEstadoCuenta = nuevoSaldoActualCuenta === 0 ? 'liquidada' : calcularEstadoPorAtraso(semanas_atraso_nueva)
+
+    await prisma.$transaction(async tx => {
+      await tx.comisionCobrador.deleteMany({ where: { id_pago } })
+      await tx.recuperacionEnganche.deleteMany({ where: { id_pago } })
+      await tx.comprobantePago.deleteMany({ where: { id_pago } })
+
+      for (const p of posteriores) {
+        await tx.pago.update({
+          where: { id_pago: p.id_pago },
+          data: {
+            saldo_anterior: parseFloat((parseFloat(p.saldo_anterior) + monto).toFixed(2)),
+            saldo_nuevo:    parseFloat((parseFloat(p.saldo_nuevo)    + monto).toFixed(2)),
+          }
+        })
+      }
+
+      await tx.pago.delete({ where: { id_pago } })
+
+      await tx.cuenta.update({
+        where: { id_cuenta: pago.id_cuenta },
+        data: {
+          saldo_actual: nuevoSaldoActualCuenta,
+          fecha_ultimo_pago: fechaMasReciente,
+          estado_cuenta: nuevoEstadoCuenta,
+          semanas_atraso: semanas_atraso_nueva,
+        }
+      })
+
+      if (nuevoSaldoActualCuenta === 0 && cuenta.estado_cuenta !== 'liquidada') {
+        await tx.venta.update({ where: { id_venta: cuenta.id_venta }, data: { estatus_venta: 'liquidada' } })
+      } else if (nuevoSaldoActualCuenta > 0 && cuenta.estado_cuenta === 'liquidada') {
+        await tx.venta.update({ where: { id_venta: cuenta.id_venta }, data: { estatus_venta: 'activa' } })
+      }
+    })
+
+    res.json({ mensaje: 'Pago eliminado', saldo_actual: nuevoSaldoActualCuenta })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar el pago', detalle: error.message })
+  }
+})
+
 module.exports = router

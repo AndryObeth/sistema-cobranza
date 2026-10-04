@@ -661,6 +661,13 @@ export default function Cobranza() {
 
   // Historiales
   const [historialPagos, setHistorialPagos]     = useState([])
+  // Editar/eliminar un pago ya registrado — solo administrador.
+  const esAdministrador = usuario?.rol === 'administrador'
+  const [editandoPago, setEditandoPago] = useState(null) // id_pago en edición, o null
+  const [formEditarPago, setFormEditarPago] = useState({ monto_pago: '', fecha_pago: '', observaciones: '' })
+  const [guardandoEdicionPago, setGuardandoEdicionPago] = useState(false)
+  const [errorEdicionPago, setErrorEdicionPago] = useState('')
+  const [eliminandoPago, setEliminandoPago] = useState(null) // id_pago en proceso de borrado
   const [historialVisitas, setHistorialVisitas] = useState([])
 
   // Pago histórico (solo admin) — fecha personalizada y, opcionalmente,
@@ -1248,6 +1255,65 @@ export default function Cobranza() {
   const confirmarPagoVisual = () => {
     setPagoConfirmado(true)
     setTimeout(() => setPagoConfirmado(false), 2500)
+  }
+
+  // Vuelve a cargar el detalle de la cuenta seleccionada (saldo, historial de
+  // pagos) tras editar o eliminar un pago — mismo patrón que tras registrar uno.
+  const refrescarCuentaSeleccionada = async () => {
+    if (!cuentaSeleccionada) return
+    try {
+      const actualizada = await api.get(`/pagos/cuenta/${cuentaSeleccionada.id_cuenta}`)
+      setCuentaSeleccionada(actualizada.data)
+      setHistorialPagos(actualizada.data.pagos || [])
+    } catch {}
+    cargarCuentas()
+  }
+
+  const abrirEdicionPago = (p) => {
+    setEditandoPago(p.id_pago)
+    setFormEditarPago({
+      monto_pago: parseFloat(p.monto_pago).toFixed(2),
+      fecha_pago: new Date(p.fecha_pago).toISOString().split('T')[0],
+      observaciones: p.observaciones || '',
+    })
+    setErrorEdicionPago('')
+  }
+  const cancelarEdicionPago = () => {
+    setEditandoPago(null)
+    setErrorEdicionPago('')
+  }
+
+  const guardarEdicionPago = async () => {
+    const monto = parseFloat(formEditarPago.monto_pago)
+    if (!monto || monto <= 0) { setErrorEdicionPago('Ingresa un monto válido'); return }
+    setGuardandoEdicionPago(true)
+    setErrorEdicionPago('')
+    try {
+      await api.put(`/pagos/${editandoPago}`, {
+        monto_pago: monto,
+        fecha_pago: formEditarPago.fecha_pago,
+        observaciones: formEditarPago.observaciones,
+      }, { timeout: 10000 })
+      setEditandoPago(null)
+      await refrescarCuentaSeleccionada()
+    } catch (err) {
+      setErrorEdicionPago(err.response?.data?.error || 'Error al editar el pago')
+    } finally {
+      setGuardandoEdicionPago(false)
+    }
+  }
+
+  const eliminarPago = async (p) => {
+    if (!confirm(`¿Eliminar el abono de ${fmt(p.monto_pago)} del ${new Date(p.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}? Esto reacomoda el saldo de la cuenta.`)) return
+    setEliminandoPago(p.id_pago)
+    try {
+      await api.delete(`/pagos/${p.id_pago}`, { timeout: 10000 })
+      await refrescarCuentaSeleccionada()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al eliminar el pago')
+    } finally {
+      setEliminandoPago(null)
+    }
   }
 
   const handleGuardar = async (e) => {
@@ -3308,31 +3374,88 @@ export default function Cobranza() {
                           </div>
                         )
                       }
+                      // Formulario de edición inline — reemplaza la fila mientras se edita
+                      // (compartido entre "enganche" y el abono normal de abajo).
+                      if (esAdministrador && editandoPago === p.id_pago) {
+                        return (
+                          <div key={p.id_pago} className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Monto</label>
+                                <input type="number" step="0.01" min="0" value={formEditarPago.monto_pago}
+                                  onChange={e => setFormEditarPago(f => ({ ...f, monto_pago: e.target.value }))}
+                                  className="w-full border border-amber-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Fecha</label>
+                                <input type="date" value={formEditarPago.fecha_pago}
+                                  onChange={e => setFormEditarPago(f => ({ ...f, fecha_pago: e.target.value }))}
+                                  className="w-full border border-amber-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                              </div>
+                            </div>
+                            <input type="text" value={formEditarPago.observaciones}
+                              onChange={e => setFormEditarPago(f => ({ ...f, observaciones: e.target.value }))}
+                              placeholder="Observaciones (opcional)"
+                              className="w-full border border-amber-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                            {errorEdicionPago && <p className="text-red-600 text-xs">{errorEdicionPago}</p>}
+                            <div className="flex gap-2">
+                              <button type="button" onClick={cancelarEdicionPago}
+                                className="flex-1 border border-gray-300 text-gray-600 py-1.5 rounded text-xs hover:bg-gray-50">Cancelar</button>
+                              <button type="button" onClick={guardarEdicionPago} disabled={guardandoEdicionPago}
+                                className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-1.5 rounded text-xs font-semibold disabled:opacity-50">
+                                {guardandoEdicionPago ? 'Guardando...' : 'Guardar'}
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      }
                       if (esEnganche) {
                         return (
-                          <div key={p.id_pago} className="flex items-center justify-between bg-teal-50 border border-teal-200 rounded-lg px-4 py-2 text-sm">
+                          <div key={p.id_pago} className="bg-teal-50 border border-teal-200 rounded-lg px-4 py-2 text-sm">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="text-xs font-semibold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">Enganche</span>
+                                <span className="font-medium text-teal-800 ml-2">{fmt(p.monto_pago)}</span>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
+                                <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
+                              </div>
+                            </div>
+                            {esAdministrador && (
+                              <div className="flex gap-3 justify-end mt-1">
+                                <button type="button" onClick={() => abrirEdicionPago(p)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">✏️ Editar</button>
+                                <button type="button" onClick={() => eliminarPago(p)} disabled={eliminandoPago === p.id_pago}
+                                  className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50">
+                                  {eliminandoPago === p.id_pago ? 'Eliminando...' : '🗑️ Eliminar'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+                      return (
+                        <div key={p.id_pago} className="bg-gray-50 rounded-lg px-4 py-2 text-sm">
+                          <div className="flex items-center justify-between">
                             <div>
-                              <span className="text-xs font-semibold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">Enganche</span>
-                              <span className="font-medium text-teal-800 ml-2">{fmt(p.monto_pago)}</span>
+                              <span className="font-medium text-gray-800">{fmt(p.monto_pago)}</span>
+                              <span className="text-gray-400 ml-2 text-xs">{p.tipo_pago}</span>
+                              {p.observaciones && <p className="text-gray-400 text-xs mt-0.5">{p.observaciones}</p>}
                             </div>
                             <div className="text-right">
                               <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
                               <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
                             </div>
                           </div>
-                        )
-                      }
-                      return (
-                        <div key={p.id_pago} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2 text-sm">
-                          <div>
-                            <span className="font-medium text-gray-800">{fmt(p.monto_pago)}</span>
-                            <span className="text-gray-400 ml-2 text-xs">{p.tipo_pago}</span>
-                            {p.observaciones && <p className="text-gray-400 text-xs mt-0.5">{p.observaciones}</p>}
-                          </div>
-                          <div className="text-right">
-                            <p className="text-gray-500 text-xs">{new Date(p.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
-                            <p className="text-gray-400 text-xs">Saldo: {fmt(p.saldo_nuevo)}</p>
-                          </div>
+                          {esAdministrador && (
+                            <div className="flex gap-3 justify-end mt-1">
+                              <button type="button" onClick={() => abrirEdicionPago(p)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">✏️ Editar</button>
+                              <button type="button" onClick={() => eliminarPago(p)} disabled={eliminandoPago === p.id_pago}
+                                className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50">
+                                {eliminandoPago === p.id_pago ? 'Eliminando...' : '🗑️ Eliminar'}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )
                     })}
