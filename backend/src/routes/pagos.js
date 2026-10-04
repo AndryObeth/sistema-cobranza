@@ -372,12 +372,22 @@ router.post('/', auth, async (req, res) => {
     const saldo_nuevo = parseFloat((saldo_anterior - monto).toFixed(2))
     const comision = parseFloat((monto * 0.12).toFixed(2))
 
-    // Semanas de atraso reales: se recalculan por fecha (no por el contador viejo),
-    // usando fechaPago como nuevo fecha_ultimo_pago y "ahora" como referencia.
-    // Así una migración con fecha_pago retroactiva refleja el atraso real acumulado desde entonces.
+    // Un pago histórico (fecha retroactiva, captura de admin) puede ser MÁS
+    // VIEJO que el último pago que ya tenía la cuenta — por ejemplo, se le
+    // está completando el historial con un abono que faltaba de hace meses,
+    // mientras que la cuenta ya tiene pagos más recientes registrados. En ese
+    // caso fecha_ultimo_pago y el cálculo de atraso NO deben retroceder a esa
+    // fecha vieja, o una cuenta al corriente se veía atrasada solo por
+    // capturar un pago faltante del pasado. Solo cuando el pago es realmente
+    // el más reciente (el caso normal) se usa su fecha como referencia.
+    const fechaUltimoPagoEfectiva = (cuenta.fecha_ultimo_pago && cuenta.fecha_ultimo_pago > fechaPago)
+      ? cuenta.fecha_ultimo_pago
+      : fechaPago
+
+    // Semanas de atraso reales: se recalculan por fecha (no por el contador viejo).
     const semanas_atraso_nueva = saldo_nuevo === 0 ? 0 : calcularSemanasAtraso({
       fecha_primer_cobro: cuenta.fecha_primer_cobro,
-      fecha_ultimo_pago:  fechaPago,
+      fecha_ultimo_pago:  fechaUltimoPagoEfectiva,
       frecuencia_pago:    cuenta.frecuencia_pago,
     })
 
@@ -439,7 +449,7 @@ router.post('/', auth, async (req, res) => {
       where: { id_cuenta: parseInt(id_cuenta) },
       data: {
         saldo_actual: saldo_nuevo,
-        fecha_ultimo_pago: fechaPago,
+        fecha_ultimo_pago: fechaUltimoPagoEfectiva,
         estado_cuenta: nuevo_estado,
         semanas_atraso: semanas_atraso_nueva
       }
