@@ -677,6 +677,13 @@ export default function Cobranza() {
   const [cobradorPagoHistorico, setCobradorPagoHistorico] = useState('')
   const [cobradoresLista, setCobradoresLista]       = useState([])
 
+  // Liquidación anticipada con descuento: cuentas vendidas a largo plazo que
+  // el cliente paga rápido (dentro de 1, 2 o 3 meses) pueden liquidarse con
+  // el mismo descuento que hubieran tenido con ese plan, sin que el admin
+  // tenga que calcularlo y aplicarlo a mano.
+  const [liquidacionAnticipada, setLiquidacionAnticipada]           = useState(null)
+  const [aplicandoLiquidacionAnticipada, setAplicandoLiquidacionAnticipada] = useState(false)
+
   // Fusión de cuentas (solo admin)
   const [modalFusion, setModalFusion]               = useState(false)
   const [cuentasCliente, setCuentasCliente]         = useState([])
@@ -889,6 +896,12 @@ export default function Cobranza() {
     } catch {
       setCuentasCliente([])
     }
+    try {
+      const resLiq = await api.get(`/cuentas/${cuenta.id_cuenta}/liquidacion-anticipada`, { timeout: 10000 })
+      setLiquidacionAnticipada(resLiq.data)
+    } catch {
+      setLiquidacionAnticipada(null)
+    }
     setNoHuboPago(false)
     setRegistrarVisitaTambien(false)
     setFormPago(FORM_PAGO_VACIO)
@@ -929,6 +942,7 @@ export default function Cobranza() {
     setModoUbicacion(null)
     setUbicPendiente(null)
     setUbicInput('')
+    setLiquidacionAnticipada(null)
   }
 
   // Si se llegó aquí desde el Mapa ("Registrar pago" en una parada de la ruta
@@ -1267,6 +1281,58 @@ export default function Cobranza() {
       setHistorialPagos(actualizada.data.pagos || [])
     } catch {}
     cargarCuentas()
+  }
+
+  // Liquidación anticipada: la cuenta se vendió a largo plazo (precio
+  // completo) pero el cliente está pagando dentro de la ventana de 1, 2 o 3
+  // meses — se le da el mismo descuento que hubiera tenido con ese plan, sin
+  // que el admin tenga que calcularlo y aplicarlo a mano con "Descuento".
+  const aplicarLiquidacionAnticipada = async () => {
+    if (!cuentaSeleccionada || !liquidacionAnticipada?.elegible) return
+    const confirmacion = `¿Liquidar esta cuenta con el descuento de ${liquidacionAnticipada.tier_label}?\n\n` +
+      `Descuento: ${fmt(liquidacionAnticipada.descuento)}\n` +
+      `El cliente paga hoy: ${fmt(liquidacionAnticipada.monto_a_pagar_hoy)}`
+    if (!confirm(confirmacion)) return
+
+    setAplicandoLiquidacionAnticipada(true)
+    setError('')
+    try {
+      const res = await api.post(`/cuentas/${cuentaSeleccionada.id_cuenta}/liquidar-anticipado`, {
+        idempotency_key: crypto.randomUUID(),
+        origen_pago: modoRuta ? 'calle' : 'domicilio',
+      })
+
+      const pagoTicket = res.data.pago_final || res.data.pago_descuento
+      setDatosPago({
+        id_pago:         pagoTicket.id_pago,
+        fecha_pago:      pagoTicket.fecha_pago,
+        monto_pago:      pagoTicket.monto_pago,
+        saldo_anterior:  pagoTicket.saldo_anterior,
+        saldo_nuevo:     pagoTicket.saldo_nuevo,
+        tipo_pago:       pagoTicket.tipo_pago,
+        origen_pago:     pagoTicket.origen_pago,
+        metodo_pago:     pagoTicket.metodo_pago,
+        cliente_nombre:  cuentaSeleccionada.cliente?.nombre,
+        numero_expediente: cuentaSeleccionada.cliente?.numero_expediente,
+        numero_cuenta:     cuentaSeleccionada.numero_cuenta,
+        folio_cuenta:      cuentaSeleccionada.folio_cuenta,
+        plan_actual:     cuentaSeleccionada.plan_actual,
+        cobrador_nombre: usuario?.nombre || 'Cobrador',
+        precio_original_total: cuentaSeleccionada.venta?.precio_original_total,
+        precio_final_total:    liquidacionAnticipada.precio_con_descuento,
+        productos: (cuentaSeleccionada.venta?.detalles || []).map(d => ({ nombre: d.producto, cantidad: d.cantidad })),
+      })
+
+      setExito(`🎉 ¡Cuenta liquidada con descuento de ${res.data.tier_label}! Ahorro: ${fmt(res.data.descuento)}`)
+      setLiquidacionAnticipada(null)
+      setCuentas(prev => prev.filter(c => c.id_cuenta !== cuentaSeleccionada.id_cuenta))
+      if (modoRuta) marcarParada(cuentaSeleccionada.id_cuenta, 'pagado')
+      await refrescarCuentaSeleccionada()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo liquidar la cuenta con descuento')
+    } finally {
+      setAplicandoLiquidacionAnticipada(false)
+    }
   }
 
   const abrirEdicionPago = (p) => {
@@ -2725,6 +2791,28 @@ export default function Cobranza() {
                       Cambiar plan
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* Liquidación anticipada: se vendió a largo plazo (precio completo)
+                  pero el cliente va pagando dentro de la ventana de 1/2/3 meses —
+                  se le ofrece el mismo descuento que hubiera tenido con ese plan. */}
+              {liquidacionAnticipada?.elegible && (
+                <div className="mb-4 bg-emerald-50 border border-emerald-300 rounded-xl px-4 py-3">
+                  <p className="text-emerald-800 text-sm font-semibold">
+                    💰 Liquidación anticipada disponible — Plan {liquidacionAnticipada.tier_label}
+                  </p>
+                  <p className="text-emerald-700 text-xs mt-1">
+                    Lleva {liquidacionAnticipada.semanas_transcurridas} de {liquidacionAnticipada.semanas_limite} semanas permitidas para este descuento.
+                  </p>
+                  <div className="flex items-center justify-between mt-2 text-sm">
+                    <span className="text-emerald-700">Descuento: <strong>{fmt(liquidacionAnticipada.descuento)}</strong></span>
+                    <span className="text-emerald-800 font-bold">Paga hoy: {fmt(liquidacionAnticipada.monto_a_pagar_hoy)}</span>
+                  </div>
+                  <button type="button" onClick={aplicarLiquidacionAnticipada} disabled={aplicandoLiquidacionAnticipada}
+                    className="w-full mt-3 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-semibold transition min-h-[44px] disabled:opacity-50">
+                    {aplicandoLiquidacionAnticipada ? 'Liquidando...' : 'Liquidar con descuento'}
+                  </button>
                 </div>
               )}
 

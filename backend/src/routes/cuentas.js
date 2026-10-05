@@ -24,6 +24,7 @@ const LABEL_PLAN = {
 // Verifica si TODOS los productos de la venta soportan el plan solicitado
 function planAplicaEnDetalles(detalles, nuevoPlan) {
   if (nuevoPlan === 'largo_plazo') return true
+  if (nuevoPlan === 'un_mes')      return true // descuento fijo del 30%, no depende del producto
   if (nuevoPlan === 'dos_meses')   return detalles.every(d => d.producto_rel?.aplica_2_meses && d.producto_rel?.precio_2_meses)
   if (nuevoPlan === 'tres_meses')  return detalles.every(d => d.producto_rel?.aplica_3_meses && d.producto_rel?.precio_3_meses)
   return false
@@ -32,9 +33,65 @@ function planAplicaEnDetalles(detalles, nuevoPlan) {
 // Calcula el precio total para el nuevo plan sumando todos los productos
 function calcularPrecioNuevoPlan(detalles, nuevoPlan, precio_original_total) {
   if (nuevoPlan === 'largo_plazo') return parseFloat(precio_original_total)
+  if (nuevoPlan === 'un_mes')      return parseFloat(precio_original_total) * 0.70
   if (nuevoPlan === 'dos_meses')   return detalles.reduce((s, d) => s + parseFloat(d.producto_rel.precio_2_meses  || 0) * d.cantidad, 0)
   if (nuevoPlan === 'tres_meses')  return detalles.reduce((s, d) => s + parseFloat(d.producto_rel.precio_3_meses  || 0) * d.cantidad, 0)
   return 0
+}
+
+// Liquidación anticipada: una cuenta vendida a largo plazo (precio completo,
+// sin descuento) puede liquidarse con el descuento de 1/2/3 meses si el
+// cliente paga dentro de esa ventana de semanas desde el inicio de la cuenta
+// — en vez de que el admin tenga que calcular y aplicar el descuento a mano
+// (POST /:id/descuento) cada vez que esto pasa.
+const TIERS_LIQUIDACION_ANTICIPADA = ['un_mes', 'dos_meses', 'tres_meses']
+
+function calcularElegibilidadLiquidacionAnticipada(cuenta, detalles) {
+  if (cuenta.plan_inicial !== 'largo_plazo' || cuenta.nivel_reestructura !== 0) {
+    return { elegible: false, motivo: 'Esta cuenta no aplica: no se vendió a largo plazo desde el inicio, o ya tuvo un cambio de plan.' }
+  }
+  if (['liquidada', 'cancelada'].includes(cuenta.estado_cuenta)) {
+    return { elegible: false, motivo: `Esta cuenta ya está ${cuenta.estado_cuenta}.` }
+  }
+
+  const semanasTranscurridas = (Date.now() - new Date(cuenta.fecha_inicio).getTime()) / (7 * 24 * 60 * 60 * 1000)
+
+  let tier = null
+  for (const candidato of TIERS_LIQUIDACION_ANTICIPADA) {
+    if (semanasTranscurridas <= SEMANAS_POR_PLAN[candidato]) { tier = candidato; break }
+  }
+  if (!tier) {
+    return { elegible: false, motivo: `Ya pasaron más de ${SEMANAS_POR_PLAN.tres_meses} semanas desde el inicio de la cuenta — fuera del rango para descuento por liquidación anticipada.` }
+  }
+  if (!planAplicaEnDetalles(detalles, tier)) {
+    return { elegible: false, motivo: `Los productos de esta venta no tienen precio configurado para el plan de ${LABEL_PLAN[tier]}.` }
+  }
+
+  const saldoActual        = parseFloat(cuenta.saldo_actual)
+  const precioConDescuento = parseFloat(calcularPrecioNuevoPlan(detalles, tier, cuenta.precio_original_total).toFixed(2))
+  const descuentoMonto     = parseFloat((parseFloat(cuenta.precio_plan_actual) - precioConDescuento).toFixed(2))
+
+  if (descuentoMonto <= 0) {
+    return { elegible: false, motivo: 'No hay ahorro disponible: el precio con descuento no es menor al precio actual de la cuenta.' }
+  }
+
+  // Si el cliente ya abonó más de lo que debería bajo el plan con descuento
+  // (caso raro, ej. enganche grande), el descuento se limita a lo que falta.
+  const descuento       = Math.min(descuentoMonto, saldoActual)
+  const monto_a_pagar_hoy = Math.max(0, parseFloat((saldoActual - descuento).toFixed(2)))
+
+  return {
+    elegible: true,
+    tier,
+    tier_label: LABEL_PLAN[tier],
+    semanas_transcurridas: Math.round(semanasTranscurridas * 10) / 10,
+    semanas_limite: SEMANAS_POR_PLAN[tier],
+    precio_original: parseFloat(cuenta.precio_plan_actual),
+    precio_con_descuento: precioConDescuento,
+    saldo_actual: saldoActual,
+    descuento,
+    monto_a_pagar_hoy,
+  }
 }
 
 // Devuelve el siguiente plan aplicable según la progresión del negocio
@@ -745,6 +802,108 @@ router.post('/:id/descuento', auth, async (req, res) => {
     })
   } catch (error) {
     res.status(500).json({ error: 'Error al aplicar descuento', detalle: error.message })
+  }
+})
+
+// ── 7b. Liquidación anticipada (cuenta vendida a largo plazo que paga rápido) ─
+
+// GET /api/cuentas/:id/liquidacion-anticipada — ¿esta cuenta puede liquidarse
+// ahora con el descuento de 1/2/3 meses? Lo puede consultar cualquier usuario
+// que vea la cuenta (cobrador incluido), para mostrarle la opción sin tener
+// que pedírselo al admin.
+router.get('/:id/liquidacion-anticipada', auth, async (req, res) => {
+  try {
+    const id_cuenta = parseInt(req.params.id)
+    const cuenta = await cargarCuentaCompleta(id_cuenta)
+    if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
+    const detalles = cuenta.venta?.detalles || []
+    res.json(calcularElegibilidadLiquidacionAnticipada(cuenta, detalles))
+  } catch (error) {
+    res.status(500).json({ error: 'Error al calcular liquidación anticipada', detalle: error.message })
+  }
+})
+
+// POST /api/cuentas/:id/liquidar-anticipado — aplica la liquidación con
+// descuento: registra el descuento y, si todavía falta efectivo por cobrar,
+// el pago final que deja la cuenta en $0 — todo en una sola operación, sin
+// que el admin tenga que calcularlo ni aplicarlo a mano.
+router.post('/:id/liquidar-anticipado', auth, async (req, res) => {
+  try {
+    const id_cuenta = parseInt(req.params.id)
+    const { idempotency_key, origen_pago, metodo_pago } = req.body
+
+    if (idempotency_key) {
+      const existente = await prisma.pago.findUnique({ where: { idempotency_key } })
+      if (existente) return res.status(200).json({ mensaje: 'Liquidación ya registrada', pago: existente })
+    }
+
+    const cuenta = await cargarCuentaCompleta(id_cuenta)
+    if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
+    const detalles = cuenta.venta?.detalles || []
+    const calculo = calcularElegibilidadLiquidacionAnticipada(cuenta, detalles)
+    if (!calculo.elegible) return res.status(400).json({ error: calculo.motivo })
+
+    const fechaHoy = new Date()
+    const metodo = metodo_pago === 'deposito' ? 'deposito' : 'efectivo'
+    const notaDescuento = `Descuento por liquidación anticipada (plan ${calculo.tier_label}, ${calculo.semanas_transcurridas} semanas transcurridas de ${calculo.semanas_limite}).`
+    const saldoTrasDescuento = parseFloat((calculo.saldo_actual - calculo.descuento).toFixed(2))
+
+    const resultado = await prisma.$transaction(async tx => {
+      const pagoDescuento = await tx.pago.create({
+        data: {
+          id_cuenta, id_cliente: cuenta.id_cliente, id_cobrador: req.usuario.id,
+          fecha_pago: fechaHoy, monto_pago: calculo.descuento,
+          saldo_anterior: calculo.saldo_actual, saldo_nuevo: saldoTrasDescuento,
+          tipo_pago: 'descuento', origen_pago: origen_pago || 'domicilio',
+          monto_aplicado_saldo: calculo.descuento, observaciones: notaDescuento,
+          idempotency_key: idempotency_key || null,
+        }
+      })
+
+      let pagoFinal = null
+      if (calculo.monto_a_pagar_hoy > 0) {
+        pagoFinal = await tx.pago.create({
+          data: {
+            id_cuenta, id_cliente: cuenta.id_cliente, id_cobrador: req.usuario.id,
+            fecha_pago: fechaHoy, monto_pago: calculo.monto_a_pagar_hoy,
+            saldo_anterior: saldoTrasDescuento, saldo_nuevo: 0,
+            tipo_pago: 'liquidacion', origen_pago: origen_pago || 'domicilio',
+            metodo_pago: metodo, monto_aplicado_saldo: calculo.monto_a_pagar_hoy,
+          }
+        })
+        await tx.comisionCobrador.create({
+          data: {
+            id_pago: pagoFinal.id_pago, id_cobrador: req.usuario.id,
+            monto_cobrado: calculo.monto_a_pagar_hoy,
+            comision_generada: parseFloat((calculo.monto_a_pagar_hoy * 0.12).toFixed(2)),
+          }
+        })
+      }
+
+      await tx.cuenta.update({
+        where: { id_cuenta },
+        data: { saldo_actual: 0, estado_cuenta: 'liquidada', fecha_ultimo_pago: fechaHoy, semanas_atraso: 0 }
+      })
+      await tx.venta.update({ where: { id_venta: cuenta.id_venta }, data: { estatus_venta: 'liquidada' } })
+
+      return { pagoDescuento, pagoFinal }
+    })
+
+    res.status(201).json({
+      mensaje: `Cuenta liquidada con descuento de ${calculo.tier_label}`,
+      tier: calculo.tier,
+      tier_label: calculo.tier_label,
+      descuento: calculo.descuento,
+      monto_pagado: calculo.monto_a_pagar_hoy,
+      pago_descuento: resultado.pagoDescuento,
+      pago_final: resultado.pagoFinal,
+    })
+  } catch (error) {
+    if (error.code === 'P2002' && error.meta?.target?.includes('idempotency_key') && req.body.idempotency_key) {
+      const existente = await prisma.pago.findUnique({ where: { idempotency_key: req.body.idempotency_key } })
+      if (existente) return res.status(200).json({ mensaje: 'Liquidación ya registrada', pago: existente })
+    }
+    res.status(500).json({ error: 'Error al liquidar la cuenta', detalle: error.message })
   }
 })
 
