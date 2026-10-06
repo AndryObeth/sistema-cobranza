@@ -93,6 +93,7 @@ model Cliente {
   pagos          Pago[]
   seguimientos   SeguimientoCliente[]
   ubicaciones    UbicacionCliente[]
+  cambios        CambioCliente[]
 
   @@map("clientes")
 }
@@ -113,6 +114,35 @@ model UbicacionCliente {
   cliente         Cliente  @relation(fields: [id_cliente], references: [id_cliente])
 
   @@map("ubicaciones_cliente")
+}
+
+// Historial de cambios en el expediente del cliente: ruta, número de cuenta,
+// o cualquier otro cambio a sus ventas (producto entregado, plan, traspaso de
+// cuenta entre perfiles duplicados, etc.) — para no perder el rastro cuando
+// el admin corrige algo a mano directamente en la base de datos.
+model CambioCliente {
+  id_cambio      Int      @id @default(autoincrement())
+  id_cliente     Int
+  tipo_cambio    TipoCambioCliente
+  numero_cuenta  String?  // cuenta afectada, si aplica — snapshot, no relación
+  descripcion    String
+  valor_anterior String?
+  valor_nuevo    String?
+  fecha_cambio   DateTime @default(now())
+  registrado_por String?  // nombre de quien lo registró, snapshot
+
+  cliente Cliente @relation(fields: [id_cliente], references: [id_cliente])
+
+  @@map("cambios_cliente")
+}
+
+enum TipoCambioCliente {
+  ruta
+  numero_cuenta
+  producto
+  plan
+  traspaso_cuenta
+  otro
 }
 
 enum EstadoCliente {

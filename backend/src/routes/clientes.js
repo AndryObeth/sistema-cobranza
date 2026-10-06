@@ -103,6 +103,9 @@ router.get('/:id', auth, async (req, res) => {
           include: {
             usuario: { select: { nombre: true } }
           }
+        },
+        cambios: {
+          orderBy: { fecha_cambio: 'desc' }
         }
       }
     })
@@ -110,6 +113,95 @@ router.get('/:id', auth, async (req, res) => {
     res.json(cliente)
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener cliente', detalle: error.message })
+  }
+})
+
+// ── Historial de cambios del cliente (ruta, número de cuenta, producto,
+// plan, traspasos entre perfiles, etc.) — solo administrador puede
+// registrar/editar/eliminar; cualquiera que vea el expediente puede leerlo
+// (ya viene incluido en GET /:id).
+
+const TIPOS_CAMBIO = ['ruta', 'numero_cuenta', 'producto', 'plan', 'traspaso_cuenta', 'otro']
+
+router.post('/:id/cambios', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'Solo el administrador puede registrar cambios' })
+    }
+    const id_cliente = parseInt(req.params.id)
+    const { tipo_cambio, numero_cuenta, descripcion, valor_anterior, valor_nuevo, fecha_cambio } = req.body
+
+    if (!TIPOS_CAMBIO.includes(tipo_cambio)) {
+      return res.status(400).json({ error: `tipo_cambio inválido. Debe ser uno de: ${TIPOS_CAMBIO.join(', ')}` })
+    }
+    if (!descripcion || !descripcion.trim()) {
+      return res.status(400).json({ error: 'Se requiere una descripción del cambio' })
+    }
+
+    const cliente = await prisma.cliente.findUnique({ where: { id_cliente } })
+    if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' })
+
+    const cambio = await prisma.cambioCliente.create({
+      data: {
+        id_cliente,
+        tipo_cambio,
+        numero_cuenta: numero_cuenta || null,
+        descripcion: descripcion.trim(),
+        valor_anterior: valor_anterior || null,
+        valor_nuevo: valor_nuevo || null,
+        fecha_cambio: fecha_cambio ? new Date(fecha_cambio + 'T12:00:00') : new Date(),
+        registrado_por: req.usuario.nombre,
+      }
+    })
+    res.status(201).json(cambio)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al registrar el cambio', detalle: error.message })
+  }
+})
+
+router.put('/cambios/:id_cambio', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'Solo el administrador puede editar cambios' })
+    }
+    const id_cambio = parseInt(req.params.id_cambio)
+    const { tipo_cambio, numero_cuenta, descripcion, valor_anterior, valor_nuevo, fecha_cambio } = req.body
+
+    if (tipo_cambio && !TIPOS_CAMBIO.includes(tipo_cambio)) {
+      return res.status(400).json({ error: `tipo_cambio inválido. Debe ser uno de: ${TIPOS_CAMBIO.join(', ')}` })
+    }
+    const existente = await prisma.cambioCliente.findUnique({ where: { id_cambio } })
+    if (!existente) return res.status(404).json({ error: 'Cambio no encontrado' })
+
+    const cambio = await prisma.cambioCliente.update({
+      where: { id_cambio },
+      data: {
+        ...(tipo_cambio && { tipo_cambio }),
+        ...(numero_cuenta !== undefined && { numero_cuenta: numero_cuenta || null }),
+        ...(descripcion && { descripcion: descripcion.trim() }),
+        ...(valor_anterior !== undefined && { valor_anterior: valor_anterior || null }),
+        ...(valor_nuevo !== undefined && { valor_nuevo: valor_nuevo || null }),
+        ...(fecha_cambio && { fecha_cambio: new Date(fecha_cambio + 'T12:00:00') }),
+      }
+    })
+    res.json(cambio)
+  } catch (error) {
+    res.status(500).json({ error: 'Error al editar el cambio', detalle: error.message })
+  }
+})
+
+router.delete('/cambios/:id_cambio', auth, async (req, res) => {
+  try {
+    if (!['administrador', 'supervisor_cobranza'].includes(req.usuario.rol)) {
+      return res.status(403).json({ error: 'Solo el administrador puede eliminar cambios' })
+    }
+    const id_cambio = parseInt(req.params.id_cambio)
+    const existente = await prisma.cambioCliente.findUnique({ where: { id_cambio } })
+    if (!existente) return res.status(404).json({ error: 'Cambio no encontrado' })
+    await prisma.cambioCliente.delete({ where: { id_cambio } })
+    res.json({ mensaje: 'Cambio eliminado' })
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar el cambio', detalle: error.message })
   }
 })
 

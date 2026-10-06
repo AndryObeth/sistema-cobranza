@@ -81,12 +81,78 @@ const LABEL_DIA_COBRANZA = {
   viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo'
 }
 
+const LABEL_TIPO_CAMBIO = {
+  ruta:            'Cambio de ruta',
+  numero_cuenta:   'Cambio de número de cuenta',
+  producto:        'Cambio de producto',
+  plan:            'Cambio de plan',
+  traspaso_cuenta: 'Traspaso de cuenta',
+  otro:            'Otro',
+}
+const FORM_CAMBIO_VACIO = { tipo_cambio: 'ruta', numero_cuenta: '', descripcion: '', valor_anterior: '', valor_nuevo: '', fecha_cambio: '' }
+
 // ─── Modal Expediente ────────────────────────────
-function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
+function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated, onCambiosChanged }) {
   const [tab, setTab] = useState('datos')
   const [subiendoFoto, setSubiendoFoto] = useState(false)
 
+  // Historial de cambios (ruta, número de cuenta, producto, plan, traspasos...)
+  const [formCambioAbierto, setFormCambioAbierto] = useState(false) // false | 'nuevo' | id_cambio
+  const [formCambio, setFormCambio]               = useState(FORM_CAMBIO_VACIO)
+  const [guardandoCambio, setGuardandoCambio]     = useState(false)
+  const [errorCambio, setErrorCambio]             = useState('')
+
   const puedeEditar = ['administrador', 'supervisor_cobranza', 'jefe_camioneta'].includes(usuario?.rol)
+  const puedeEditarCambios = ['administrador', 'supervisor_cobranza'].includes(usuario?.rol)
+
+  const abrirNuevoCambio = () => {
+    setFormCambioAbierto('nuevo')
+    setFormCambio(FORM_CAMBIO_VACIO)
+    setErrorCambio('')
+  }
+  const abrirEdicionCambio = (c) => {
+    setFormCambioAbierto(c.id_cambio)
+    setFormCambio({
+      tipo_cambio: c.tipo_cambio,
+      numero_cuenta: c.numero_cuenta || '',
+      descripcion: c.descripcion,
+      valor_anterior: c.valor_anterior || '',
+      valor_nuevo: c.valor_nuevo || '',
+      fecha_cambio: c.fecha_cambio ? c.fecha_cambio.split('T')[0] : '',
+    })
+    setErrorCambio('')
+  }
+  const cancelarCambio = () => { setFormCambioAbierto(false); setErrorCambio('') }
+
+  const guardarCambio = async () => {
+    if (!formCambio.descripcion.trim()) { setErrorCambio('Describe el cambio'); return }
+    setGuardandoCambio(true)
+    setErrorCambio('')
+    try {
+      if (formCambioAbierto === 'nuevo') {
+        const res = await api.post(`/clientes/${cliente.id_cliente}/cambios`, formCambio)
+        onCambiosChanged?.([res.data, ...(cliente.cambios || [])])
+      } else {
+        const res = await api.put(`/clientes/cambios/${formCambioAbierto}`, formCambio)
+        onCambiosChanged?.((cliente.cambios || []).map(c => c.id_cambio === formCambioAbierto ? res.data : c))
+      }
+      setFormCambioAbierto(false)
+    } catch (err) {
+      setErrorCambio(err.response?.data?.error || 'Error al guardar el cambio')
+    } finally {
+      setGuardandoCambio(false)
+    }
+  }
+
+  const eliminarCambio = async (c) => {
+    if (!confirm(`¿Eliminar este registro de cambio?\n\n${c.descripcion}`)) return
+    try {
+      await api.delete(`/clientes/cambios/${c.id_cambio}`)
+      onCambiosChanged?.((cliente.cambios || []).filter(x => x.id_cambio !== c.id_cambio))
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al eliminar el cambio')
+    }
+  }
 
   const handleFotoUpload = async (e) => {
     const file = e.target.files[0]
@@ -125,6 +191,7 @@ function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
             { id: 'compras',      label: `Compras (${cliente.ventas?.length || 0})` },
             { id: 'cuentas',      label: `Cuentas (${cliente.cuentas?.length || 0})` },
             { id: 'seguimientos', label: `Seguimientos (${cliente.seguimientos?.length || 0})` },
+            { id: 'cambios',      label: `Cambios (${cliente.cambios?.length || 0})` },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`px-4 py-2 text-sm font-medium rounded-t-lg -mb-px border-b-2 transition ${
@@ -304,6 +371,98 @@ function ModalExpediente({ cliente, onClose, usuario, onFotoUpdated }) {
                 ))}
               </div>
             )
+          )}
+
+          {tab === 'cambios' && (
+            <div>
+              {puedeEditarCambios && formCambioAbierto === false && (
+                <div className="mb-4 flex justify-end">
+                  <button type="button" onClick={abrirNuevoCambio}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                    + Agregar cambio
+                  </button>
+                </div>
+              )}
+
+              {formCambioAbierto !== false && (
+                <div className="mb-4 border border-blue-200 bg-blue-50 rounded-xl p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Campo label="Tipo de cambio">
+                      <select className={INPUT} value={formCambio.tipo_cambio}
+                        onChange={e => setFormCambio(f => ({ ...f, tipo_cambio: e.target.value }))}>
+                        {Object.entries(LABEL_TIPO_CAMBIO).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </Campo>
+                    <Campo label="No. de cuenta afectada (opcional)">
+                      <input className={INPUT} value={formCambio.numero_cuenta}
+                        onChange={e => setFormCambio(f => ({ ...f, numero_cuenta: e.target.value }))} placeholder="Ej. 45-G" />
+                    </Campo>
+                  </div>
+                  <Campo label="Descripción">
+                    <textarea className={INPUT} rows={2} value={formCambio.descripcion}
+                      onChange={e => setFormCambio(f => ({ ...f, descripcion: e.target.value }))}
+                      placeholder="Ej. Se cambió de ruta C a ruta G" />
+                  </Campo>
+                  <div className="grid grid-cols-3 gap-3">
+                    <Campo label="Valor anterior (opcional)">
+                      <input className={INPUT} value={formCambio.valor_anterior}
+                        onChange={e => setFormCambio(f => ({ ...f, valor_anterior: e.target.value }))} />
+                    </Campo>
+                    <Campo label="Valor nuevo (opcional)">
+                      <input className={INPUT} value={formCambio.valor_nuevo}
+                        onChange={e => setFormCambio(f => ({ ...f, valor_nuevo: e.target.value }))} />
+                    </Campo>
+                    <Campo label="Fecha">
+                      <input type="date" className={INPUT} value={formCambio.fecha_cambio}
+                        onChange={e => setFormCambio(f => ({ ...f, fecha_cambio: e.target.value }))} />
+                    </Campo>
+                  </div>
+                  {errorCambio && <p className="text-red-600 text-sm">{errorCambio}</p>}
+                  <div className="flex gap-2 justify-end">
+                    <button type="button" onClick={cancelarCambio} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+                    <button type="button" onClick={guardarCambio} disabled={guardandoCambio}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                      {guardandoCambio ? 'Guardando...' : 'Guardar'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {cliente.cambios?.length === 0 ? (
+                <p className="text-gray-400 text-center py-8">Sin cambios registrados</p>
+              ) : (
+                <div className="space-y-3">
+                  {cliente.cambios?.map(c => (
+                    <div key={c.id_cambio} className="border rounded-xl p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                            {LABEL_TIPO_CAMBIO[c.tipo_cambio] || c.tipo_cambio}
+                          </span>
+                          {c.numero_cuenta && <span className="ml-2 text-xs font-mono text-gray-500">Cuenta {c.numero_cuenta}</span>}
+                          <p className="text-sm text-gray-700 mt-1.5">{c.descripcion}</p>
+                          {(c.valor_anterior || c.valor_nuevo) && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {c.valor_anterior || '—'} <span className="mx-1">→</span> {c.valor_nuevo || '—'}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right text-xs text-gray-400 shrink-0">
+                          <p>{fmtFecha(c.fecha_cambio)}</p>
+                          {c.registrado_por && <p className="mt-0.5">{c.registrado_por}</p>}
+                        </div>
+                      </div>
+                      {puedeEditarCambios && (
+                        <div className="flex gap-3 justify-end mt-2">
+                          <button type="button" onClick={() => abrirEdicionCambio(c)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">✏️ Editar</button>
+                          <button type="button" onClick={() => eliminarCambio(c)} className="text-xs text-red-500 hover:text-red-700 font-medium">🗑️ Eliminar</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {tab === 'ubicaciones' && (
@@ -808,6 +967,7 @@ export default function Clientes() {
           onClose={() => setClienteExpediente(null)}
           usuario={usuario}
           onFotoUpdated={(foto) => setClienteExpediente(prev => ({ ...prev, foto_fachada: foto }))}
+          onCambiosChanged={(cambios) => setClienteExpediente(prev => ({ ...prev, cambios }))}
         />
       )}
 
