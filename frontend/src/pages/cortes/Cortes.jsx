@@ -44,20 +44,22 @@ const exportarPdfCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCobrad
 <meta charset="UTF-8">
 <title>Corte ${nombreCobrador}</title>
 <style>
-  body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color:#1f2937; }
-  h1 { font-size: 18px; margin-bottom:2px; }
-  .sub { color:#6b7280; font-size:12px; margin-bottom:16px; }
-  .resumen { display:flex; gap:16px; margin-bottom:20px; }
-  .card { border:1px solid #e5e7eb; border-radius:8px; padding:12px 16px; flex:1; }
-  .card .label { font-size:11px; color:#6b7280; }
-  .card .valor { font-size:20px; font-weight:bold; }
-  table { width:100%; border-collapse:collapse; font-size:12px; }
-  th { text-align:left; background:#f9fafb; padding:8px; border-bottom:1px solid #e5e7eb; text-transform:uppercase; font-size:10px; color:#6b7280; }
-  td { padding:8px; border-bottom:1px solid #f3f4f6; }
+  @page { size: A4 portrait; margin: 8mm 10mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; padding: 0; color:#1f2937; font-size:11px; }
+  h1 { font-size: 15px; margin-bottom:1px; }
+  .sub { color:#6b7280; font-size:10px; margin-bottom:10px; }
+  .resumen { display:flex; gap:8px; margin-bottom:10px; }
+  .card { border:1px solid #e5e7eb; border-radius:6px; padding:6px 10px; flex:1; }
+  .card .label { font-size:9px; color:#6b7280; }
+  .card .valor { font-size:14px; font-weight:bold; line-height:1.3; }
+  table { width:100%; border-collapse:collapse; font-size:10px; }
+  th { text-align:left; background:#f9fafb; padding:4px 6px; border-bottom:1px solid #e5e7eb; text-transform:uppercase; font-size:8px; color:#6b7280; }
+  td { padding:3px 6px; border-bottom:1px solid #f3f4f6; }
   .right { text-align:right; }
   .cap { text-transform:capitalize; }
   tfoot td { font-weight:bold; border-top:2px solid #e5e7eb; }
-  .btn-imprimir { margin-top:20px; padding:10px 20px; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:14px; }
+  .btn-imprimir { margin-top:14px; padding:10px 20px; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:14px; }
   @media print { .btn-imprimir { display:none; } }
 </style>
 </head>
@@ -65,7 +67,7 @@ const exportarPdfCorte = ({ nombreCobrador, semanaInicio, semanaFin, totalCobrad
   <h1>Corte de cobrador — ${nombreCobrador}</h1>
   <p class="sub">Periodo: ${fmtFecha(semanaInicio)} – ${fmtFecha(semanaFin)} · Novedades Cancún</p>
   <div class="resumen">
-    <div class="card"><div class="label">Total cobrado</div><div class="valor">${fmt(totalCobrado)}</div>${totalDeposito > 0 ? `<div style="font-size:11px;color:#4f46e5;margin-top:2px;">Depósitos: ${fmt(totalDeposito)} · Efectivo: ${fmt(efectivo)}</div>` : ''}</div>
+    <div class="card"><div class="label">Total cobrado</div><div class="valor">${fmt(totalCobrado)}</div>${totalDeposito > 0 ? `<div style="font-size:9px;color:#4f46e5;margin-top:1px;">Depósitos: ${fmt(totalDeposito)} · Efectivo: ${fmt(efectivo)}</div>` : ''}</div>
     <div class="card"><div class="label">Comisión (12%)${totalDeposito > 0 ? ' — incluye depósitos' : ''}</div><div class="valor" style="color:#16a34a">${fmt(totalComisiones)}</div></div>
     <div class="card"><div class="label">Cantidad de pagos</div><div class="valor" style="color:#2563eb">${cantidadPagos}</div></div>
   </div>
