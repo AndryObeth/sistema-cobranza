@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import Layout from '../../components/Layout.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import api from '../../api.js'
-import { encolarPago, encolarVisita, encolarCambioDia, encolarUbicacion, getQueue } from '../../utils/offlineQueue.js'
+import { encolarPago, encolarVisita, encolarCambioDia, encolarUbicacion, encolarLiquidacionAnticipada, getQueue } from '../../utils/offlineQueue.js'
+import { calcularElegibilidadLiquidacionAnticipadaLocal } from '../../utils/liquidacionAnticipada.js'
 import { encodePlusCode, decodePlusCode, normalizePlusCode } from '../../utils/plusCode.js'
 import { sinAcentos, incluyeTexto, empiezaCon } from '../../utils/texto.js'
 import { optimizarRuta } from '../../utils/ruta.js'
@@ -900,7 +901,13 @@ export default function Cobranza() {
       const resLiq = await api.get(`/cuentas/${cuenta.id_cuenta}/liquidacion-anticipada`, { timeout: 10000 })
       setLiquidacionAnticipada(resLiq.data)
     } catch {
-      setLiquidacionAnticipada(null)
+      // Sin señal (este endpoint no se cachea): se calcula localmente con los
+      // mismos datos del detalle de la cuenta, que sí vienen de caché.
+      try {
+        setLiquidacionAnticipada(calcularElegibilidadLiquidacionAnticipadaLocal(detalle, detalle.venta?.detalles || []))
+      } catch {
+        setLiquidacionAnticipada(null)
+      }
     }
     setNoHuboPago(false)
     setRegistrarVisitaTambien(false)
@@ -1296,11 +1303,60 @@ export default function Cobranza() {
 
     setAplicandoLiquidacionAnticipada(true)
     setError('')
+    const idempotency_key = crypto.randomUUID()
+    const origen_pago = modoRuta ? 'calle' : 'domicilio'
+
+    // Ticket provisional con los datos ya calculados localmente (saldo queda
+    // en $0 siempre) — igual que un pago normal sin señal, el cobrador ya
+    // tiene qué darle al cliente aunque la sincronización quede pendiente.
+    const encolarYSalir = () => {
+      encolarLiquidacionAnticipada({
+        id_cuenta: cuentaSeleccionada.id_cuenta,
+        idempotency_key,
+        origen_pago,
+        _meta: {
+          cliente_nombre: cuentaSeleccionada.cliente?.nombre,
+          folio_cuenta:   cuentaSeleccionada.folio_cuenta,
+        }
+      })
+      setDatosPago({
+        id_pago:         'PENDIENTE',
+        fecha_pago:      new Date().toISOString(),
+        monto_pago:      liquidacionAnticipada.monto_a_pagar_hoy,
+        saldo_anterior:  liquidacionAnticipada.saldo_actual,
+        saldo_nuevo:     0,
+        tipo_pago:       'liquidacion',
+        origen_pago,
+        metodo_pago:     'efectivo',
+        cliente_nombre:  cuentaSeleccionada.cliente?.nombre,
+        numero_expediente: cuentaSeleccionada.cliente?.numero_expediente,
+        numero_cuenta:     cuentaSeleccionada.numero_cuenta,
+        folio_cuenta:      cuentaSeleccionada.folio_cuenta,
+        plan_actual:     cuentaSeleccionada.plan_actual,
+        cobrador_nombre: usuario?.nombre || 'Cobrador',
+        precio_original_total: cuentaSeleccionada.venta?.precio_original_total,
+        precio_final_total:    liquidacionAnticipada.precio_con_descuento,
+        productos: (cuentaSeleccionada.venta?.detalles || []).map(d => ({ nombre: d.producto, cantidad: d.cantidad })),
+        pendienteSync: true,
+      })
+      setExito('__offline__')
+      setLiquidacionAnticipada(null)
+      setCuentas(prev => prev.filter(c => c.id_cuenta !== cuentaSeleccionada.id_cuenta))
+      if (modoRuta) marcarParada(cuentaSeleccionada.id_cuenta, 'pagado')
+      confirmarPagoVisual()
+    }
+
+    if (!navigator.onLine) {
+      encolarYSalir()
+      setAplicandoLiquidacionAnticipada(false)
+      return
+    }
+
     try {
       const res = await api.post(`/cuentas/${cuentaSeleccionada.id_cuenta}/liquidar-anticipado`, {
-        idempotency_key: crypto.randomUUID(),
-        origen_pago: modoRuta ? 'calle' : 'domicilio',
-      })
+        idempotency_key,
+        origen_pago,
+      }, { timeout: 10000 })
 
       const pagoTicket = res.data.pago_final || res.data.pago_descuento
       setDatosPago({
@@ -1329,6 +1385,13 @@ export default function Cobranza() {
       if (modoRuta) marcarParada(cuentaSeleccionada.id_cuenta, 'pagado')
       await refrescarCuentaSeleccionada()
     } catch (err) {
+      // Sin respuesta del servidor (señal mala o se agotó el tiempo): se
+      // encola en vez de perder la liquidación, igual que un pago normal.
+      if (!err.response) {
+        encolarYSalir()
+        setAplicandoLiquidacionAnticipada(false)
+        return
+      }
       setError(err.response?.data?.error || 'No se pudo liquidar la cuenta con descuento')
     } finally {
       setAplicandoLiquidacionAnticipada(false)

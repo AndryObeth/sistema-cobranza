@@ -150,6 +150,24 @@ export function encolarFrecuencia(datos) {
   return operacion
 }
 
+// Liquidación anticipada con descuento (Cobranza.jsx) — a diferencia de un
+// pago normal, siempre deja la cuenta en $0/liquidada, así que se puede
+// calcular y mostrar un ticket provisional completo sin esperar a sincronizar.
+export function encolarLiquidacionAnticipada(datos) {
+  const queue = getQueue()
+  const operacion = {
+    id:           crypto.randomUUID(),
+    tipo:         'POST_LIQUIDACION_ANTICIPADA',
+    datos, // { id_cuenta, idempotency_key, origen_pago }
+    timestamp:    Date.now(),
+    sincronizado: false,
+    error:        null,
+  }
+  queue.push(operacion)
+  saveQueue(queue)
+  return operacion
+}
+
 // Primer filtro / segundo visto bueno / regresar de Primera visita.
 export function encolarVerificacion(datos) {
   const queue = getQueue()
@@ -195,6 +213,9 @@ async function enviarOperacion(op) {
     } else if (op.tipo === 'POST_VERIFICACION') {
       const { id_cuenta, accion, aprobar, notas } = op.datos
       await api.post(`/cuentas/${id_cuenta}/verificacion/${accion}`, { aprobar, notas }, { timeout: 20000 })
+    } else if (op.tipo === 'POST_LIQUIDACION_ANTICIPADA') {
+      const { id_cuenta, idempotency_key, origen_pago } = op.datos
+      await api.post(`/cuentas/${id_cuenta}/liquidar-anticipado`, { idempotency_key, origen_pago }, { timeout: 20000 })
     }
     return { sincronizado: true, error: null, errorEsDeRed: false }
   } catch (err) {

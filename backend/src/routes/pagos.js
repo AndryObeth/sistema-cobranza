@@ -47,7 +47,15 @@ router.get('/cuenta/:id_cuenta', auth, async (req, res) => {
           observaciones_generales: true, latitud: true, longitud: true,
           plus_code: true, dia_cobranza: true, activo: true,
         }},
-        venta: { include: { detalles: true, vendedor: { select: { nombre: true } }, jefe_camioneta: { select: { nombre: true } } } },
+        venta: { include: {
+          // producto_rel: necesario para que el frontend pueda calcular la
+          // elegibilidad de liquidación anticipada sin conexión (replica la
+          // lógica de cuentas.js con los datos ya cacheados por la PWA).
+          detalles: { include: { producto_rel: { select: {
+            aplica_2_meses: true, precio_2_meses: true, aplica_3_meses: true, precio_3_meses: true,
+          } } } },
+          vendedor: { select: { nombre: true } }, jefe_camioneta: { select: { nombre: true } },
+        } },
         pagos: {
           orderBy: { fecha_pago: 'desc' },
           take: 10,
@@ -92,8 +100,14 @@ router.get('/todas-cuentas', auth, async (req, res) => {
           vendedor: true, cobrador: true, jefe_camioneta: { select: { nombre: true } },
           // Datos de la compra para el ticket y la ficha de la parada en el
           // modo ruta (también funciona offline: este endpoint es el que
-          // cachea la PWA)
-          detalles: { select: { producto: true, cantidad: true, precio_final_unitario: true } },
+          // cachea la PWA). producto_rel: para que el frontend calcule la
+          // elegibilidad de liquidación anticipada sin conexión.
+          detalles: { select: {
+            producto: true, cantidad: true, precio_final_unitario: true,
+            producto_rel: { select: {
+              aplica_2_meses: true, precio_2_meses: true, aplica_3_meses: true, precio_3_meses: true,
+            } },
+          } },
         } },
         // Último abono real (fecha + monto) para la ficha de la parada en
         // modo ruta — fecha_ultimo_pago ya está en la cuenta, pero no el monto.

@@ -175,7 +175,7 @@ Cobradores y jefe_camioneta reciben datos filtrados por `rutas_asignadas` (array
 - Cachea: `/api/pagos/todas-cuentas`, `/api/clientes`, `/api/pagos/cuenta/:id`, `/api/ventas`, `/api/visitas/cuenta/:id`, `/api/visitas` (agenda)
 - Strategy: `NetworkFirst` con timeout de 5s, fallback a caché
 - Crítico para cobradores que trabajan sin conexión estable
-- Cola de escritura offline (`frontend/src/utils/offlineQueue.js`): pagos, visitas, cambios de día de cobranza y ubicaciones se guardan en `localStorage` cuando falla la red (`navigator.onLine === false` o timeout/error sin `err.response`) y se reintentan solos al reconectar o cada 60s. Distingue error de red (`errorEsDeRed: true`, se reintenta en silencio) de rechazo real del servidor (`errorEsDeRed: false`, se muestra al usuario para revisión manual).
+- Cola de escritura offline (`frontend/src/utils/offlineQueue.js`): pagos, visitas, cambios de día de cobranza, ubicaciones y liquidación anticipada se guardan en `localStorage` cuando falla la red (`navigator.onLine === false` o timeout/error sin `err.response`) y se reintentan solos al reconectar o cada 60s. Distingue error de red (`errorEsDeRed: true`, se reintenta en silencio) de rechazo real del servidor (`errorEsDeRed: false`, se muestra al usuario para revisión manual).
 - "Actualizar app" (botón en el sidebar) borra el service worker y cachés de código, pero preserva las cachés de datos (`CACHES_DE_DATOS` en `Layout.jsx`) para no dejar a un cobrador sin nada guardado si se queda sin señal justo después.
 
 ### Confiabilidad de escrituras — idempotencia
@@ -230,6 +230,7 @@ Scripts `.cjs` en `backend/` para correcciones puntuales de BD. Se ejecutan con 
 - Panel "Comentarios de cobranza" + badge de no leídos en el menú (ver sección "Comentarios de cobranza")
 - Corte cobrador: columna de número de cuenta y hora del pago; exportación a PDF (vía ventana de impresión, mismo patrón que el ticket); columna "Saldo actual" en vez de "Comisión"; pagos ordenados por número de cuenta ascendente (no alfabético); selector de rango de fechas libre (antes fijo a la semana en curso) con cálculo de semana en horario México (antes usaba la hora cruda del servidor, se podía recorrer de semana cerca de medianoche)
 - Fix zona horaria "hoy" en `GET /dashboard/resumen` (Ventas hoy/Cobrado hoy mostraban $0 después de las 6pm hora México) y en los `date` inputs de Dashboard/Cobranza/Ventas/Listado — todos usan fecha local en vez de `toISOString()` (que refleja la zona del servidor/navegador)
+- Liquidación anticipada con descuento (cuenta vendida a largo plazo que el cliente liquida dentro de la ventana de 1/2/3 meses) funciona sin conexión: `GET /cuentas/:id/liquidacion-anticipada` no se cachea (depende de "hoy"), así que si falla, el frontend calcula la elegibilidad localmente (`frontend/src/utils/liquidacionAnticipada.js`, réplica de la lógica de `cuentas.js`) con los datos que ya vienen cacheados en el detalle de la cuenta (`venta.detalles.producto_rel` agregado a `/pagos/cuenta/:id` y `/pagos/todas-cuentas` para que el cálculo de 2/3 meses también funcione offline). Aplicar la liquidación (`POST /cuentas/:id/liquidar-anticipado`) ahora entra a la misma cola offline que pagos/visitas si no hay señal
 
 ## Scripts de utilidad (raíz del proyecto)
 
