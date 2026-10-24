@@ -167,6 +167,15 @@ router.post('/', auth, async (req, res) => {
             saldo_inicial: saldoInicial,
             saldo_actual:  saldoInicial,
             semanas_plazo: semanas,
+            // fecha_inicio: antes se dejaba el default now() de Prisma, que es
+            // la hora de captura en el sistema — con ventas de fecha
+            // retroactiva (clientes migrados, captura tardía) quedaba muy
+            // adelantada respecto a la venta real, haciendo que la
+            // liquidación anticipada (GET /:id/liquidacion-anticipada) viera
+            // "pocas semanas transcurridas" aunque la cuenta ya llevara meses.
+            // fecha_limite NO se toca aquí a propósito: es un cambio aparte
+            // con impacto en el auto-procesamiento de vencidos (ver aviso).
+            fecha_inicio: ventaCreada.fecha_venta,
             fecha_limite: new Date(Date.now() + semanas * 7 * 24 * 60 * 60 * 1000),
             frecuencia_pago:    frecuencia_pago    || 'semanal',
             fecha_primer_cobro: fecha_primer_cobro ? new Date(fecha_primer_cobro + 'T12:00:00') : null,
