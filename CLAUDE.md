@@ -114,6 +114,8 @@ El middleware `auth.js` solo usa el JWT para probar identidad (`decoded.id`); en
 | PUT | `/api/pagos/comentarios/marcar-todos-leidos` | Marca todos los comentarios pendientes como leídos |
 | PUT | `/api/pagos/cuenta/:id/frecuencia` | Frecuencia + horario preferido |
 | GET/POST/PUT | `/api/cuentas` | Cambio de plan, reestructuras |
+| POST | `/api/cuentas/:id/cancelar` | Admin/supervisor. `motivo`, `notas`, `enviar_mp` opcional (manda a Lista Negra con saldo y último abono) |
+| GET/POST/PUT/DELETE | `/api/lista-negra` | GET todos los roles; escritura solo admin (DELETE = baja lógica) |
 | GET/POST/PUT | `/api/productos` | |
 | GET/POST/PUT | `/api/usuarios` | |
 | GET | `/api/dashboard/resumen` | KPIs del día |
@@ -149,6 +151,12 @@ Cobradores y jefe_camioneta reciben datos filtrados por `rutas_asignadas` (array
 - `precio_final_total` = `precio_original_total × 0.70`
 - `saldo_inicial` = `precio_final_total - abono_inicial`
 - `saldo_actual` = `precio_final_total - total_abonado` (enganche + pagos registrados)
+- **Plan 2/3 meses (`dos_meses`, `tres_meses`):** precio tomado del producto (`precio_2_meses`, `precio_3_meses`). Ojo: `precio_3_meses` suele ser el pago semanal redondeado hacia arriba × 12, no el 20% exacto (ej. $3,500 → $240×12 = $2,880, no $2,800)
+- **Liquidación anticipada de 3 meses:** usa **20% exacto** sobre `precio_original_total` (`precioLiquidacionAnticipada()` en `cuentas.js` y su réplica en `frontend/src/utils/liquidacionAnticipada.js`), NO el `precio_3_meses` del producto. Cambios de plan y ventas nuevas a 3 meses siguen usando el precio del producto
+
+### Lista Negra (MP / mala paga)
+- Modelo `ListaNegra`, página `/lista-negra`. Alta manual solo admin (`POST /api/lista-negra`)
+- Al cancelar una cuenta en Cobranza (`POST /cuentas/:id/cancelar`, admin/supervisor) se puede marcar **"Mandar a MP"** (`enviar_mp: true`): en la misma transacción crea el registro con datos del cliente + `id_cliente`, `numero_cuenta`, `saldo_pendiente`, `ultimo_abono_monto`, `ultimo_abono_fecha` (campos opcionales, vacíos en altas manuales)
 
 ### Comisiones
 - **Cobrador:** 12% de cada pago registrado (por defecto)
@@ -231,6 +239,8 @@ Scripts `.cjs` en `backend/` para correcciones puntuales de BD. Se ejecutan con 
 - Corte cobrador: columna de número de cuenta y hora del pago; exportación a PDF (vía ventana de impresión, mismo patrón que el ticket); columna "Saldo actual" en vez de "Comisión"; pagos ordenados por número de cuenta ascendente (no alfabético); selector de rango de fechas libre (antes fijo a la semana en curso) con cálculo de semana en horario México (antes usaba la hora cruda del servidor, se podía recorrer de semana cerca de medianoche)
 - Fix zona horaria "hoy" en `GET /dashboard/resumen` (Ventas hoy/Cobrado hoy mostraban $0 después de las 6pm hora México) y en los `date` inputs de Dashboard/Cobranza/Ventas/Listado — todos usan fecha local en vez de `toISOString()` (que refleja la zona del servidor/navegador)
 - Liquidación anticipada con descuento (cuenta vendida a largo plazo que el cliente liquida dentro de la ventana de 1/2/3 meses) funciona sin conexión: `GET /cuentas/:id/liquidacion-anticipada` no se cachea (depende de "hoy"), así que si falla, el frontend calcula la elegibilidad localmente (`frontend/src/utils/liquidacionAnticipada.js`, réplica de la lógica de `cuentas.js`) con los datos que ya vienen cacheados en el detalle de la cuenta (`venta.detalles.producto_rel` agregado a `/pagos/cuenta/:id` y `/pagos/todas-cuentas` para que el cálculo de 2/3 meses también funcione offline). Aplicar la liquidación (`POST /cuentas/:id/liquidar-anticipado`) ahora entra a la misma cola offline que pagos/visitas si no hay señal
+- "Mandar a MP" al cancelar cuenta: el cliente queda en Lista Negra con saldo pendiente y último abono; las tarjetas de Lista Negra muestran esos datos (migración `20261113180000_lista_negra_datos_cuenta`)
+- Fix liquidación anticipada de 3 meses: antes usaba `precio_3_meses` del producto (semanal redondeado × 12) y el descuento salía menor al 20% (caso cuenta 353-E: $620 en vez de $700); ahora es 20% exacto del precio original
 
 ## Scripts de utilidad (raíz del proyecto)
 
