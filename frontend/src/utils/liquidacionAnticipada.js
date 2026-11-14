@@ -38,6 +38,13 @@ function calcularPrecioNuevoPlan(detalles, nuevoPlan, precio_original_total) {
   return 0
 }
 
+// 3 meses = 20% exacto sobre el precio original (no el precio_3_meses del
+// producto, que es el semanal redondeado × 12). Igual que en cuentas.js.
+function precioLiquidacionAnticipada(detalles, tier, precio_original_total) {
+  if (tier === 'tres_meses') return parseFloat(precio_original_total) * 0.80
+  return calcularPrecioNuevoPlan(detalles, tier, precio_original_total)
+}
+
 export function calcularElegibilidadLiquidacionAnticipadaLocal(cuenta, detalles) {
   if (cuenta.plan_inicial !== 'largo_plazo' || cuenta.nivel_reestructura !== 0) {
     return { elegible: false, motivo: 'Esta cuenta no aplica: no se vendió a largo plazo desde el inicio, o ya tuvo un cambio de plan.' }
@@ -60,7 +67,7 @@ export function calcularElegibilidadLiquidacionAnticipadaLocal(cuenta, detalles)
   }
 
   const saldoActual        = parseFloat(cuenta.saldo_actual)
-  const precioConDescuento = parseFloat(calcularPrecioNuevoPlan(detalles, tier, cuenta.precio_original_total).toFixed(2))
+  const precioConDescuento = parseFloat(precioLiquidacionAnticipada(detalles, tier, cuenta.precio_original_total).toFixed(2))
   const descuentoMonto     = parseFloat((parseFloat(cuenta.precio_plan_actual) - precioConDescuento).toFixed(2))
 
   if (descuentoMonto <= 0) {

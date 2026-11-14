@@ -46,6 +46,15 @@ function calcularPrecioNuevoPlan(detalles, nuevoPlan, precio_original_total) {
 // (POST /:id/descuento) cada vez que esto pasa.
 const TIERS_LIQUIDACION_ANTICIPADA = ['un_mes', 'dos_meses', 'tres_meses']
 
+// En liquidación anticipada el tier de 3 meses es 20% exacto sobre el precio
+// original — NO el precio_3_meses del producto, que es el pago semanal
+// redondeado hacia arriba × 12 (ej. $3,500 → $240×12 = $2,880 en vez de
+// $2,800). Cambios de plan y ventas nuevas a 3 meses siguen usando el del producto.
+function precioLiquidacionAnticipada(detalles, tier, precio_original_total) {
+  if (tier === 'tres_meses') return parseFloat(precio_original_total) * 0.80
+  return calcularPrecioNuevoPlan(detalles, tier, precio_original_total)
+}
+
 function calcularElegibilidadLiquidacionAnticipada(cuenta, detalles) {
   if (cuenta.plan_inicial !== 'largo_plazo' || cuenta.nivel_reestructura !== 0) {
     return { elegible: false, motivo: 'Esta cuenta no aplica: no se vendió a largo plazo desde el inicio, o ya tuvo un cambio de plan.' }
@@ -68,7 +77,7 @@ function calcularElegibilidadLiquidacionAnticipada(cuenta, detalles) {
   }
 
   const saldoActual        = parseFloat(cuenta.saldo_actual)
-  const precioConDescuento = parseFloat(calcularPrecioNuevoPlan(detalles, tier, cuenta.precio_original_total).toFixed(2))
+  const precioConDescuento = parseFloat(precioLiquidacionAnticipada(detalles, tier, cuenta.precio_original_total).toFixed(2))
   const descuentoMonto     = parseFloat((parseFloat(cuenta.precio_plan_actual) - precioConDescuento).toFixed(2))
 
   if (descuentoMonto <= 0) {
