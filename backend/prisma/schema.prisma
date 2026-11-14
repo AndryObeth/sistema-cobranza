@@ -689,6 +689,14 @@ model ListaNegra {
   activo           Boolean  @default(true)
   fecha_registro   DateTime @default(now())
 
+  // Datos de la cuenta al mandarla a MP desde "Cancelar cuenta"
+  // (vacíos en registros capturados a mano desde la página de Lista Negra)
+  id_cliente           Int?
+  numero_cuenta        String?
+  saldo_pendiente      Decimal?  @db.Decimal(10, 2)
+  ultimo_abono_monto   Decimal?  @db.Decimal(10, 2)
+  ultimo_abono_fecha   DateTime?
+
   id_usuario_registro Int
   registrado_por      Usuario @relation(fields: [id_usuario_registro], references: [id_usuario])
 

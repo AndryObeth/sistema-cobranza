@@ -236,6 +236,26 @@ export default function ListaNegra() {
                   <p className="text-sm text-red-800">{r.motivo}</p>
                 </div>
 
+                {r.saldo_pendiente != null && (
+                  <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                    <div className="bg-gray-50 rounded-xl px-3 py-2">
+                      <p className="text-xs text-gray-500">Saldo pendiente{r.numero_cuenta ? ` · ${r.numero_cuenta}` : ''}</p>
+                      <p className="font-bold text-gray-900">${parseFloat(r.saldo_pendiente).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl px-3 py-2">
+                      <p className="text-xs text-gray-500">Último abono</p>
+                      {r.ultimo_abono_monto != null ? (
+                        <>
+                          <p className="font-bold text-gray-900">${parseFloat(r.ultimo_abono_monto).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                          <p className="text-xs text-gray-500">{new Date(r.ultimo_abono_fecha).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
+                        </>
+                      ) : (
+                        <p className="text-gray-500">Sin abonos</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {r.observaciones && (
                   <p className="text-xs text-gray-500 italic mb-3">{r.observaciones}</p>
                 )}

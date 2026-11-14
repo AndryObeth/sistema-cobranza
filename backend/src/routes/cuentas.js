@@ -925,7 +925,7 @@ router.post('/:id/cancelar', auth, async (req, res) => {
     }
 
     const id_cuenta = parseInt(req.params.id)
-    const { motivo, notas } = req.body
+    const { motivo, notas, enviar_mp } = req.body
 
     if (!motivo || !motivo.trim()) {
       return res.status(400).json({ error: 'Se requiere un motivo de cancelación' })
@@ -933,7 +933,10 @@ router.post('/:id/cancelar', auth, async (req, res) => {
 
     const cuenta = await prisma.cuenta.findUnique({
       where:   { id_cuenta },
-      include: { cliente: { select: { nombre: true } } },
+      include: {
+        cliente: { select: { id_cliente: true, nombre: true, alias: true, telefono: true, municipio: true, colonia: true } },
+        pagos:   { orderBy: { fecha_pago: 'desc' }, take: 1, select: { monto_pago: true, fecha_pago: true } },
+      },
     })
 
     if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' })
@@ -964,12 +967,39 @@ router.post('/:id/cancelar', auth, async (req, res) => {
         where: { id_venta: cuenta.id_venta },
         data:  { estatus_venta: 'cancelada', motivo_cancelacion: motivoCompleto },
       })
+
+      // Mandar a MP (lista negra / mala paga) con su último saldo y abono
+      if (enviar_mp) {
+        const ultimoPago = cuenta.pagos[0]
+        const numCuenta  = cuenta.numero_cuenta || cuenta.folio_cuenta
+        const abonoStr   = ultimoPago
+          ? `$${parseFloat(ultimoPago.monto_pago).toFixed(2)} el ${new Date(ultimoPago.fecha_pago).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}`
+          : 'sin abonos'
+        await tx.listaNegra.create({
+          data: {
+            nombre:        cuenta.cliente.nombre,
+            alias:         cuenta.cliente.alias,
+            telefono:      cuenta.cliente.telefono,
+            municipio:     cuenta.cliente.municipio,
+            colonia:       cuenta.cliente.colonia,
+            motivo:        motivoCompleto,
+            observaciones: `Cuenta ${numCuenta} cancelada el ${hoyStr}. Saldo pendiente: $${parseFloat(cuenta.saldo_actual).toFixed(2)}. Último abono: ${abonoStr}`,
+            id_cliente:         cuenta.cliente.id_cliente,
+            numero_cuenta:      numCuenta,
+            saldo_pendiente:    cuenta.saldo_actual,
+            ultimo_abono_monto: ultimoPago?.monto_pago ?? null,
+            ultimo_abono_fecha: ultimoPago?.fecha_pago ?? null,
+            id_usuario_registro: req.usuario.id,
+          },
+        })
+      }
     })
 
     res.json({
-      mensaje:         'Cuenta cancelada correctamente',
+      mensaje:         enviar_mp ? 'Cuenta cancelada y enviada a MP' : 'Cuenta cancelada correctamente',
       motivo:          motivoCompleto,
       saldo_al_cancelar: parseFloat(cuenta.saldo_actual),
+      enviada_mp:      !!enviar_mp,
     })
   } catch (error) {
     res.status(500).json({ error: 'Error al cancelar cuenta', detalle: error.message })

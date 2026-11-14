@@ -696,6 +696,7 @@ export default function Cobranza() {
   const [modalCancelar, setModalCancelar]           = useState(false)
   const [motivoCancelacion, setMotivoCancelacion]   = useState('')
   const [notasCancelacion, setNotasCancelacion]     = useState('')
+  const [enviarMP, setEnviarMP]                     = useState(false)
   const [guardandoCancelacion, setGuardandoCancelacion] = useState(false)
   const [errorCancelacion, setErrorCancelacion]     = useState('')
 
@@ -1714,6 +1715,7 @@ export default function Cobranza() {
   const abrirCancelar = () => {
     setMotivoCancelacion('')
     setNotasCancelacion('')
+    setEnviarMP(false)
     setErrorCancelacion('')
     setModalCancelar(true)
   }
@@ -1726,6 +1728,7 @@ export default function Cobranza() {
       await api.post(`/cuentas/${cuentaSeleccionada.id_cuenta}/cancelar`, {
         motivo: motivoCancelacion,
         notas:  notasCancelacion,
+        enviar_mp: enviarMP,
       }, { timeout: 10000 })
       setModalCancelar(false)
       cerrarModal()
@@ -3863,6 +3866,21 @@ export default function Cobranza() {
                 />
               </div>
 
+              <label className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition ${enviarMP ? 'border-gray-800 bg-gray-900 text-white' : 'border-gray-300 hover:bg-gray-50'}`}>
+                <input
+                  type="checkbox"
+                  checked={enviarMP}
+                  onChange={e => setEnviarMP(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-red-600"
+                />
+                <span className="text-sm">
+                  <span className="font-semibold">⛔ Mandar a MP (mala paga)</span>
+                  <span className={`block text-xs mt-0.5 ${enviarMP ? 'text-gray-300' : 'text-gray-500'}`}>
+                    Queda registrado en la Lista Negra con su saldo de {fmt(cuentaSeleccionada.saldo_actual)} y su último abono.
+                  </span>
+                </span>
+              </label>
+
               {errorCancelacion && (
                 <p className="text-red-600 text-sm bg-red-50 rounded-lg px-3 py-2">{errorCancelacion}</p>
               )}
@@ -3881,7 +3899,7 @@ export default function Cobranza() {
                 disabled={!motivoCancelacion || guardandoCancelacion}
                 className="px-5 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-lg transition"
               >
-                {guardandoCancelacion ? 'Cancelando...' : 'Confirmar cancelación'}
+                {guardandoCancelacion ? 'Cancelando...' : enviarMP ? 'Cancelar y mandar a MP' : 'Confirmar cancelación'}
               </button>
             </div>
           </div>
